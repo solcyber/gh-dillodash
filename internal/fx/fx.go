@@ -11,8 +11,9 @@
 //
 // One-shot effects tick at FrameMS. Ambient ones (the breathing gutter,
 // chip glints, gleams, the header's logo) tick at AmbientMS and rest after
-// AmbientIdleSecs without a key, so an unattended dashboard costs no more
-// than a static one.
+// AmbientIdleSecs without a key; the loop then wakes only for the next
+// second a countdown shows, or the refresh, so an unattended dashboard
+// costs no more than a static one.
 package fx
 
 import (

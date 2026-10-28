@@ -762,3 +762,46 @@ func TestDrawBox(t *testing.T) {
 }
 
 var _ = []Modal{(*Prompt)(nil), (*Confirm)(nil), (*Pick)(nil)}
+
+func TestPromptPaste(t *testing.T) {
+	frozen(t)
+	p := NewPrompt("q", "ab")
+	changes := 0
+	p.OnChange = func(string) { changes++ }
+	p.Handle(K("left"))
+	if p.Handle(T("héllo 世界")) {
+		t.Fatal("a paste does not finish the prompt")
+	}
+	if p.Text() != "ahéllo 世界b" || p.Pos() != 1+len([]rune("héllo 世界")) || changes != 1 {
+		t.Errorf("paste: %q pos %d changes %d", p.Text(), p.Pos(), changes)
+	}
+	p = NewPrompt("q", "")
+	p.Handle(T("  line one\r\n\tline two  \x01"))
+	if p.Text() != "line one line two" {
+		t.Errorf("newlines, tabs and controls flatten: %q", p.Text())
+	}
+	p = NewPrompt("q", "")
+	p.Handle(T("👍🏽"))
+	if p.Text() != "👍🏽" || p.Pos() != 2 {
+		t.Errorf("a grapheme cluster inserts whole: %q pos %d", p.Text(), p.Pos())
+	}
+	p = NewPrompt("q", "keep")
+	p.Forbid = "\""
+	p.Handle(T(`say "hi"`))
+	if p.Text() != "keep" || !strings.Contains(p.Note(), "pasted text") {
+		t.Errorf("a forbidden character refuses the whole paste: %q note %q", p.Text(), p.Note())
+	}
+	p = NewPrompt("q", "x")
+	if p.Handle(T("\n\n")) || p.Text() != "x" {
+		t.Errorf("an empty paste is nothing: %q", p.Text())
+	}
+}
+
+func TestPickCancelsOnCtrlC(t *testing.T) {
+	for _, k := range []Key{K("ctrl+c"), K("ctrl+g"), K("esc"), R('q')} {
+		p := NewPick("t", []string{"a", "b"}, "menu")
+		if !p.Handle(k) || p.Result() != -1 {
+			t.Errorf("%v cancels the menu: done=%v result=%d", k, p.Done(), p.Result())
+		}
+	}
+}

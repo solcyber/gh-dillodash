@@ -171,6 +171,9 @@ func (m *Model) fortressTickMS() int {
 		base = fx.AmbientMS
 	}
 	if fx.Motion != "full" {
+		if base == 400 {
+			return m.idleWakeMS() // the still map: wake for the countdowns only
+		}
 		return base
 	}
 	if fx.Now()-m.lastKey >= fx.AmbientIdleSecs {

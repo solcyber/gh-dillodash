@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -16,7 +17,10 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/widgets"
 )
 
-type tickMsg struct{}
+// tickMsg is the frame clock; gen lets a wake-up (retick) orphan the
+// tick that was already scheduled, so a key never waits for a long idle
+// sleep to end.
+type tickMsg struct{ gen int }
 
 // ErrInterrupted is Run's error when the dashboard was interrupted
 // (ctrl-c, or SIGINT): main exits 130 without a message.
@@ -74,13 +78,31 @@ func (m *Model) Init() tea.Cmd {
 // tick schedules the next frame (lock held: tickMS reads the state).
 func (m *Model) tick() tea.Cmd {
 	d := time.Duration(m.tickMS()) * time.Millisecond
-	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{} })
+	gen := m.tickGen
+	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg{gen} })
 }
 
-// tickMS: FrameMS while a one-shot effect plays, TickMS while a spinner
-// spins, AmbientMS for ambient motion, 400ms otherwise (still often
-// enough for the once-a-second countdowns).
+// retick wakes the clock now: whatever tick was pending is orphaned and
+// a fresh one is scheduled from the current state (lock held).
+func (m *Model) retick() tea.Cmd {
+	m.tickGen++
+	return m.tick()
+}
+
+// tickMS: FrameMS while a one-shot effect or a prompt's own effect
+// plays, TickMS while a spinner spins, AmbientMS for ambient motion
+// (a modal's too), else idleWakeMS: the next instant something on the
+// screen changes, which may be a minute away. A static dashboard costs
+// nothing in between.
 func (m *Model) tickMS() int {
+	if m.modal != nil {
+		if a, ok := m.modal.(interface{ Active() bool }); ok && a.Active() {
+			return fx.FrameMS
+		}
+		if m.modal.Animated() {
+			return fx.AmbientMS
+		}
+	}
 	if m.view == ViewFortress && m.fortress != nil {
 		return m.fortressTickMS()
 	}
@@ -93,7 +115,46 @@ func (m *Model) tickMS() int {
 	if m.ambient {
 		return fx.AmbientMS
 	}
-	return 400
+	return m.idleWakeMS()
+}
+
+// idleMaxMS is the longest the idle loop sleeps: ages and the window
+// countdowns are minute-grained.
+const idleMaxMS = 60000
+
+// idleWakeMS is how long until the next thing on the screen changes
+// when nothing animates: the refresh falling due, the next whole second
+// of a countdown (the header's next refresh, a rate-limit hold, the
+// retry of a failed load), the toast's fade and expiry; else a minute.
+func (m *Model) idleWakeMS() int {
+	now := fx.Now()
+	next := now + idleMaxMS/1000
+	at := func(t float64) {
+		if t > now+0.005 && t < next {
+			next = t
+		}
+	}
+	// the fraction of a second until a countdown's next whole second
+	frac := func(d float64) float64 {
+		f := d - math.Floor(d)
+		if f < 0.005 {
+			f = 1
+		}
+		return f
+	}
+	at(m.nextRefreshAt)
+	if (m.loaded && !m.refreshing) || (!m.loaded && m.errText != "") {
+		at(now + frac(m.nextRefreshAt-now))
+	}
+	if hold := time.Until(m.rateLimitedUntil).Seconds(); hold > 0 {
+		at(now + frac(hold))
+		at(now + hold)
+	}
+	if m.status != "" && m.statusKind != "spin" {
+		at(m.statusAt + fx.ToastSecs - 0.8)
+		at(m.statusAt + fx.ToastSecs)
+	}
+	return max(50, min(int((next-now)*1000)+5, idleMaxMS))
 }
 
 // Update handles one message.
@@ -104,6 +165,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 	case tickMsg:
+		if msg.gen != m.tickGen {
+			return m, nil // orphaned by a retick
+		}
 		if m.refreshDue() {
 			m.refresh(false) // no-ops while rate-limited
 		}
@@ -122,9 +186,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actionDoneMsg:
 		m.action = false
 	case tea.KeyPressMsg:
-		return m, m.handleKey(toKey(msg))
+		return m, tea.Batch(m.handleKey(toKey(msg)), m.retick())
+	case tea.PasteMsg:
+		return m, tea.Batch(m.handleKey(widgets.T(msg.Content)), m.retick())
+	case tea.PasteStartMsg, tea.PasteEndMsg:
+		return m, nil
+	default:
+		return m, nil
 	}
-	return m, nil
+	// something changed: wake the clock so the next frame is drawn
+	// from the new state, not after an idle sleep
+	return m, m.retick()
 }
 
 // View paints the frame.
@@ -153,8 +225,12 @@ func toKey(k tea.KeyPressMsg) widgets.Key {
 	}
 	if k.Text != "" && !strings.Contains(s, "ctrl+") && !strings.Contains(s, "alt+") {
 		r := []rune(k.Text)
-		if len(r) == 1 && r[0] >= 0x20 {
+		switch {
+		case len(r) == 1 && r[0] >= 0x20:
 			return widgets.Key{Rune: r[0]}
+		case len(r) > 1:
+			// an IME commit, an emoji with a modifier: text for a prompt
+			return widgets.T(k.Text)
 		}
 	}
 	return widgets.Key{Name: s}
@@ -170,6 +246,7 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		// it (it cancels the prompt) and everywhere else it quits
 		return m.requestQuit(true)
 	}
+	m.lastKey = fx.Now() // typing in a prompt keeps ambient motion awake too
 	if m.modal != nil {
 		if m.modal.Handle(k) {
 			close(m.modalDone)
@@ -177,7 +254,6 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		}
 		return nil
 	}
-	m.lastKey = fx.Now()
 	if _, splash := m.fx.Elapsed("splash"); splash {
 		m.endSplash() // any key skips the splash, and only that
 		return nil
@@ -193,6 +269,12 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		m.fx.Start("help", 0.2, nil)
 		return nil
 	}
+	if m.action {
+		if m.view == ViewList && k.Rune == 'q' {
+			return m.requestQuit(false) // warns once, quits on the second press
+		}
+		return nil // an action is mid-flight: its modal owns the keys
+	}
 	if k.Rune == ':' {
 		if m.view == ViewList || m.view == ViewFortress {
 			m.detailFrom = m.view
@@ -200,12 +282,6 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		app := &lockedApp{m}
 		m.runAction(func() { m.doGoto(app) })
 		return nil
-	}
-	if m.action {
-		if m.view == ViewList && k.Rune == 'q' {
-			return m.requestQuit(false) // warns once, quits on the second press
-		}
-		return nil // an action is mid-flight: its modal owns the keys
 	}
 	page := max(1, m.h-4)
 	app := &lockedApp{m}

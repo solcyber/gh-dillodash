@@ -61,6 +61,8 @@ func (m *Model) showDetail(detail any, kind string, started float64, listed *mod
 	m.view = ViewDetail
 	m.scroll = 0
 	m.searchQ = ""
+	m.raw = false             // rendered markdown, whatever the last PR was shown as
+	delete(m.glide, "detail") // a fresh page starts at the top, no glide from the old offset
 	m.errText = ""
 }
 
@@ -91,6 +93,10 @@ func (m *Model) doApprove(app *lockedApp) {
 	}
 	if strings.EqualFold(pr.Author.Login, m.me) {
 		app.Notice(fmt.Sprintf("you authored %s — a self-approval counts for nothing.", where))
+		return
+	}
+	if app.IApproved(pr) {
+		app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
 		return
 	}
 	if m.wf.Approve(app, pr, app.DetailListed()) {
@@ -149,7 +155,11 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 		}
 		body = txt
 	} else {
-		t, _ := app.Prompt(fmt.Sprintf("comment on %s (enter posts, Esc cancels):", where), workflow.PromptOpts{})
+		t, ok := app.Prompt(fmt.Sprintf("comment on %s (enter posts, Esc cancels):", where), workflow.PromptOpts{})
+		if !ok {
+			app.Notice("comment cancelled")
+			return
+		}
 		body = t
 	}
 	if strings.TrimSpace(body) == "" {
@@ -427,7 +437,9 @@ func (m *Model) openFiles(app *lockedApp, keepSelection bool) {
 		m.fileSel = min(m.fileSel, max(0, len(files)-1))
 	} else {
 		m.fileSel = 0
+		delete(m.glide, "files")
 	}
+	m.searchQ, m.searchCur, m.hitsKey = "", 0, "" // a search belongs to one page
 	m.errText = ""
 	if m.statusKind == "spin" {
 		m.status = ""
@@ -443,7 +455,8 @@ func (m *Model) openPatch() {
 	m.patchLines = nil
 	m.patchStamp = patchStamp{-1, -1}
 	m.patchScroll = 0
-	m.hitsKey = ""
+	m.searchQ, m.searchCur, m.hitsKey = "", 0, ""
+	delete(m.glide, "patch")
 	m.view = ViewPatch
 }
 

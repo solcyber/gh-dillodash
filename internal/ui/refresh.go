@@ -254,9 +254,10 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.warn = out.warn
 		m.lastRefreshWall = clock.Now().Local().Format("15:04:05")
 		m.noteDeltas()
-		if m.status == "refreshing..." && m.errText == "" {
+		if m.manualPending && m.errText == "" {
 			m.ok("refreshed at " + m.lastRefreshWall)
 		}
+		m.manualPending = false
 	}
 	if m.refreshAgain {
 		m.refreshAgain = false
@@ -349,5 +350,6 @@ func (m *Model) manualRefresh() {
 	}
 	m.setStatus("refreshing...")
 	m.ciFlush = true // re-check settled CI too (e.g. a re-run)
+	m.manualPending = true
 	m.refresh(true)
 }

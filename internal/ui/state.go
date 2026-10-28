@@ -164,6 +164,11 @@ type Model struct {
 
 	wfState map[string]any
 
+	// tickGen is the frame clock's generation (retick orphans old ticks)
+	tickGen int
+	// manualPending: r was pressed, so the next landing says "refreshed at"
+	manualPending bool
+
 	// the running action, if any; quitArmedAt is when q was last pressed
 	// during one (a second press within quitArmSecs quits anyway)
 	action      bool

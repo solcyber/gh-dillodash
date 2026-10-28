@@ -170,7 +170,31 @@ func (m *Model) refilter() {
 	if m.selected < 0 {
 		m.selected = 0
 	}
-	m.cursorOffHeaders(+1)
+	m.parkCursor()
+}
+
+// parkCursor settles the cursor on a selectable row near where it is:
+// down first, then up, without wrapping to the far end (a row that
+// vanished under the cursor must not send it to the top of the list).
+func (m *Model) parkCursor() {
+	n := len(m.rows)
+	if n == 0 {
+		m.selected = 0
+		return
+	}
+	for i := m.selected; i < n; i++ {
+		if m.rows[i].Kind != "header" {
+			m.selected = i
+			return
+		}
+	}
+	for i := m.selected; i >= 0; i-- {
+		if m.rows[i].Kind != "header" {
+			m.selected = i
+			return
+		}
+	}
+	m.selected = 0
 }
 
 // cursorOffHeaders parks the cursor on a selectable row.

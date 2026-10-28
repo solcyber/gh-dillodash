@@ -113,7 +113,7 @@ func TestCIFallbackSeesWorkflowSHAsAsLive(t *testing.T) {
 	h.m.mu.Lock()
 	h.m.nextRefreshAt = 0
 	h.m.mu.Unlock()
-	h.m.Update(tickMsg{})
+	h.m.Update(tickMsg{gen: h.m.tickGen})
 	h.pump()
 	if got := h.gh.Reads["workflow_runs"]; got != reads {
 		t.Errorf("settled, passing SHAs are cached across the pass: %d more calls", got-reads)

@@ -136,7 +136,7 @@ func (p *Pick) Handle(k Key) bool {
 		return true
 	}
 	switch k.Name {
-	case "esc":
+	case "esc", "ctrl+c", "ctrl+g":
 		p.done = true
 		return true
 	case "down":

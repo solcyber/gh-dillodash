@@ -334,6 +334,10 @@ func (m *Model) hitsByLine() map[int][]text.Span {
 
 // searchStep moves to the next/previous hit.
 func (m *Model) searchStep(step int) {
+	if m.searchQ == "" {
+		m.notice("no search yet — / searches this page")
+		return
+	}
 	hits := m.currentHits()
 	if len(hits) == 0 {
 		m.notice(fmt.Sprintf("no match for %q", m.searchQ))

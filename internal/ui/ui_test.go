@@ -423,3 +423,254 @@ func TestConfigKnobsAreWired(t *testing.T) {
 		t.Error("defaults without release_pr")
 	}
 }
+
+func TestToKeyMultiRune(t *testing.T) {
+	for _, tc := range []struct {
+		msg  tea.KeyPressMsg
+		want widgets.Key
+	}{
+		{tea.KeyPressMsg{Code: 'c', Text: "c"}, widgets.R('c')},
+		{tea.KeyPressMsg{Code: '中', Text: "中"}, widgets.R('中')},
+		{tea.KeyPressMsg{Code: '👍', Text: "👍🏽"}, widgets.T("👍🏽")},
+		{tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, widgets.K("ctrl+c")},
+		{tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}, widgets.R(' ')},
+	} {
+		if got := toKey(tc.msg); got != tc.want {
+			t.Errorf("toKey(%v) = %+v, want %+v", tc.msg, got, tc.want)
+		}
+	}
+}
+
+// TestPasteIntoFilter: a bracketed paste lands in the live filter.
+func TestPasteIntoFilter(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.tp.Prompt = nil // the real prompt
+	h.m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	h.pump() // the action goroutine is now parked on the modal
+	if h.m.modal == nil {
+		t.Fatal("no prompt up")
+	}
+	h.m.Update(tea.PasteMsg{Content: "rotate"})
+	if h.m.filter != "rotate" {
+		t.Fatalf("live filter after the paste: %q", h.m.filter)
+	}
+	h.m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	h.pump()
+	if h.m.filter != "rotate" || h.m.modal != nil {
+		t.Errorf("filter %q modal %v", h.m.filter, h.m.modal)
+	}
+	if s := h.screen(); !strings.Contains(s, "rotate the signing keys") || strings.Contains(s, "widen the deploy") {
+		t.Errorf("screen:\n%s", s)
+	}
+}
+
+// TestTypingInModalKeepsAmbient: keys typed in a prompt count as
+// activity, so ambient motion does not idle out while someone types.
+func TestTypingInModalKeepsAmbient(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.modal = widgets.NewPrompt("x", "")
+	h.m.modalDone = make(chan struct{})
+	h.m.lastKey = -1000
+	h.m.mu.Unlock()
+	h.m.handleKey(widgets.R('a'))
+	if h.m.lastKey < 0 {
+		t.Error("lastKey did not advance for a key typed in a prompt")
+	}
+	h.m.handleKey(widgets.K("esc"))
+}
+
+// TestIdleTickSleepsToTheNextBoundary: with nothing animating the loop
+// sleeps until the next instant the screen changes.
+func TestIdleTickSleepsToTheNextBoundary(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	was := fx.Now
+	t.Cleanup(func() { fx.Now = was })
+	now := 1000.0
+	fx.Now = func() float64 { return now }
+	h.m.mu.Lock()
+	defer h.m.mu.Unlock()
+	h.m.fx.Stop("splash")
+	h.m.ambient, h.m.animating, h.m.status = false, false, ""
+	h.m.nextRefreshAt = now + 120.5 // the header countdown ticks at .5
+	near := func(got, want int) bool { return got >= want-10 && got <= want+10 }
+	if ms := h.m.tickMS(); !near(ms, 505) {
+		t.Errorf("countdown boundary: %d", ms)
+	}
+	h.m.status, h.m.statusKind, h.m.statusAt = "x", "info", now-5.6 // fades at 5.2, gone at 6.0
+	if ms := h.m.tickMS(); !near(ms, 405) {
+		t.Errorf("toast expiry: %d", ms)
+	}
+	h.m.status = ""
+	h.m.nextRefreshAt = now + 0.3
+	if ms := h.m.tickMS(); !near(ms, 305) {
+		t.Errorf("refresh due: %d", ms)
+	}
+	h.m.nextRefreshAt = now + 3600
+	h.m.loaded = false
+	h.m.errText = ""
+	if ms := h.m.tickMS(); ms != idleMaxMS {
+		t.Errorf("nothing to wait for: %d", ms)
+	}
+	h.m.loaded = true
+	h.m.animating = true
+	if ms := h.m.tickMS(); ms != TickMS {
+		t.Errorf("a spinner ticks: %d", ms)
+	}
+}
+
+func TestStaleTickIsIgnored(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.nextRefreshAt = 0
+	gen := h.m.tickGen
+	h.m.mu.Unlock()
+	_, cmd := h.m.Update(tickMsg{gen: gen - 1})
+	if cmd != nil || h.m.refreshing {
+		t.Error("a stale tick must do nothing")
+	}
+	_, cmd = h.m.Update(tickMsg{gen: gen})
+	if cmd == nil || !h.m.refreshing {
+		t.Error("the live tick refreshes and reschedules")
+	}
+	h.pump()
+}
+
+func TestKeyWakesTheClock(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	gen := h.m.tickGen
+	_, cmd := h.m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if cmd == nil || h.m.tickGen != gen+1 {
+		t.Errorf("a key reticks: cmd=%v gen %d -> %d", cmd != nil, gen, h.m.tickGen)
+	}
+	h.pump()
+}
+
+func TestGlideAndRawResetOnOpen(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.glide["detail"] = glideEntry{40, 0, fx.Now()}
+	h.m.raw = true
+	h.m.mu.Unlock()
+	h.named("enter")
+	if _, ok := h.m.glide["detail"]; ok {
+		t.Error("the detail glide survived opening another PR")
+	}
+	if h.m.raw {
+		t.Error("raw markdown mode stuck across PRs")
+	}
+}
+
+func TestSearchClearedWhenLeavingThePage(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	h.m.mu.Lock()
+	h.m.searchQ = "summary"
+	h.m.mu.Unlock()
+	h.key('f')
+	if h.m.view != ViewFiles || h.m.searchQ != "" {
+		t.Errorf("view %s searchQ %q", h.m.view, h.m.searchQ)
+	}
+}
+
+func TestNextMatchWithoutASearch(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	h.key('n')
+	if !strings.Contains(h.m.status, "no search yet") {
+		t.Errorf("status %q", h.m.status)
+	}
+}
+
+func TestRefilterFollowsIdentThenNearest(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	// rows: header, #101, #102, header, issue #7: select the issue
+	h.key('G')
+	if row, ok := h.m.Selected(); !ok || row.Kind != "issue" {
+		t.Fatalf("G selects the issue, got row %d", h.m.selected)
+	}
+	h.m.mu.Lock()
+	h.m.filter = "widen" // only #101 survives
+	h.m.refilter()
+	sel := h.m.rows[h.m.selected]
+	h.m.mu.Unlock()
+	if p, ok := sel.Item.(*model.PR); !ok || p.Number != 101 {
+		t.Errorf("the cursor should park on the nearest row, got %v", sel)
+	}
+}
+
+func TestManualRefreshReportsOnce(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	if strings.Contains(h.m.status, "refreshed at") {
+		t.Fatal("an automatic refresh must not toast")
+	}
+	h.key('r')
+	if !strings.Contains(h.m.status, "refreshed at") {
+		t.Errorf("r reports: %q", h.m.status)
+	}
+	h.m.mu.Lock()
+	h.m.status = ""
+	h.m.nextRefreshAt = 0
+	gen := h.m.tickGen
+	h.m.mu.Unlock()
+	h.m.Update(tickMsg{gen: gen})
+	h.pump()
+	if strings.Contains(h.m.status, "refreshed at") {
+		t.Error("the next automatic refresh must not reuse the manual toast")
+	}
+}
+
+func TestGotoWhileActionRunningIsANoop(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.action = true
+	h.m.view = ViewFortress
+	h.m.detailFrom = ViewList
+	h.m.mu.Unlock()
+	h.m.handleKey(widgets.R(':'))
+	if h.m.detailFrom != ViewList {
+		t.Error("a swallowed : must not change detailFrom")
+	}
+	h.m.mu.Lock()
+	h.m.action, h.m.view = false, ViewList
+	h.m.mu.Unlock()
+}
+
+func TestApproveRefusesAlreadyApproved(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	h.m.tp.Confirm = func(string) bool { return true }
+	h.key('a')
+	h.key('a')
+	if len(h.gh.Approvals) != 1 || !strings.Contains(h.m.status, "already approved by you") {
+		t.Errorf("approvals %v status %q", h.gh.Approvals, h.m.status)
+	}
+}
+
+func TestCommentInlineCancelAndBlank(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "", false }
+	h.key('c')
+	if h.m.status != "comment cancelled" || len(h.gh.CommentsPosted) != 0 {
+		t.Errorf("Esc: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
+	}
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "   ", true }
+	h.key('c')
+	if h.m.status != "comment cancelled (empty)" || len(h.gh.CommentsPosted) != 0 {
+		t.Errorf("blank: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
+	}
+}
