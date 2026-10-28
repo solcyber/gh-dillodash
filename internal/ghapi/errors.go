@@ -1,0 +1,77 @@
+package ghapi
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Error is a failed GitHub call. Status is 0 for anything that never got
+// an HTTP status (a network error, a truncated body, a GraphQL error in
+// a 200); RetryAt is set when GitHub asked us to back off.
+type Error struct {
+	Method  string
+	URL     string
+	Status  int
+	Message string
+	RetryAt time.Time
+}
+
+func (e *Error) Error() string {
+	if e.Status == 0 {
+		return e.Message
+	}
+	return fmt.Sprintf("%s %s -> %d: %s", e.Method, e.URL, e.Status, e.Message)
+}
+
+// IsRateLimit reports whether GitHub told us when to retry.
+func (e *Error) IsRateLimit() bool { return !e.RetryAt.IsZero() }
+
+// AsError unwraps err to the *Error it carries, if any.
+func AsError(err error) (*Error, bool) {
+	var e *Error
+	if errors.As(err, &e) {
+		return e, true
+	}
+	return nil, false
+}
+
+// IsRateLimit reports whether err is a rate-limit *Error.
+func IsRateLimit(err error) bool {
+	e, ok := AsError(err)
+	return ok && e.IsRateLimit()
+}
+
+// IsNetwork reports whether err is a "network error: ..." *Error.
+func IsNetwork(err error) bool {
+	e, ok := AsError(err)
+	return ok && strings.HasPrefix(e.Message, "network error")
+}
+
+// RetryAtFromHeaders is the time to back off until, from a GitHub
+// response's rate-limit headers; ok is false if the headers don't
+// indicate a rate limit.
+//
+// Secondary limits send Retry-After (delta seconds); primary limits send
+// X-RateLimit-Remaining: 0 with X-RateLimit-Reset (absolute epoch).
+func RetryAtFromHeaders(h http.Header, now time.Time) (time.Time, bool) {
+	if h == nil {
+		return time.Time{}, false
+	}
+	if ra := strings.TrimSpace(h.Get("Retry-After")); ra != "" {
+		if n, err := strconv.Atoi(ra); err == nil && n >= 0 {
+			return now.Add(time.Duration(n) * time.Second), true
+		}
+	}
+	if strings.TrimSpace(h.Get("X-RateLimit-Remaining")) == "0" {
+		if reset := strings.TrimSpace(h.Get("X-RateLimit-Reset")); reset != "" {
+			if n, err := strconv.ParseInt(reset, 10, 64); err == nil && n >= 0 {
+				return time.Unix(n, 0), true
+			}
+		}
+	}
+	return time.Time{}, false
+}

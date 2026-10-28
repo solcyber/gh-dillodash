@@ -1,0 +1,108 @@
+# dillodash config  —  ~/.config/dillodash/config.toml
+#
+# Minimal config: these three lines are all that is required.
+#   [reviews]
+#   repos = ["acme/infra"]
+#
+# Everything else below is optional and shown commented out with its default.
+# Auth is the gh CLI's job (`gh auth login`); there is no token here.
+# Search order: --config, $DILLODASH_CONFIG, $XDG_CONFIG_HOME/dillodash/config.toml,
+# ~/.config/dillodash/config.toml.
+
+# ============================================================================
+# GitHub
+# ============================================================================
+[github]
+# host = "github.com"         # GitHub Enterprise Server hostname, if not github.com
+# login = ""                  # expected login; warns when gh's active account differs
+
+# ============================================================================
+# Reviews — the repos the dashboard lists
+# ============================================================================
+[reviews]
+repos = ["acme/infra"]        # required: one or more "owner/name" (--repo replaces the list)
+# ci_recheck_secs = 900       # how often a PR's checks are re-read between refreshes
+
+# ============================================================================
+# Display
+# ============================================================================
+[display]
+# refresh_secs = 300          # seconds between refreshes (floor 5)
+# icons = "nerd"              # nerd | unicode | ascii
+# theme = "auto"              # auto | mono
+# motion = "full"             # full | off (a still dashboard)
+# mascot = "sprite"           # sprite | ascii | none
+
+# ============================================================================
+# Bots — logins drawn as bots (case-insensitive; "[bot]" suffixes always count)
+# ============================================================================
+[bots]
+# logins = ["github-actions", "dependabot"]
+
+# ============================================================================
+# Workflow: terraform approve
+# PRs whose plan digest comes from a bot, approved with a slash command
+# ============================================================================
+[workflows.terraform_approve]
+enabled = false
+# repos = []                                       # default: every [reviews] repo
+# digest_bot = "github-actions"                    # login that posts the plan digest
+# plan_workflow = "plan.yml"                       # Actions workflow file that plans
+# gate_context = "terraform/apply-gate"            # status context the apply gate sets
+# gate_done_prefixes = ["applied:", "ceremony executed:"]   # gate descriptions that mean done
+# approve_command = "/approve"                     # comment that approves
+# confirm_destroys_flag = "--confirm-destroys"     # added when the plan destroys resources
+# outside_window_flag = "--outside-window"         # added when approving outside the window
+# outside_window_min_reason = 20                   # shortest acceptable out-of-window reason
+# ceremony_window = { timezone = "America/New_York", from = "23:00", to = "23:30" }   # all three or none
+
+# ============================================================================
+# Workflow: maintenance window
+# Approved PRs queue for a nightly window run by a conductor bot
+# ============================================================================
+[workflows.maintenance_window]
+enabled = false
+# manifest_repo = ""                        # where manifest issues live; default: first [reviews] repo
+# timezone = "America/New_York"             # IANA zone of the window clock
+# tz_label = ""                             # label override such as "ET"; default EST/EDT
+# cutoff = "21:00"                          # last approval that joins tonight's window
+# start = "23:00"                           # window opens
+# release_from = "22:59"                    # earliest /release
+# end = "23:30"                             # window closes
+# queued_label = "window:queued"            # label while waiting for a night
+# scheduled_label = "window:scheduled"      # label once on a manifest
+# rolled_label = "window:rolled"            # label after rolling to a later night
+# manifest_label = "window-manifest"        # label on manifest issues
+# manifest_title = "Window {night}"            # manifest issue title; {night} is YYYY-MM-DD; add the start time if your bot does
+# conductor_bot = "github-actions"          # login that runs the window
+# team = ""                                 # "org/team" to mention in hints
+# attend_command = "/attend"                # comment that marks you attending
+# release_command = "/release"              # comment that releases an item
+# cancel_command = "/window-cancel"         # comment that pulls an item from the window
+
+# ============================================================================
+# Workflow: release PRs
+# Application repos release by merging release/<date> or hotfix/<slug> into main
+# ============================================================================
+[workflows.release_pr]
+enabled = false
+# repos = "auto"                            # "auto" (discover by ruleset) or ["owner/name", ...]
+# org = ""                                  # org to discover in; default: the [reviews] repos' shared owner
+# ruleset = "release"                       # repos under this ruleset are release repos
+# discover_ttl_secs = 86400                 # how long auto discovery is cached
+# cache = "~/.cache/dillodash/release-repos-{org}.json"   # discovery cache (~, {org}, $XDG_CACHE_HOME)
+# production_branch = "main"                # release PRs target this branch
+# staging_branch = "stage"                  # where the cut is staged first
+# release_prefix = "release/"               # release branch prefix
+# hotfix_prefix = "hotfix/"                 # hotfix branch prefix (must differ)
+# go_tag_prefix = "go/"                     # tag that marks a cut ready
+# hold_tag_prefix = "hold/"                 # tag that holds a cut back
+# list_other_prs = true                     # also list non-release PRs in release repos
+# release_now_command = "/release-now"      # comment that releases ahead of the window
+# release_now_min_reason = 20               # shortest acceptable /release-now reason
+# approval_queues_for_window = false        # approving queues the release for the maintenance window
+# merge_method = "merge"                    # merge | squash | rebase
+# merged_keep_secs = 43200                  # keep a merged release listed this long
+# deploy_stuck_secs = 2700                  # flag a deploy still running after this long
+# deploy_refresh_secs = 30                  # poll a running deploy this often
+# deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}

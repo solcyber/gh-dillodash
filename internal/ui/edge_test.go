@@ -1,0 +1,252 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/workflow"
+)
+
+// TestTinySizesDoNotPanic renders every view, the help overlay and a
+// modal at absurd terminal sizes: nothing may panic.
+func TestTinySizesDoNotPanic(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	sizes := [][2]int{{1, 1}, {2, 2}, {10, 3}, {3, 10}, {20, 5}, {40, 8}}
+	views := []struct {
+		name string
+		prep func()
+	}{
+		{"list", func() {}},
+		{"empty", func() {
+			h.m.mu.Lock()
+			h.m.filter = "zzz-no-such-thing"
+			h.m.refilter()
+			h.m.mu.Unlock()
+		}},
+		{"help", func() {
+			h.m.mu.Lock()
+			h.m.filter = ""
+			h.m.refilter()
+			h.m.mu.Unlock()
+			h.key('?')
+		}},
+		{"detail", func() {
+			h.named("esc") // close the help
+			h.named("enter")
+		}},
+		{"files", func() { h.key('f') }},
+		{"patch", func() { h.named("enter") }},
+		{"fortress", func() {
+			h.named("esc")
+			h.named("esc")
+			h.named("esc")
+			h.key('d')
+		}},
+		{"loading", func() {
+			h.key('d')
+			h.m.mu.Lock()
+			h.m.loaded = false
+			h.m.mu.Unlock()
+		}},
+		{"load-failed", func() {
+			h.m.mu.Lock()
+			h.m.errText = "boom"
+			h.m.mu.Unlock()
+		}},
+	}
+	for _, v := range views {
+		v.prep()
+		for _, sz := range sizes {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Fatalf("%s at %dx%d panicked: %v", v.name, sz[0], sz[1], r)
+					}
+				}()
+				h.m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
+				_ = h.m.View()
+			}()
+		}
+		h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	}
+}
+
+// TestGotoEdgeCases: repo#N for a repo that is not configured, a
+// non-number, and a number that is neither a PR nor an issue.
+func TestGotoEdgeCases(t *testing.T) {
+	h := newHarness(t, infra, portal)
+	h.load()
+	for _, tc := range []struct{ typed, want string }{
+		{"nowhere#7", `no repo named "nowhere"`},
+		{"abc", "is not a number"},
+		{"999", "infra#999"}, // the first repo is the default
+	} {
+		h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return tc.typed, true }
+		h.key(':')
+		if h.m.view != ViewList {
+			t.Fatalf("%q opened %s", tc.typed, h.m.view)
+		}
+		if got := h.m.status + h.m.errText; !strings.Contains(got, tc.want) {
+			t.Errorf("%q: status %q lacks %q", tc.typed, got, tc.want)
+		}
+	}
+	// repo#N names the second repo
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "web-portal#101", true }
+	h.key(':')
+	if h.m.view != ViewDetail || h.m.detailRef() != "web-portal#101" {
+		t.Fatalf("view=%s ref=%s", h.m.view, h.m.detailRef())
+	}
+}
+
+// TestGotoWithNoRepos never indexes an empty repo list.
+func TestGotoWithNoRepos(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.repos = nil
+	h.m.mu.Unlock()
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "7", true }
+	h.key(':')
+	if h.m.view != ViewList || !strings.Contains(h.m.status, "no repos") {
+		t.Fatalf("view=%s status=%q", h.m.view, h.m.status)
+	}
+}
+
+// TestDetailSurvivesVanishingPR: the open PR drops out of the list and
+// its detail can no longer be fetched; the refresh still lands, the
+// detail stays readable with the error on the status line, and q goes
+// back to a list with a valid cursor.
+func TestDetailSurvivesVanishingPR(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	if h.m.view != ViewDetail {
+		t.Fatalf("view = %s", h.m.view)
+	}
+	id := model.Ident{Repo: "infra", Number: 101}
+	h.gh.Open[infra] = ghapi.ListResult{PRs: h.gh.Open[infra].PRs[1:], Issues: h.gh.Open[infra].Issues}
+	delete(h.gh.PRs, id)
+	h.key('r')
+	if h.m.view != ViewDetail || h.m.detail == nil {
+		t.Fatalf("view=%s detail=%v", h.m.view, h.m.detail)
+	}
+	if !strings.Contains(h.m.errText, "couldn't refresh #101") {
+		t.Errorf("errText = %q", h.m.errText)
+	}
+	if !strings.Contains(h.screen(), "A change by bob") {
+		t.Errorf("detail no longer readable:\n%s", h.screen())
+	}
+	h.key('q')
+	if h.m.view != ViewList {
+		t.Fatalf("view = %s", h.m.view)
+	}
+	if _, ok := h.m.Selected(); !ok {
+		t.Errorf("cursor off the rows: selected=%d of %d", h.m.selected, len(h.m.rows))
+	}
+	for _, r := range h.m.rows {
+		if p, ok := r.Item.(*model.PR); ok && p.Number == 101 {
+			t.Errorf("the vanished PR is still listed:\n%s", h.screen())
+		}
+	}
+}
+
+// TestDetailListedFollowsRefresh: the listed PR behind an open detail is
+// re-pointed at the refreshed list's object, so workflow cards and the
+// header icon read fresh data rather than the pre-refresh copy.
+func TestDetailListedFollowsRefresh(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	was := h.m.detailListed
+	if was == nil {
+		t.Fatal("no listed PR")
+	}
+	fresh := *was
+	fresh.Title = "widen the deploy role (v2)"
+	h.gh.Open[infra] = ghapi.ListResult{PRs: []*model.PR{&fresh, h.gh.Open[infra].PRs[1]}, Issues: h.gh.Open[infra].Issues}
+	h.key('r')
+	if h.m.detailListed != &fresh {
+		t.Errorf("detailListed still points at the old object (%p vs %p)", h.m.detailListed, &fresh)
+	}
+}
+
+// TestEmptyListAfterFilterKeys: with nothing matching, the movement and
+// open keys are no-ops and the note says how to clear it.
+func TestEmptyListAfterFilterKeys(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.filter = "nothing-matches-this"
+	h.m.refilter()
+	h.m.mu.Unlock()
+	if len(h.m.rows) != 0 {
+		t.Fatalf("rows = %d", len(h.m.rows))
+	}
+	for _, k := range []rune{'j', 'k', 'g', 'G', ' ', 'y', 'o', 'D'} {
+		h.key(k)
+	}
+	h.named("enter")
+	if h.m.view != ViewList || h.m.selected != 0 {
+		t.Fatalf("view=%s selected=%d", h.m.view, h.m.selected)
+	}
+	if !strings.Contains(h.screen(), "nothing matches the filter") {
+		t.Errorf("screen:\n%s", h.screen())
+	}
+}
+
+// TestZeroReposRenders: an empty repo list (demo, tests) draws without
+// a panic and with no repos text.
+func TestZeroReposRenders(t *testing.T) {
+	h := newHarness(t)
+	h.m.mu.Lock()
+	h.m.repos = nil
+	h.m.multi = false
+	h.m.cfg.Reviews.Repos = nil
+	h.m.mu.Unlock()
+	h.load()
+	s := h.screen()
+	if !h.m.loaded || len(h.m.rows) != 0 {
+		t.Fatalf("loaded=%v rows=%d err=%q", h.m.loaded, len(h.m.rows), h.m.errText)
+	}
+	if !strings.Contains(s, "all clear") {
+		t.Errorf("screen:\n%s", s)
+	}
+}
+
+// TestErrorMessagesNameTheThing: failed fetches say what failed and for
+// which item.
+func TestErrorMessagesNameTheThing(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	boom := &ghapi.Error{Method: "GET", URL: "x", Status: 403, Message: "forbidden"}
+	for _, tc := range []struct {
+		op   string
+		key  rune
+		want string
+	}{
+		{"files", 'f', "couldn't load the files of #101"},
+		{"diff", 'v', "couldn't fetch the diff of #101"},
+		{"users", 't', "couldn't list who is assignable in acme/infra"},
+	} {
+		h.gh.Fail = map[string]error{tc.op: boom}
+		h.key(tc.key)
+		if !strings.Contains(h.m.errText, tc.want) {
+			t.Errorf("%s: errText %q lacks %q", tc.op, h.m.errText, tc.want)
+		}
+		if h.m.view != ViewDetail {
+			t.Fatalf("%s: view = %s", tc.op, h.m.view)
+		}
+	}
+	h.gh.Fail = map[string]error{"approve": boom}
+	h.m.tp.Confirm = func(string) bool { return true }
+	h.key('a')
+	if !strings.Contains(h.m.errText, "review approval of #101 failed") || !strings.Contains(h.m.errText, "Pull requests") {
+		t.Errorf("approve errText = %q", h.m.errText)
+	}
+}
