@@ -680,7 +680,7 @@ func fixture(t *testing.T, window bool) (*Workflow, *wftest.App, *State) {
 		ID   int64  `json:"id"`
 		Name string `json:"name"`
 	}{4, "prod"}, CurrentUserCanApprove: true}}}
-	s, warns := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st := s.(*State)
 	if len(warns) != 1 || !strings.Contains(warns[0], "etl-jobs") {
 		t.Errorf("the repo that failed warns: %v", warns)
@@ -797,14 +797,14 @@ func TestSectionsWithoutWindowListQueued(t *testing.T) {
 func TestRefreshKeepsLastGood(t *testing.T) {
 	w, app, _ := fixture(t, true)
 	app.Fake.Fail["releases"] = &ghapi.Error{Message: "network error: timed out"}
-	s, warns := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st := s.(*State)
 	if len(st.Releases) != 5 || len(st.Stages) != 1 || len(warns) != 1 || !strings.Contains(warns[0], "last good") {
 		t.Errorf("a failed read keeps every repo's last rows: %d %d %v", len(st.Releases), len(st.Stages), warns)
 	}
 	delete(app.Fake.Fail, "releases")
 	delete(app.Fake.Releases, portal)
-	s, warns = w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ = w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st = s.(*State)
 	if len(st.Releases) != 5 || len(st.Stages) != 1 || len(warns) != 2 || !strings.Contains(warns[0], "showing") || !strings.Contains(warns[0], "'s data") {
 		t.Errorf("a failed repo keeps its last good rows, not a blank: %d %v", len(st.Releases), warns)
@@ -1094,5 +1094,45 @@ func TestConstructor(t *testing.T) {
 	w2 := New(&workflow.Context{Config: cfg, Repos: cfg.Reviews.Repos})
 	if w2.org != "acme" {
 		t.Errorf("the org falls back to the review repos' owner: %q", w2.org)
+	}
+}
+
+// TestLastGoodRowsAreFreshCopies: when a read fails and the last good
+// rows are shown again, they are copies. The originals may be on screen,
+// and re-annotating them would write their Ext maps under the UI's feet.
+func TestLastGoodRowsAreFreshCopies(t *testing.T) {
+	w, app, first := fixture(t, true)
+	app.Fake.Fail["releases"] = &ghapi.Error{Status: 502, Message: "Bad Gateway"}
+	s, _, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("a 502 is a warning, not an error: %v", err)
+	}
+	st := s.(*State)
+	if len(st.Releases) != len(first.Releases) {
+		t.Fatalf("rows: %d vs %d", len(st.Releases), len(first.Releases))
+	}
+	for i, p := range st.Releases {
+		if p == first.Releases[i] {
+			t.Fatalf("row %d is the same pointer as the previous state's", i)
+		}
+		if p.Ext != nil && first.Releases[i].Ext != nil && &p.Ext == &first.Releases[i].Ext {
+			t.Fatalf("row %d shares its Ext map", i)
+		}
+		p.Set("probe", true)
+		if first.Releases[i].Get("probe") != nil {
+			t.Fatalf("row %d: writing the copy wrote the original", i)
+		}
+	}
+}
+
+func TestReleaseRefreshReturnsRateLimit(t *testing.T) {
+	w, app, _ := fixture(t, true)
+	app.Fake.Fail["releases"] = &ghapi.Error{Status: 403, Message: "secondary rate limit", RetryAt: time.Now().Add(time.Minute)}
+	s, warns, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	if !ghapi.IsRateLimit(err) {
+		t.Fatalf("a rate limit is returned so the refresh backs off: %v", err)
+	}
+	if st := s.(*State); st == nil || len(st.Releases) == 0 || len(warns) == 0 {
+		t.Error("the last good state still comes back with it")
 	}
 }

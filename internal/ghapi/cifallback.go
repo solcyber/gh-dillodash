@@ -2,11 +2,18 @@ package ghapi
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
+
+// ciWorkers caps the Actions calls in flight during one Annotate.
+const ciWorkers = 6
 
 // CIRecheck is how long a settled, passing SHA's cluster is trusted
 // before the Actions API is asked again (a re-run may have happened).
@@ -29,12 +36,16 @@ type ciEntry struct {
 // all) from the Actions workflow runs on its head SHA, which only needs
 // Actions: read. Settled SHAs are cached so finished CI is never
 // re-fetched; in-flight ones are re-polled each refresh, failing ones
-// too (a re-run may fix them), and passing ones after CIRecheck. A
-// non-rate-limit failure of the Actions call turns the fallback off for
-// that repo until the process restarts (or Reset), so a token without
-// the permission is not hammered every refresh.
+// too (a re-run may fix them), and passing ones after Recheck. A
+// permission failure of the Actions call (401, 403, 404) turns the
+// fallback off for that repo until Reset (the manual refresh), so a
+// token without the permission is not hammered every refresh; any
+// other failure (a timeout, a 502) is transient and is retried next
+// refresh, showing the last known cluster meanwhile.
 type CIFallback struct {
-	// Recheck overrides CIRecheck (tests).
+	// Recheck is how long a settled, passing SHA's cluster is trusted
+	// before the Actions API is asked again; 0 means CIRecheck. The
+	// config's ci_recheck_secs sets it.
 	Recheck time.Duration
 
 	mu       sync.Mutex
@@ -43,28 +54,59 @@ type CIFallback struct {
 }
 
 // Annotate computes the cluster of every PR: the GraphQL rollup when the
-// token can see it, else the Actions fallback. clusters[i] belongs to
-// prs[i]. warn is the first warning met (CI invisible by every route);
-// err is only ever a rate limit from the Actions call, which must back
-// the whole refresh off rather than silently disable CI.
+// token can see it, else the Actions fallback, at most ciWorkers calls
+// in flight and one per head SHA (a PR listed twice, as a review row
+// and a release row, is asked once). clusters[i] belongs to prs[i].
+// warn is the first warning met in prs order (CI invisible by every
+// route); err is only ever a rate limit from the Actions call, which
+// must back the whole refresh off rather than silently disable CI.
 func (f *CIFallback) Annotate(ctx context.Context, now time.Time, prs []*model.PR, fetch RunsFunc) (clusters []model.CICluster, warn string, err error) {
 	clusters = make([]model.CICluster, len(prs))
+	warns := make([]string, len(prs))
 	live := map[string]bool{}
+	bySHA := map[string][]int{} // head sha -> indexes needing the Actions route
+	var order []string
 	for i, pr := range prs {
 		if c, ok := model.ClusterCI(pr); ok {
 			clusters[i] = c
 			continue
 		}
-		if pr.HeadRefOid != "" {
-			live[pr.HeadRefOid] = true
+		sha := pr.HeadRefOid
+		if sha == "" {
+			clusters[i], warns[i] = model.CIUnknownCluster(), CINotVisible
+			continue
 		}
-		c, w, err := f.Lookup(ctx, now, pr, fetch)
-		if err != nil {
-			return nil, "", err
+		live[sha] = true
+		if _, seen := bySHA[sha]; !seen {
+			order = append(order, sha)
 		}
-		clusters[i] = c
-		if warn == "" {
+		bySHA[sha] = append(bySHA[sha], i)
+	}
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(ciWorkers)
+	var mu sync.Mutex
+	for _, sha := range order {
+		idx := bySHA[sha]
+		g.Go(func() error {
+			c, w, err := f.Lookup(gctx, now, prs[idx[0]], fetch)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			for _, i := range idx {
+				clusters[i], warns[i] = c, w
+			}
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, "", err
+	}
+	for _, w := range warns {
+		if w != "" {
 			warn = w
+			break
 		}
 	}
 	f.Prune(live)
@@ -102,16 +144,24 @@ func (f *CIFallback) Lookup(ctx context.Context, now time.Time, pr *model.PR, fe
 		if IsRateLimit(err) {
 			return model.CICluster{}, "", err
 		}
-		// a non-rate-limit 403 (e.g. token lacks Actions: read): don't
-		// hammer it every refresh; stays off until restart
-		why := "CI via Actions API failed: " + err.Error() + " — token needs Actions: read"
-		f.mu.Lock()
-		if f.disabled == nil {
-			f.disabled = map[model.Repo]string{}
+		if isPermission(err) {
+			// the token cannot read Actions here: don't hammer it every
+			// refresh; off until Reset (the manual refresh)
+			why := fmt.Sprintf("CI via Actions API failed on %s: %s — token needs Actions: read", pr.Repo.Name, err)
+			f.mu.Lock()
+			if f.disabled == nil {
+				f.disabled = map[model.Repo]string{}
+			}
+			f.disabled[pr.Repo] = why
+			f.mu.Unlock()
+			return model.CIUnknownCluster(), why, nil
 		}
-		f.disabled[pr.Repo] = why
-		f.mu.Unlock()
-		return model.CIUnknownCluster(), why, nil
+		// transient (a timeout, a 502): keep showing what we knew, and
+		// ask again next refresh
+		if ok {
+			return cached.cluster, "", nil
+		}
+		return model.CIUnknownCluster(), fmt.Sprintf("CI via Actions API on %s: %s (retried next refresh)", pr.Repo.Name, err), nil
 	}
 	entry := clusterRuns(runs, now)
 	f.mu.Lock()
@@ -180,15 +230,24 @@ func (f *CIFallback) Prune(live map[string]bool) {
 	}
 }
 
-// Flush forgets every cached cluster (the manual refresh re-checks
-// settled CI too, e.g. after a re-run).
-func (f *CIFallback) Flush() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.cache = nil
+// isPermission reports whether err is GitHub refusing the request for
+// this token (401, 403 or 404, which is what a private repo the token
+// cannot see answers) rather than failing to answer it.
+func isPermission(err error) bool {
+	e, ok := AsError(err)
+	if !ok {
+		return false
+	}
+	switch e.Status {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		return true
+	}
+	return false
 }
 
-// Reset re-enables the Actions route for every repo and flushes.
+// Reset re-enables the Actions route for every repo and forgets every
+// cached cluster: the manual refresh re-checks settled CI too (a re-run
+// may have happened) and re-tries a repo whose token was just fixed.
 func (f *CIFallback) Reset() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -210,14 +269,4 @@ func (f *CIFallback) Cached(sha string) (model.CICluster, time.Time, bool) {
 	defer f.mu.Unlock()
 	e, ok := f.cache[sha]
 	return e.cluster, e.at, ok
-}
-
-// Age backdates a cached SHA by d (tests: expire a cluster).
-func (f *CIFallback) Age(sha string, d time.Duration) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if e, ok := f.cache[sha]; ok {
-		e.at = e.at.Add(-d)
-		f.cache[sha] = e
-	}
 }

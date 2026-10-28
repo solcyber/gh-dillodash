@@ -1,6 +1,8 @@
 package model
 
 import (
+	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -139,6 +141,21 @@ func ClusterCI(pr *PR) (c CICluster, ok bool) {
 				name = "?"
 			}
 			failed = append(failed, name)
+		}
+	}
+	// the query reads the first 50 contexts; a PR with more has the
+	// rest summarized by the rollup's own state, so a failure past the
+	// page is never painted over by the passes before it
+	if missing := head.Rollup.Contexts.TotalCount - len(head.Rollup.Contexts.Nodes); missing > 0 {
+		switch head.Rollup.State {
+		case "SUCCESS":
+			chars = append(chars, bytes.Repeat([]byte{CIPass}, missing)...)
+		case "FAILURE", "ERROR":
+			chars = append(chars, CIFail)
+			chars = append(chars, bytes.Repeat([]byte{CIPass}, missing-1)...)
+			failed = append(failed, fmt.Sprintf("%d more (rollup: %s)", missing, strings.ToLower(head.Rollup.State)))
+		default: // PENDING, EXPECTED, or unknown: not settled
+			chars = append(chars, bytes.Repeat([]byte{CIQueued}, missing)...)
 		}
 	}
 	return FinishCluster(string(chars), failed), true

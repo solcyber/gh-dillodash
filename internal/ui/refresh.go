@@ -81,7 +81,7 @@ func (m *Model) refresh(again bool) {
 			m.send(refreshDoneMsg{out})
 		}()
 		if flushCI {
-			ci.Flush()
+			ci.Reset() // re-check settled CI, and re-try repos whose token was fixed
 		}
 		results, err := gh.ListOpen(ctx, repos)
 		if err != nil {
@@ -130,9 +130,15 @@ func (m *Model) refresh(again bool) {
 		if ciWarn != "" {
 			warns = append([]string{"degraded: " + ciWarn}, warns...)
 		}
-		states, wfWarns := wf.RefreshAll(ctx, gh, repos, out.allPRs, out.issues)
+		states, wfWarns, wfErr := wf.RefreshAll(ctx, gh, repos, out.allPRs, out.issues)
 		out.wfStates = states
 		warns = append(warns, wfWarns...)
+		if e, ok := ghapi.AsError(wfErr); ok && e.IsRateLimit() {
+			// the list landed; only the workflows hit the wall, so the
+			// list shows and the next refresh waits for the window
+			out.retryAt = e.RetryAt
+			warns = append([]string{"rate limited — workflow data paused until " + e.RetryAt.Local().Format("15:04:05")}, warns...)
+		}
 		if wantFortress {
 			fort, err := gh.Fortress(ctx, repos)
 			if err != nil {
@@ -206,8 +212,9 @@ func (m *Model) applyRefresh(out *refreshResult) {
 			}
 		}
 	} else {
-		// a clean refresh means the wall has lifted
-		m.rateLimitedUntil = time.Time{}
+		// a clean refresh means the wall has lifted, unless a workflow
+		// just hit it (retryAt set with the list still delivered)
+		m.rateLimitedUntil = out.retryAt
 		m.failStreak = 0
 		m.loaded = true
 		m.allPRs = out.allPRs

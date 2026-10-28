@@ -204,8 +204,11 @@ func TestHTTPErrorsAndRateLimitHeaders(t *testing.T) {
 	if !ok || e.Status != 500 || e.Message != "boom" || e.IsRateLimit() {
 		t.Fatalf("500: %#v", err)
 	}
-	if !strings.HasPrefix(e.Error(), "POST http://") || !strings.HasSuffix(e.Error(), "/repos/acme/infra/pulls/3543/reviews -> 500: boom") {
+	if e.Error() != "GitHub 500: boom" {
 		t.Errorf("Error(): %q", e.Error())
+	}
+	if !strings.HasPrefix(e.Verbose(), "POST http://") || !strings.HasSuffix(e.Verbose(), "/repos/acme/infra/pulls/3543/reviews -> 500: boom") {
+		t.Errorf("Verbose(): %q", e.Verbose())
 	}
 
 	before := time.Now()
@@ -503,11 +506,77 @@ func TestListOpenChunkFailure(t *testing.T) {
 	})
 	repos := []model.Repo{infra, portal, {Owner: "acme", Name: "a"}, {Owner: "acme", Name: "b"}, {Owner: "acme", Name: "lonely"}}
 	out, err := s.client(t).ListOpen(context.Background(), repos)
-	if err == nil || !strings.Contains(err.Error(), "502") {
-		t.Fatalf("the failed chunk is the call's error: %v", err)
+	if err != nil {
+		t.Fatalf("one failed chunk is not the call's error: %v", err)
 	}
-	if out[infra].Err != nil || out[repos[4]].Err == nil {
-		t.Errorf("the other chunk still landed: %+v / %+v", out[infra], out[repos[4]])
+	if out[infra].Err != nil || out[repos[4]].Err == nil || !strings.Contains(out[repos[4]].Err.Error(), "502") {
+		t.Errorf("the failed chunk's repos carry the error, the others landed: %+v / %+v", out[infra], out[repos[4]])
+	}
+}
+
+func TestListOpenAllChunksFailIsAnError(t *testing.T) {
+	s := newServer(t)
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(502)
+		io.WriteString(w, `{"message":"Bad Gateway"}`)
+	})
+	repos := []model.Repo{infra, portal, {Owner: "acme", Name: "a"}, {Owner: "acme", Name: "b"}, {Owner: "acme", Name: "lonely"}}
+	out, err := s.client(t).ListOpen(context.Background(), repos)
+	if err == nil || !strings.Contains(err.Error(), "502") {
+		t.Fatalf("every chunk failing is an outage, so the call fails: %v", err)
+	}
+	if out[infra].Err == nil || out[repos[4]].Err == nil {
+		t.Error("every repo carries the error too")
+	}
+}
+
+func TestListOpenRateLimitFailsTheCall(t *testing.T) {
+	s := newServer(t)
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		w.Header().Set("Content-Type", "application/json")
+		if len(req.Variables) == 2 {
+			w.Header().Set("Retry-After", "30")
+			w.WriteHeader(403)
+			io.WriteString(w, `{"message":"You have exceeded a secondary rate limit"}`)
+			return
+		}
+		io.WriteString(w, `{"data":{"r0":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}},
+			"r1":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}},
+			"r2":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}},
+			"r3":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}}}}`)
+	})
+	repos := []model.Repo{infra, portal, {Owner: "acme", Name: "a"}, {Owner: "acme", Name: "b"}, {Owner: "acme", Name: "lonely"}}
+	_, err := s.client(t).ListOpen(context.Background(), repos)
+	if !IsRateLimit(err) {
+		t.Fatalf("a rate limit on any chunk fails the call so the refresh backs off: %v", err)
+	}
+}
+
+func TestSecondaryRateLimits(t *testing.T) {
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	at, ok := retryAt(429, "", nil, now)
+	if !ok || !at.Equal(now.Add(secondaryFloor)) {
+		t.Errorf("a bare 429 waits the floor: %v %v", at, ok)
+	}
+	at, ok = retryAt(403, "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.", nil, now)
+	if !ok || !at.Equal(now.Add(secondaryFloor)) {
+		t.Errorf("a secondary-limit 403 without headers waits the floor: %v %v", at, ok)
+	}
+	if _, ok := retryAt(403, "Resource not accessible by personal access token", nil, now); ok {
+		t.Error("a permission 403 is not a rate limit")
+	}
+	if _, ok := retryAt(500, "", http.Header{"Retry-After": {"5"}}, now); ok {
+		t.Error("only 403 and 429 are rate limits, whatever the headers say")
+	}
+	at, ok = retryAt(429, "", http.Header{"Retry-After": {"7"}}, now)
+	if !ok || !at.Equal(now.Add(7*time.Second)) {
+		t.Errorf("Retry-After wins over the floor: %v %v", at, ok)
+	}
+	date := now.Add(90 * time.Second)
+	at, ok = retryAt(403, "abuse detection", http.Header{"Retry-After": {date.Format(http.TimeFormat)}}, now)
+	if !ok || !at.Equal(date) {
+		t.Errorf("an HTTP-date Retry-After is parsed: %v %v", at, ok)
 	}
 }
 

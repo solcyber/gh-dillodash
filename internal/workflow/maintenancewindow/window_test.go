@@ -620,7 +620,7 @@ func TestRefreshAnnotateApply(t *testing.T) {
 		manifestFor(3600, night, "open", nil, nil, human("alice", "/attend", "2026-10-21T18:00:00Z"),
 			botC("@alice is attending the night of 2026-10-21.", "2026-10-21T18:00:40Z"))}}}
 	prs := []*model.PR{normal, queued}
-	st, warns := w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
+	st, warns, _ := w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
 	w.Annotate(prs, nil, st)
 	check(t, "no warnings", len(warns) == 0)
 	info := InfoOf(queued)
@@ -633,14 +633,14 @@ func TestRefreshAnnotateApply(t *testing.T) {
 		got.Nights[night].Issue == 3600 && got.Nights[night].Mine.Attend == StateAttending)
 	check(t, "the manifests were read from the manifest repo", app.Fake.Reads["labelled"] == 1 && app.Fake.Reads["comments"] == 1)
 
-	st, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, []*model.PR{normal}, nil)
+	st, _, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, []*model.PR{normal}, nil)
 	check(t, "nothing queued: nothing fetched", app.Fake.Reads["labelled"] == 1 && len(st.(*State).Manifests) == 0)
 	app.Fake.Fail["labelled"] = errors.New("GET -> 403")
-	st, warns = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
+	st, warns, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
 	check(t, "manifests unreadable: a warning, the PRs still annotated", len(warns) == 1 && len(st.(*State).infos) == 1)
 	delete(app.Fake.Fail, "labelled")
 	app.Fake.Fail["comments"] = errors.New("GET -> 403")
-	st, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
+	st, _, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
 	check(t, "comments unreadable: the PR shows its label only", len(st.(*State).infos) == 0)
 	w.Apply(app, nil)
 	check(t, "a nil state applies as empty", w.state(app).Nights != nil && len(w.state(app).Nights) == 0)
@@ -650,7 +650,7 @@ func TestRefreshAnnotateApply(t *testing.T) {
 	digestB := botC("### plan `prod/09-portal`\n\nPlan-id: `"+pidB+"`", "2026-10-22T23:19:44Z")
 	queued.Commits.Nodes[0].Commit.CommittedDate = at("2026-10-22T23:18:45Z")
 	app.Fake.Comments[queued.Ident()] = []model.Comment{digestA, markerComment("2026-10-22", true, "2026-10-22T16:33:40Z", bot), digestB}
-	st, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
+	st, _, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
 	w.Annotate(prs, nil, st)
 	check(t, "a stale entry is not queued and asks for a re-approve", !IsQueued(queued, cfg.MaintenanceWindow) && InfoOf(queued).Reapprove &&
 		!w.Claims(workflow.Row{Kind: "pr", Item: queued}))

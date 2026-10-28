@@ -188,8 +188,11 @@ type Workflow interface {
 	Name() string
 	Order() int
 
-	// Worker goroutine.
-	Refresh(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (State, []string)
+	// Worker goroutine. err is only ever a rate limit (ghapi.IsRateLimit)
+	// that must back the whole refresh off; anything else a workflow
+	// meets is a warning, and the state it returns alongside is what it
+	// could still assemble.
+	Refresh(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (State, []string, error)
 	Annotate(prs []*model.PR, issues []*model.Issue, s State)
 
 	// UI goroutine, after a refresh lands.
@@ -239,8 +242,8 @@ type Base struct{}
 
 func (Base) Name() string { return "" }
 func (Base) Order() int   { return 50 }
-func (Base) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string) {
-	return nil, nil
+func (Base) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string, error) {
+	return nil, nil, nil
 }
 func (Base) Annotate([]*model.PR, []*model.Issue, State) {}
 func (Base) Apply(App, State)                            {}

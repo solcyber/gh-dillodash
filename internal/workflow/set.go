@@ -114,20 +114,26 @@ func (s *Set) Names() []string {
 // Empty reports no workflows.
 func (s *Set) Empty() bool { return s == nil || len(s.Items) == 0 }
 
-// RefreshAll runs every workflow's Refresh; states keyed by name.
-func (s *Set) RefreshAll(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (map[string]State, []string) {
+// RefreshAll runs every workflow's Refresh; states keyed by name. The
+// first rate limit a workflow meets is returned and the workflows after
+// it are skipped (they would only hit the same wall); the states
+// gathered so far still come back.
+func (s *Set) RefreshAll(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (map[string]State, []string, error) {
 	states := map[string]State{}
 	var warns []string
 	if s == nil {
-		return states, nil
+		return states, nil, nil
 	}
 	for _, w := range s.Items {
-		st, ws := w.Refresh(ctx, gh, repos, prs, issues)
+		st, ws, err := w.Refresh(ctx, gh, repos, prs, issues)
 		states[w.Name()] = st
 		warns = append(warns, ws...)
 		w.Annotate(prs, issues, st)
+		if err != nil {
+			return states, warns, err
+		}
 	}
-	return states, warns
+	return states, warns, nil
 }
 
 // ApplyAll hands each workflow its state on the UI goroutine.

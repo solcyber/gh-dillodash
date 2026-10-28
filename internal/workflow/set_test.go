@@ -30,8 +30,8 @@ func (s *stub) Classify(pr *model.PR, _ *model.PR, _ string, _ bool) *Classifica
 	}
 	return &Classification{Label: s.label, Style: "chip.await", NeedsYou: true}
 }
-func (s *stub) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string) {
-	return s.state, []string{s.name + " warn"}
+func (s *stub) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string, error) {
+	return s.state, []string{s.name + " warn"}, nil
 }
 func (s *stub) Sections(App, []string, string) []Row {
 	return []Row{{Kind: "header", Item: s.name}}
@@ -63,9 +63,9 @@ func TestSetOrderAndMerge(t *testing.T) {
 	if s.Get("a") != b || s.Get("zzz") != nil {
 		t.Error("Get")
 	}
-	states, warns := s.RefreshAll(context.Background(), nil, nil, nil, nil)
-	if len(states) != 2 || len(warns) != 2 || warns[0] != "a warn" {
-		t.Errorf("refresh: %v %v", states, warns)
+	states, warns, err := s.RefreshAll(context.Background(), nil, nil, nil, nil)
+	if len(states) != 2 || len(warns) != 2 || warns[0] != "a warn" || err != nil {
+		t.Errorf("refresh: %v %v %v", states, warns, err)
 	}
 	if rows := s.LegendRows(); len(rows) != 2 {
 		t.Errorf("legend rows = %d", len(rows))

@@ -103,10 +103,6 @@ func (h *harness) pump() {
 	}
 }
 
-// drain applies only what is already queued, without waiting for the
-// goroutines; for tests that drive a modal by hand.
-func (h *harness) drain() { drain(h.m, h.msgs) }
-
 func (h *harness) load() {
 	h.m.Init()
 	h.pump()
@@ -273,5 +269,79 @@ func TestRefreshErrorBacksOff(t *testing.T) {
 	}
 	if h.m.failStreak != 1 {
 		t.Errorf("failStreak = %d", h.m.failStreak)
+	}
+}
+
+// TestPartialListFailureKeepsOtherRepos: one repo the token cannot read
+// is a warning on its line, not a failed refresh.
+func TestPartialListFailureKeepsOtherRepos(t *testing.T) {
+	h := newHarness(t, infra, portal)
+	delete(h.gh.Open, portal)
+	h.load()
+	if !h.m.loaded || h.m.errText != "" {
+		t.Fatalf("loaded=%v err=%q", h.m.loaded, h.m.errText)
+	}
+	if !strings.Contains(h.m.warn, "web-portal") {
+		t.Errorf("warn %q does not name the failed repo", h.m.warn)
+	}
+	if s := h.screen(); !strings.Contains(s, "infra#101") || strings.Contains(s, "couldn't load") {
+		t.Errorf("the readable repo still lists:\n%s", s)
+	}
+}
+
+// TestManualRefreshLiftsCILatch: a token that could not read Actions
+// latches CI off for the repo; r re-tries it once the token is fixed.
+func TestManualRefreshLiftsCILatch(t *testing.T) {
+	h := newHarness(t)
+	h.gh.Fail["workflow_runs"] = &ghapi.Error{Status: 403, Message: "Resource not accessible by personal access token"}
+	h.load()
+	p := h.gh.Open[infra].PRs[0]
+	if c, ok := h.m.ciOf(p); !ok || c.Glyphs != "?" || !strings.Contains(h.m.warn, "degraded") || !strings.Contains(h.m.warn, "Actions: read") {
+		t.Fatalf("latched: %+v %v warn=%q", c, ok, h.m.warn)
+	}
+	delete(h.gh.Fail, "workflow_runs")
+	h.gh.Runs = map[string][]model.WorkflowRun{p.HeadRefOid: {{ID: 1, Name: "ci", Path: ".github/workflows/ci.yml", Status: "completed", Conclusion: "success"}}}
+	h.key('r')
+	if c, ok := h.m.ciOf(p); !ok || c.Glyphs != "+" || strings.Contains(h.m.warn, "degraded") {
+		t.Errorf("after r: %+v %v warn=%q", c, ok, h.m.warn)
+	}
+}
+
+// rateLimitedWorkflow is a workflow whose Refresh hits the wall.
+type rateLimitedWorkflow struct {
+	workflow.Base
+	until time.Time
+}
+
+func (rateLimitedWorkflow) Name() string { return "stub" }
+func (w rateLimitedWorkflow) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (workflow.State, []string, error) {
+	return nil, []string{"stub: partial"}, &ghapi.Error{Status: 403, Message: "secondary rate limit", RetryAt: w.until}
+}
+
+// TestWorkflowRateLimitPausesRefresh: a rate limit met by a workflow
+// pauses the next refresh like one met by the list, while the list
+// itself still lands.
+func TestWorkflowRateLimitPausesRefresh(t *testing.T) {
+	h := newHarness(t)
+	until := time.Now().Add(90 * time.Second)
+	set, err := workflow.NewSet(nil, rateLimitedWorkflow{until: until})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.m.wf = set
+	h.load()
+	if !h.m.loaded || h.m.errText != "" {
+		t.Fatalf("the list still lands: loaded=%v err=%q", h.m.loaded, h.m.errText)
+	}
+	if !h.m.rateLimitedUntil.Equal(until) {
+		t.Errorf("rateLimitedUntil = %v, want %v", h.m.rateLimitedUntil, until)
+	}
+	if !strings.Contains(h.m.warn, "rate limited") || !strings.Contains(h.m.warn, "stub: partial") {
+		t.Errorf("warn %q", h.m.warn)
+	}
+	// and the manual refresh refuses to hammer the wall
+	h.key('r')
+	if !strings.Contains(h.m.status, "held") {
+		t.Errorf("r while rate limited: status %q", h.m.status)
 	}
 }

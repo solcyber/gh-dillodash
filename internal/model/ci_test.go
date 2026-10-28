@@ -205,3 +205,34 @@ func TestIdentCarriesOwner(t *testing.T) {
 		t.Error("a PR and an issue with the same number share the row identity")
 	}
 }
+
+func TestClusterCITruncatedUsesRollupState(t *testing.T) {
+	// 50 passing contexts came back, but the rollup counts 52 and says
+	// FAILURE: the two unseen ones must not be painted as passes
+	var nodes []CheckContext
+	for i := 0; i < 50; i++ {
+		nodes = append(nodes, checkRun("ok", "COMPLETED", "SUCCESS"))
+	}
+	pr := prWithChecks(nodes...)
+	pr.HeadCommit().Rollup.Contexts.TotalCount = 52
+	pr.HeadCommit().Rollup.State = "FAILURE"
+	c, ok := ClusterCI(pr)
+	if !ok || len(c.Failed) != 1 || !strings.Contains(c.Failed[0], "2 more") || !strings.Contains(c.Glyphs, string(CIFail)) {
+		t.Errorf("truncated failure: %+v ok=%v", c, ok)
+	}
+	pr.HeadCommit().Rollup.State = "PENDING"
+	c, _ = ClusterCI(pr)
+	if len(c.Failed) != 0 || !strings.Contains(c.Glyphs, string(CIQueued)) {
+		t.Errorf("truncated pending: %+v", c)
+	}
+	pr.HeadCommit().Rollup.State = "SUCCESS"
+	c, _ = ClusterCI(pr)
+	if len(c.Failed) != 0 || strings.ContainsAny(c.Glyphs, string([]byte{CIFail, CIQueued})) {
+		t.Errorf("truncated success: %+v", c)
+	}
+	pr.HeadCommit().Rollup.Contexts.TotalCount = 50
+	c, _ = ClusterCI(pr)
+	if strings.Contains(c.Glyphs, string(CIQueued)) {
+		t.Errorf("nothing missing, nothing added: %+v", c)
+	}
+}

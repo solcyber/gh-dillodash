@@ -17,6 +17,7 @@ package releasepr
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -257,7 +258,7 @@ func (w *Workflow) Current() *State {
 // per repo and the deploy state of each merged release. Anything but a
 // rate limit degrades to a warning; a repo that fails keeps its last
 // good rows.
-func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo, _ []*model.PR, _ []*model.Issue) (workflow.State, []string) {
+func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo, _ []*model.PR, _ []*model.Issue) (workflow.State, []string, error) {
 	now := clock.Now()
 	st := &State{}
 	if w.win != nil {
@@ -281,7 +282,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
 			for _, r := range repos {
 				lg := w.last[r]
-				st.Releases = append(st.Releases, lg.rows...)
+				st.Releases = append(st.Releases, clonePRs(lg.rows)...)
 				if lg.stage != nil {
 					st.Stages = append(st.Stages, lg.stage)
 				}
@@ -295,7 +296,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			st.Warnings = warns
 			st.index()
 			w.annotate(st)
-			return st, warns
+			return st, warns, rateLimit(err)
 		}
 	}
 	for _, repo := range names {
@@ -305,7 +306,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		}
 		if info.Err != nil {
 			if lg, ok := w.last[repo]; ok {
-				st.Releases = append(st.Releases, lg.rows...)
+				st.Releases = append(st.Releases, clonePRs(lg.rows)...)
 				if lg.stage != nil {
 					st.Stages = append(st.Stages, lg.stage)
 				}
@@ -338,6 +339,12 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 				stage = lg.stage
 			}
 			warns = append(warns, fmt.Sprintf("%s stage: %s", repo.Name, err))
+			if ghapi.IsRateLimit(err) {
+				st.Warnings = warns
+				st.index()
+				w.annotate(st)
+				return st, warns, err
+			}
 		}
 		st.Releases = append(st.Releases, rows...)
 		if stage != nil {
@@ -359,12 +366,39 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		dep, err := w.deploy.Fetch(ctx, gh, pr.Repo, sha, false, now)
 		if err != nil {
 			warns = append(warns, fmt.Sprintf("%s#%d deploys: %s", pr.Repo.Name, pr.Number, err))
+			if ghapi.IsRateLimit(err) {
+				st.Warnings = warns
+				return st, warns, err
+			}
 			continue
 		}
 		pr.Set(ExtDeploy, dep)
 	}
 	st.Warnings = warns
-	return st, warns
+	return st, warns, nil
+}
+
+// rateLimit is err when it is a rate limit, else nil: the one error a
+// Refresh returns rather than turns into a warning.
+func rateLimit(err error) error {
+	if ghapi.IsRateLimit(err) {
+		return err
+	}
+	return nil
+}
+
+// clonePRs copies the last-good rows before they are re-annotated. The
+// originals may be on screen: the UI goroutine reads their Ext maps
+// while this goroutine would write them, and a Go map must not be
+// written while it is read.
+func clonePRs(in []*model.PR) []*model.PR {
+	out := make([]*model.PR, len(in))
+	for i, p := range in {
+		c := *p
+		c.Ext = maps.Clone(p.Ext)
+		out[i] = &c
+	}
+	return out
 }
 
 func (w *Workflow) keep() time.Duration {
@@ -393,12 +427,9 @@ func (w *Workflow) annotate(st *State) {
 	}
 }
 
-// Annotate tags the state's PRs (the core's PRs are not releases).
-func (w *Workflow) Annotate(_ []*model.PR, _ []*model.Issue, s workflow.State) {
-	if st, ok := s.(*State); ok && st != nil {
-		w.annotate(st)
-	}
-}
+// Annotate is a no-op: Refresh annotates the state it builds (the
+// core's PRs are not releases), and a second pass would only redo it.
+func (w *Workflow) Annotate(_ []*model.PR, _ []*model.Issue, _ workflow.State) {}
 
 // Apply stores the state.
 func (w *Workflow) Apply(app workflow.App, s workflow.State) {

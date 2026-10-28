@@ -103,8 +103,10 @@ type Client interface {
 	// Whoami is the token's login.
 	Whoami(ctx context.Context) (string, error)
 	// ListOpen reads every repo's open PRs and issues, one aliased
-	// GraphQL request per chunk of four repos run concurrently. A repo
-	// the token cannot see gets a ListResult.Err, never a global failure.
+	// GraphQL request per chunk of four repos, a few in flight at once.
+	// A repo the token cannot see, or a chunk that fails, gets a
+	// ListResult.Err; the call itself fails only on a rate limit or
+	// when every chunk failed.
 	ListOpen(ctx context.Context, repos []model.Repo) (map[model.Repo]ListResult, error)
 	// LastRate is the GraphQL budget from the latest list-shaped query.
 	LastRate() *model.RateLimit
@@ -308,12 +310,11 @@ func httpError(method, rawURL string, resp *http.Response) *Error {
 	if herr, ok := api.HandleHTTPError(resp).(*api.HTTPError); ok && herr.Message != "" {
 		e.Message = herr.Message
 	}
-	// 403/429 with rate-limit headers: record when to retry so the caller
-	// backs off instead of hammering the wall every tick
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		if at, ok := RetryAtFromHeaders(resp.Header, time.Now()); ok {
-			e.RetryAt = at
-		}
+	// a rate limit (headers, or a 429 / secondary-limit 403 without
+	// them): record when to retry so the caller backs off instead of
+	// hammering the wall every tick
+	if at, ok := retryAt(resp.StatusCode, e.Message, resp.Header, time.Now()); ok {
+		e.RetryAt = at
 	}
 	return e
 }
@@ -435,12 +436,9 @@ func (c *GitHub) graphql(ctx context.Context, query string, variables map[string
 				e.Message = e0.Message
 			}
 			if e0.Type == "RATE_LIMITED" || strings.Contains(strings.ToLower(e0.Message), "rate limit") {
-				now := time.Now()
-				if at, ok := RetryAtFromHeaders(hdrs, now); ok {
-					e.RetryAt = at
-				} else {
-					e.RetryAt = now.Add(60 * time.Second)
-				}
+				// a 200 with RATE_LIMITED is a secondary limit in all but
+				// status: the headers when they say, else the floor
+				e.RetryAt, _ = retryAt(http.StatusTooManyRequests, e0.Message, hdrs, time.Now())
 			}
 		}
 		return nil, out.Errors, e
