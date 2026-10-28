@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,22 +22,10 @@ func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]
 	m.tp = &testPrompter{}
 	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	pump := func() error {
-		deadline := time.After(10 * time.Second)
-		for {
-			select {
-			case msg := <-msgs:
-				m.Update(msg)
-			case <-deadline:
-				return fmt.Errorf("the fixture never settled")
-			case <-time.After(30 * time.Millisecond):
-				m.mu.Lock()
-				busy := m.refreshing || m.action
-				m.mu.Unlock()
-				if !busy {
-					return nil
-				}
-			}
+		if err := settle(m, msgs, 10*time.Second); err != nil {
+			return fmt.Errorf("the fixture never settled: %w", err)
 		}
+		return nil
 	}
 	m.Init()
 	if err := pump(); err != nil {
@@ -60,6 +49,49 @@ func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// errNeverSettled is settle's error when the deadline passes.
+var errNeverSettled = errors.New("goroutines never settled")
+
+// settle applies the goroutines' messages until the model is idle: no
+// refresh and no action in flight, or a modal is up waiting for an
+// answer. It is deterministic rather than "quiet for a while": the
+// refreshing and action flags are set under the lock before their
+// goroutines start and cleared only by the messages those goroutines
+// send last, so an empty queue while a flag is set means a message is
+// still coming, and the loop blocks for it (up to deadline).
+func settle(m *Model, msgs <-chan tea.Msg, deadline time.Duration) error {
+	timer := time.NewTimer(deadline)
+	defer timer.Stop()
+	for {
+		drain(m, msgs)
+		m.mu.Lock()
+		busy := m.refreshing || m.action
+		modal := m.modal != nil
+		m.mu.Unlock()
+		if modal || !busy {
+			return nil
+		}
+		select {
+		case msg := <-msgs:
+			m.Update(msg)
+		case <-timer.C:
+			return errNeverSettled
+		}
+	}
+}
+
+// drain applies every message already queued, without waiting.
+func drain(m *Model, msgs <-chan tea.Msg) {
+	for {
+		select {
+		case msg := <-msgs:
+			m.Update(msg)
+		default:
+			return
+		}
+	}
 }
 
 // keyMsg turns a script key into a key press.

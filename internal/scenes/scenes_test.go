@@ -589,8 +589,9 @@ func TestGleamSegs(t *testing.T) {
 	if len(segs) != 1 || segs[0].Style != "rule" || text.Width(segs[0].Text) != 20 {
 		t.Errorf("mono rule: %+v", segs)
 	}
-	if theme.Setup(colorprofile.TrueColor, false) != theme.TrueColor {
-		t.Skip("no color in this environment")
+	t.Setenv("NO_COLOR", "") // Setup reads only NO_COLOR and the profile it is given
+	if got := theme.Setup(colorprofile.TrueColor, false); got != theme.TrueColor {
+		t.Fatalf("Setup(TrueColor) = %v, want TrueColor", got)
 	}
 	t.Cleanup(func() { theme.Setup(0, true) })
 	segs = GleamSegs(20, 0)

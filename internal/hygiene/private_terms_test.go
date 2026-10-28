@@ -73,10 +73,13 @@ func hashed(s string) string {
 }
 
 func repoRoot(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed; this test reads the tree through git")
+	}
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
-		wd, _ := os.Getwd()
-		return filepath.Join(wd, "..", "..")
+		t.Skip("not inside a git checkout (a module zip or a tarball); nothing to scan")
 	}
 	return strings.TrimSpace(string(out))
 }

@@ -526,8 +526,9 @@ func TestManifestRowsAndSections(t *testing.T) {
 	check(t, "nothing queued, no manifest: no section", QueueRows(nil, nil, map[string]*Manifest{}, now26, nil, nil, mw) == nil)
 
 	app, w := newApp(cfg)
+	savedNow := clock.Now
 	clock.Now = func() time.Time { return now26 }
-	defer func() { clock.Now = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { clock.Now = savedNow })
 	plainIssue := &model.Issue{Repo: infra, Number: 3916, Title: "demo tenant", Author: model.Actor{Login: "bob"}}
 	app.IssueList = []*model.Issue{m3891, plainIssue}
 	app.PRs = []*model.PR{q3922, {Repo: infra, Number: 3601, Title: "normal"}}
@@ -585,8 +586,9 @@ func TestReleases(t *testing.T) {
 		eq(rowShape(rows), []string{"header:queued for the maintenance window (2)", "header:window 2026-10-26 23:00 ET, tonight", "issue:3891", "queued:42", "release:42"}))
 
 	app, w := newApp(cfg)
+	savedNow := clock.Now
 	clock.Now = func() time.Time { return now26 }
-	defer func() { clock.Now = func() time.Time { return time.Now().UTC() } }()
+	t.Cleanup(func() { clock.Now = savedNow })
 	check(t, "/window-cancel on a release names the manifest's rel: id",
 		w.CancelText(rel42, &relItem) == "/window-cancel rel:web-portal#42" && w.CancelText(rel42, nil) == "/window-cancel rel:web-portal#42" &&
 			w.CancelText(tf42, &tfItem) == "/window-cancel #42")

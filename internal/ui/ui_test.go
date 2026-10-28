@@ -94,26 +94,18 @@ func newHarness(t *testing.T, repos ...model.Repo) *harness {
 	return h
 }
 
-// pump applies messages from the goroutines until the queue is quiet.
+// pump applies messages from the goroutines until the model is idle (or
+// a modal waits for the test to answer it).
 func (h *harness) pump() {
 	h.t.Helper()
-	deadline := time.After(5 * time.Second)
-	for {
-		select {
-		case msg := <-h.msgs:
-			h.m.Update(msg)
-		case <-deadline:
-			h.t.Fatal("goroutines never settled")
-		case <-time.After(50 * time.Millisecond):
-			h.m.mu.Lock()
-			busy := h.m.refreshing || h.m.action
-			h.m.mu.Unlock()
-			if !busy {
-				return
-			}
-		}
+	if err := settle(h.m, h.msgs, 5*time.Second); err != nil {
+		h.t.Fatal(err)
 	}
 }
+
+// drain applies only what is already queued, without waiting for the
+// goroutines; for tests that drive a modal by hand.
+func (h *harness) drain() { drain(h.m, h.msgs) }
 
 func (h *harness) load() {
 	h.m.Init()
