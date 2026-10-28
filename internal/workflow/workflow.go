@@ -179,6 +179,25 @@ type QueuedProvider interface {
 	QueuedForWindow() []*model.PR
 }
 
+// CIKey is the Ext key under which the core writes the CI cluster of a
+// PR a workflow contributed through CIProvider.
+const CIKey = "ci"
+
+// CIProvider is implemented by a workflow state that lists PRs outside
+// the review repos (the release workflow's releases) whose CI the core
+// computes like every review PR's: the GraphQL rollup when the token can
+// see it, else the Actions fallback, one cache and one call for all.
+type CIProvider interface {
+	CIPRs() []*model.PR
+}
+
+// DeployProvider is implemented by a workflow whose rows can be merged
+// PRs with deployments to approve (the release workflow), so the list's
+// key bar shows D while it is enabled.
+type DeployProvider interface {
+	ProvidesDeploys() bool
+}
+
 // NightRow is the Meta key a window sub-header row carries its night
 // (YYYY-MM-DD) under.
 const NightRow = "night"

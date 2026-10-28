@@ -16,7 +16,16 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
-// Run prints the report; it returns an error when something is broken.
+// Client is what the report needs of GitHub: the API plus where the
+// token came from.
+type Client interface {
+	ghapi.Client
+	Host() string
+	TokenSource() string
+}
+
+// Run builds the client from the gh login and prints the report; it
+// returns an error when something is broken.
 func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) error {
 	fmt.Fprintf(w, "dillodash %s\n", version)
 	fmt.Fprintf(w, "config: %s\n", cfg.Path)
@@ -40,17 +49,45 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 		fmt.Fprintf(w, "auth: FAILED: %s\n  sign in with: gh auth login\n", err)
 		return err
 	}
+	return Report(ctx, w, cfg, gh, src, pulled)
+}
+
+// BotHint is the second half of the bot-login message: how to run as
+// yourself, which depends on where the token came from.
+func BotHint(source string) string {
+	if ghapi.TokenFromEnv(source) {
+		return "unset " + source + " to use gh's own login, or export your own token in it"
+	}
+	return "gh auth switch (or GH_TOKEN=<your token>) to run as yourself"
+}
+
+// Report prints everything after the client exists: the token and the
+// login, the source check, every repo's reach, the budget and the
+// workflows. A login listed in [bots] fails the report: the dashboard
+// would post reviews, comments and merges as the bot, and the audit
+// trail of who approved is only meaningful when it is the human who
+// decided.
+func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src config.Source, pulled bool) error {
 	fmt.Fprintf(w, "host: %s\ntoken: from %s\n", gh.Host(), gh.TokenSource())
+	if ghapi.TokenFromEnv(gh.TokenSource()) {
+		fmt.Fprintf(w, "  note: %s in the environment overrides the gh login (gh auth status shows it); unset it to use gh's account\n", gh.TokenSource())
+	}
 	me, err := gh.Whoami(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "login: FAILED: %s\n", err)
 		return err
 	}
-	fmt.Fprintf(w, "login: %s", me)
-	if cfg.GitHub.Login != "" && !strings.EqualFold(cfg.GitHub.Login, me) {
-		fmt.Fprintf(w, "  (config expects %s: gh auth switch)", cfg.GitHub.Login)
+	var botErr error
+	if cfg.Bots.IsBot(me) {
+		botErr = fmt.Errorf("%s is a bot login", me)
+		fmt.Fprintf(w, "login: FAILED: %s is a bot login ([bots] logins, or the [bot] suffix); reviews, comments and merges would be signed by it — %s\n", me, BotHint(gh.TokenSource()))
+	} else {
+		fmt.Fprintf(w, "login: %s", me)
+		if cfg.GitHub.Login != "" && !strings.EqualFold(cfg.GitHub.Login, me) {
+			fmt.Fprintf(w, "  (config expects %s: gh auth switch)", cfg.GitHub.Login)
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w)
 	if pulled {
 		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {
 			fmt.Fprintf(w, "  source: could not check %s: %s\n", src.Spec(), err)
@@ -112,6 +149,9 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 		on("release_pr", false, "")
 	}
 	fmt.Fprintln(w, "write permissions (reviews, comments, merges, deployments) are not probed: a 403 names the missing one when it happens")
+	if botErr != nil {
+		return botErr
+	}
 	if failed {
 		return fmt.Errorf("some repos could not be read")
 	}

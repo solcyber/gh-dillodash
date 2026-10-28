@@ -63,10 +63,10 @@ const (
 
 // Ext keys the workflow writes on a PR.
 const (
-	ExtRel    = "rel"    // *Info
-	ExtDeploy = "deploy" // deploys.State (the core writes it too, after D)
-	ExtCI     = "ci"     // model.CICluster
-	ExtIcon   = "icon"   // "release" | "hotfix" (the detail header icon)
+	ExtRel    = "rel"          // *Info
+	ExtDeploy = "deploy"       // deploys.State (the core writes it too, after D)
+	ExtCI     = workflow.CIKey // model.CICluster, written by the core (rollup or Actions fallback)
+	ExtIcon   = "icon"         // "release" | "hotfix" (the detail header icon)
 )
 
 // mergeable are the GitHub mergeStateStatus values M accepts (UNKNOWN:
@@ -114,7 +114,24 @@ type State struct {
 	byIdent     map[model.Ident]*model.PR
 }
 
-var _ workflow.QueuedProvider = (*State)(nil)
+var (
+	_ workflow.QueuedProvider = (*State)(nil)
+	_ workflow.CIProvider     = (*State)(nil)
+	_ workflow.DeployProvider = (*Workflow)(nil)
+)
+
+// CIPRs hands the releases to the core's CI pass, so a release row gets
+// the Actions fallback when the token cannot read the check rollup, the
+// same as a review PR (#5).
+func (s *State) CIPRs() []*model.PR {
+	if s == nil {
+		return nil
+	}
+	return s.Releases
+}
+
+// ProvidesDeploys: merged releases wait on environment approvals.
+func (w *Workflow) ProvidesDeploys() bool { return true }
 
 // QueuedForWindow lists the release PRs carrying the maintenance window's
 // queued label, for the window workflow to list under their night.
@@ -408,7 +425,9 @@ func (w *Workflow) keep() time.Duration {
 	return time.Duration(w.cfg.MergedKeepSecs) * time.Second
 }
 
-// annotate writes the per-PR info the renderers and actions read.
+// annotate writes the per-PR info the renderers and actions read. CI
+// comes from the rollup here when the token can see it; the core fills
+// ExtCI through the Actions fallback for the rest (State.CIPRs).
 func (w *Workflow) annotate(st *State) {
 	for _, pr := range st.Releases {
 		kind := w.Kind(pr)

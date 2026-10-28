@@ -136,6 +136,35 @@ func (s *Set) RefreshAll(ctx context.Context, gh ghapi.Client, repos []model.Rep
 	return states, warns, nil
 }
 
+// CIPRs collects the PRs the workflow states contribute to the core's CI
+// pass (CIProvider), in workflow order.
+func (s *Set) CIPRs(states map[string]State) []*model.PR {
+	if s == nil {
+		return nil
+	}
+	var out []*model.PR
+	for _, w := range s.Items {
+		if p, ok := states[w.Name()].(CIProvider); ok && p != nil {
+			out = append(out, p.CIPRs()...)
+		}
+	}
+	return out
+}
+
+// ProvidesDeploys reports whether any workflow lists merged PRs whose
+// deployments D approves (the list key bar shows D then).
+func (s *Set) ProvidesDeploys() bool {
+	if s == nil {
+		return false
+	}
+	for _, w := range s.Items {
+		if p, ok := w.(DeployProvider); ok && p.ProvidesDeploys() {
+			return true
+		}
+	}
+	return false
+}
+
 // ApplyAll hands each workflow its state on the UI goroutine.
 func (s *Set) ApplyAll(app App, states map[string]State) {
 	if s == nil {

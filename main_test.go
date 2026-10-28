@@ -9,6 +9,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"testing"
+
+	"github.com/solcyber/gh-dillodash/internal/config"
 )
 
 func TestResolveVersion(t *testing.T) {
@@ -190,4 +192,20 @@ func firstLine(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+func TestRefuseBot(t *testing.T) {
+	cfg := config.Default()
+	cfg.Bots.Logins = append(cfg.Bots.Logins, "infra-bot")
+	if err := refuseBot(cfg, "alice", "keyring"); err != nil {
+		t.Errorf("a human runs: %v", err)
+	}
+	err := refuseBot(cfg, "dependabot[bot]", "keyring")
+	if err == nil || exitCode(err) != 2 || !strings.Contains(err.Error(), "bot login") || !strings.Contains(err.Error(), "gh auth switch") {
+		t.Errorf("[bot] suffix: %v", err)
+	}
+	err = refuseBot(cfg, "infra-bot", "GH_TOKEN")
+	if err == nil || exitCode(err) != 2 || !strings.Contains(err.Error(), "unset GH_TOKEN") {
+		t.Errorf("configured bot from the environment: %v", err)
+	}
 }

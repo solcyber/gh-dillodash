@@ -441,3 +441,16 @@ func TestQueryShapes(t *testing.T) {
 		t.Error("the label is a variable")
 	}
 }
+
+func TestTokenFromEnv(t *testing.T) {
+	for _, src := range []string{"GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"} {
+		if !TokenFromEnv(src) {
+			t.Errorf("%s is an env source", src)
+		}
+	}
+	for _, src := range []string{"keyring", "oauth_token", "option", "default", ""} {
+		if TokenFromEnv(src) {
+			t.Errorf("%s is not an env source", src)
+		}
+	}
+}

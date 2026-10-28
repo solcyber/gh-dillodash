@@ -97,3 +97,38 @@ func TestEmptySet(t *testing.T) {
 		t.Error("empty set should be inert")
 	}
 }
+
+type ciState struct{ prs []*model.PR }
+
+func (s *ciState) CIPRs() []*model.PR { return s.prs }
+
+type deployStub struct{ stub }
+
+func (deployStub) ProvidesDeploys() bool { return true }
+
+func TestCIPRsAndProvidesDeploys(t *testing.T) {
+	a := &stub{name: "a"}
+	b := &stub{name: "b", state: &ciState{prs: []*model.PR{{Number: 1}, {Number: 2}}}}
+	s, err := NewSet(nil, a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[string]State{"a": nil, "b": b.state, "zzz": (*ciState)(nil)}
+	if got := s.CIPRs(states); len(got) != 2 {
+		t.Errorf("CIPRs = %d", len(got))
+	}
+	var none *Set
+	if none.CIPRs(states) != nil || none.ProvidesDeploys() {
+		t.Error("a nil set contributes nothing")
+	}
+	if s.ProvidesDeploys() {
+		t.Error("plain stubs provide no deploys")
+	}
+	d, err := NewSet(nil, &deployStub{stub{name: "d"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.ProvidesDeploys() {
+		t.Error("a DeployProvider turns the D key on")
+	}
+}

@@ -238,6 +238,18 @@ func New(opts Options) (*GitHub, error) {
 // Host is the GitHub host the client talks to.
 func (c *GitHub) Host() string { return c.host }
 
+// TokenFromEnv reports whether a TokenSource names an environment
+// variable: go-gh reads GH_TOKEN, GITHUB_TOKEN, GH_ENTERPRISE_TOKEN and
+// GITHUB_ENTERPRISE_TOKEN ahead of the account gh auth login stored, so
+// one of those exported in a shell silently overrides the human's login.
+func TokenFromEnv(source string) bool {
+	switch source {
+	case "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN":
+		return true
+	}
+	return false
+}
+
 // TokenSource is where the token came from ("option", or go-gh's
 // GH_TOKEN / GITHUB_TOKEN / oauth_token / keyring / ...), for
 // `config check`.

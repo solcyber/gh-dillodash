@@ -1136,3 +1136,18 @@ func TestReleaseRefreshReturnsRateLimit(t *testing.T) {
 		t.Error("the last good state still comes back with it")
 	}
 }
+
+func TestStateCIPRs(t *testing.T) {
+	var none *State
+	if none.CIPRs() != nil {
+		t.Error("a nil state contributes nothing")
+	}
+	_, _, st := fixture(t, true)
+	if got := st.CIPRs(); len(got) != len(st.Releases) {
+		t.Errorf("CIPRs = %d, Releases = %d", len(got), len(st.Releases))
+	}
+	w, _ := newWF(t, false)
+	if !w.ProvidesDeploys() {
+		t.Error("the release workflow provides deploys (D in the list bar)")
+	}
+}

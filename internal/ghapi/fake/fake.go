@@ -35,6 +35,10 @@ type Client struct {
 
 	// User is Whoami's answer.
 	User string
+	// HostName is Host's answer ("github.com" when empty); Source is
+	// TokenSource's ("keyring" when empty).
+	HostName string
+	Source   string
 	// Rate is LastRate's answer.
 	Rate *model.RateLimit
 
@@ -150,6 +154,22 @@ func (f *Client) Whoami(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return f.User, nil
+}
+
+// Host is HostName, or github.com.
+func (f *Client) Host() string {
+	if f.HostName == "" {
+		return "github.com"
+	}
+	return f.HostName
+}
+
+// TokenSource is Source, or keyring.
+func (f *Client) TokenSource() string {
+	if f.Source == "" {
+		return "keyring"
+	}
+	return f.Source
 }
 
 // LastRate is Rate.

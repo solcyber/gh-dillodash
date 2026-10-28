@@ -305,10 +305,17 @@ func dashboard(args []string) error {
 	if err != nil {
 		return fmt.Errorf("GitHub auth failed: %w (gh auth status shows the account)", err)
 	}
+	if err := refuseBot(cfg, me, gh.TokenSource()); err != nil {
+		return err
+	}
 	if cfg.GitHub.Login != "" && !strings.EqualFold(cfg.GitHub.Login, me) {
 		fmt.Fprintf(os.Stderr, "warning: config expects login %q but gh is signed in as %q\n", cfg.GitHub.Login, me)
 		fmt.Fprintln(os.Stderr, "actions will be performed as", me, "(gh auth switch changes it); ctrl-c now to abort")
-		time.Sleep(3 * time.Second)
+		select {
+		case <-time.After(3 * time.Second):
+		case <-ctx.Done():
+			return exitError{130, errors.New("aborted")}
+		}
 	}
 	setupDisplay(cfg)
 	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
@@ -323,6 +330,18 @@ func dashboard(args []string) error {
 		Host:      gh.Host(),
 		Version:   version,
 	})
+}
+
+// refuseBot refuses to run the dashboard as a login listed in [bots]
+// (or any *[bot] account): every key that posts would sign as the bot,
+// and the audit trail of who approved only means something when it is
+// the human who decided. The usual cause is a CI shell's GH_TOKEN
+// leaking into the terminal, so the hint names the token source.
+func refuseBot(cfg *config.Config, me, source string) error {
+	if !cfg.Bots.IsBot(me) {
+		return nil
+	}
+	return exitError{2, fmt.Errorf("signed in as %s, a bot login ([bots] logins, or the [bot] suffix); dillodash posts reviews, comments and merges as the signed-in user, so it will not run as a bot — %s", me, doctor.BotHint(source))}
 }
 
 // runDemo opens the dashboard on the offline fixture. The display flags

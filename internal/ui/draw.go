@@ -434,9 +434,19 @@ var coreKeys = map[string][][2]string{
 	ViewFortress: {{"hjkl", "look"}, {"tab", "next"}, {"↵", "open"}, {"+/-", "zoom"}, {"c", "city"}, {"y", "url"}, {"r", "refresh"}, {"d", "back"}},
 }
 
-// keysFor merges the core keys with the workflows' for a view.
+// keysFor merges the core keys with the workflows' for a view. The
+// list shows D while a workflow lists merged PRs with deployments to
+// approve (release_pr), the way the window workflow adds w.
 func (m *Model) keysFor(view string) [][2]string {
 	keys := append([][2]string(nil), coreKeys[view]...)
+	if view == ViewList && m.wf.ProvidesDeploys() {
+		for i, k := range keys {
+			if k[0] == "d" {
+				keys = append(keys[:i], append([][2]string{{"D", "deploys"}}, keys[i:]...)...)
+				break
+			}
+		}
+	}
 	wfKeys := m.wf.Keys(view)
 	if view == "issue" {
 		wfKeys = nil
@@ -487,7 +497,7 @@ func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 
 var coreHelp = [][2]string{
 	{"list", "j/k g/G pgup/pgdn  move   enter  open   /  filter (live)"},
-	{"", "A  PRs approved by others   r  refresh   q  quit"},
+	{"", "A  PRs approved by others   D  approve a merged row's deployments   r  refresh   q  quit"},
 	{"detail", "a  approve   c  comment   C  comment in $EDITOR   t  tag"},
 	{"", "f  files   v  diff in $PAGER   /  search, n/N   m  raw markdown"},
 	{"", "M  merge an approved PR   D  approve its waiting deployments"},

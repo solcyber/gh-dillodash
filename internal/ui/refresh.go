@@ -113,23 +113,6 @@ func (m *Model) refresh(again bool) {
 		sort.SliceStable(out.issues, func(i, j int) bool {
 			return out.issues[i].UpdatedAt.After(out.issues[j].UpdatedAt)
 		})
-		clusters, ciWarn, err := ci.Annotate(ctx, time.Now(), out.allPRs, gh.WorkflowRuns)
-		if err != nil {
-			out.err = err.Error()
-			if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
-				out.retryAt = e.RetryAt
-			}
-			return
-		}
-		out.ci = map[model.Ident]model.CICluster{}
-		for i, pr := range out.allPRs {
-			if i < len(clusters) {
-				out.ci[pr.Ident()] = clusters[i]
-			}
-		}
-		if ciWarn != "" {
-			warns = append([]string{"degraded: " + ciWarn}, warns...)
-		}
 		states, wfWarns, wfErr := wf.RefreshAll(ctx, gh, repos, out.allPRs, out.issues)
 		out.wfStates = states
 		warns = append(warns, wfWarns...)
@@ -138,6 +121,27 @@ func (m *Model) refresh(again bool) {
 			// list shows and the next refresh waits for the window
 			out.retryAt = e.RetryAt
 			warns = append([]string{"rate limited — workflow data paused until " + e.RetryAt.Local().Format("15:04:05")}, warns...)
+		}
+		// one CI pass for the review PRs and the PRs the workflows contribute
+		// (releases): one cache, one set of live SHAs, one Actions call per SHA
+		ciPRs := append(append([]*model.PR{}, out.allPRs...), wf.CIPRs(states)...)
+		clusters, ciWarn, err := ci.Annotate(ctx, time.Now(), ciPRs, gh.WorkflowRuns)
+		if err != nil {
+			out.err = err.Error()
+			if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
+				out.retryAt = e.RetryAt
+			}
+			return
+		}
+		out.ci = map[model.Ident]model.CICluster{}
+		for i, pr := range ciPRs {
+			out.ci[pr.Ident()] = clusters[i]
+			if i >= len(out.allPRs) {
+				pr.Set(workflow.CIKey, clusters[i]) // a workflow's PR: its renderers read Ext
+			}
+		}
+		if ciWarn != "" {
+			warns = append([]string{"degraded: " + ciWarn}, warns...)
 		}
 		if wantFortress {
 			fort, err := gh.Fortress(ctx, repos)
