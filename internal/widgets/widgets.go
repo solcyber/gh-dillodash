@@ -11,13 +11,13 @@ package widgets
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/text"
 )
 
@@ -60,12 +60,9 @@ type Modal interface {
 	Animated() bool
 }
 
-// ApproveCmdRe matches an /approve command line: the 64-hex plan id and
-// its optional --confirm-destroys / --outside-window flags.
-var ApproveCmdRe = regexp.MustCompile(
-	`^/approve [ \t\r\n\f\v]*([0-9a-f]{64})` +
-		`((?:[ \t]+--(?:confirm-destroys=[0-9]+|outside-window="[^"\r\n]*"))*)` +
-		`[ \t\r\n\f\v]*$`)
+// ApproveCmdRe matches an /approve command line: the validator's shape,
+// shared with the markdown renderer.
+var ApproveCmdRe = markdown.ApproveCmdRE
 
 // Wrap word-wraps s to width cells the way textwrap.wrap does: words move
 // whole to the next line, a word wider than a line is broken, whitespace
@@ -200,7 +197,7 @@ func ReasonProgress(s string, minLen int, forbid string) (ok bool, remaining int
 		}
 		return false, remaining, fmt.Sprintf("%d more character%s", remaining, plural)
 	}
-	return true, 0, "enough — enter continues"
+	return true, 0, "enough — Enter continues"
 }
 
 // HazardSegs is a gold hazard stripe width cells wide; it marches when

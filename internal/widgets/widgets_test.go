@@ -66,7 +66,7 @@ func TestReasonProgress(t *testing.T) {
 	if ok || !strings.Contains(hint, "validator") {
 		t.Errorf("a double quote is refused whatever the length: %v %q", ok, hint)
 	}
-	if _, _, hint := ReasonProgress("ok", 2, ""); hint != "enough — enter continues" {
+	if _, _, hint := ReasonProgress("ok", 2, ""); hint != "enough — Enter continues" {
 		t.Errorf("hint = %q", hint)
 	}
 	// characters, not bytes
@@ -398,7 +398,7 @@ func TestPromptDrawReasonFooter(t *testing.T) {
 	if !strings.Contains(c.Text(21), "20 more characters") || c.StyleAt(21, 1) != "hint.short" {
 		t.Errorf("hint row = %q (%s)", c.Text(21), c.StyleAt(21, 1))
 	}
-	if !strings.HasSuffix(strings.TrimRight(c.Text(21), " "), `no " · esc cancels`) {
+	if !strings.HasSuffix(strings.TrimRight(c.Text(21), " "), `no " · Esc cancels`) {
 		t.Errorf("keys = %q", c.Text(21))
 	}
 	if !strings.HasPrefix(c.Text(22), "› ") || p.CursorY != 22 {
@@ -446,7 +446,7 @@ func TestPromptDrawReasonFooter(t *testing.T) {
 		p.Handle(k)
 	}
 	p.Draw(c, nil)
-	if !strings.Contains(c.Text(21), "enough — enter continues") || c.StyleAt(21, 1) != "hint.ok" {
+	if !strings.Contains(c.Text(21), "enough — Enter continues") || c.StyleAt(21, 1) != "hint.ok" {
 		t.Errorf("ok hint = %q (%s)", c.Text(21), c.StyleAt(21, 1))
 	}
 	if c.StyleAt(23, 1) != "meter.ok" && c.StyleAt(23, 1) != "meter.shine" {
@@ -618,7 +618,7 @@ func TestPickDraw(t *testing.T) {
 		t.Errorf("item styles: %q %q %q %q", c.StyleAt(4, 2), c.StyleAt(4, 5), c.StyleAt(3, 5), c.StyleAt(3, 3))
 	}
 	// the hint is clipped at the interior's edge
-	if !strings.Contains(c.Text(7), "j/k move · enter choose · 1-9 pick · esc can │") || c.StyleAt(7, 3) != "menu.hint" {
+	if !strings.Contains(c.Text(7), "j/k move · Enter picks · 1-9 jump · Esc canc │") || c.StyleAt(7, 3) != "menu.hint" {
 		t.Errorf("hint row = %q", c.Text(7))
 	}
 	if !strings.HasPrefix(c.Text(8), " ╰") || !strings.Contains(c.Text(8), "╯") {

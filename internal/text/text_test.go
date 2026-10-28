@@ -39,7 +39,10 @@ func TestEllipPad(t *testing.T) {
 	if got := Pad("日本", 5); got != "日本 " || Width(got) != 5 {
 		t.Errorf("Pad = %q", got)
 	}
-	if got := LPad("ab", 4); got != "  ab" {
+	if got := OrQ(""); got != "?" {
+		t.Errorf("OrQ(\"\") = %q", got)
+	}
+	if got := OrQ("ab") + strings.Repeat(" ", 2); got != "ab  " {
 		t.Errorf("LPad = %q", got)
 	}
 }

@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
@@ -341,9 +340,9 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 	author := func(r workflow.Row) string {
 		switch v := r.Item.(type) {
 		case *model.PR:
-			return orQ(v.Author.Login)
+			return text.OrQ(v.Author.Login)
 		case *model.Issue:
-			return orQ(v.Author.Login)
+			return text.OrQ(v.Author.Login)
 		}
 		return ""
 	}
@@ -382,13 +381,6 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 	return lay
 }
 
-func orQ(s string) string {
-	if s == "" {
-		return "?"
-	}
-	return s
-}
-
 // fit drops columns in order until the title keeps 24 cells (16 under
 // 60 columns, where every cell counts).
 func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout {
@@ -417,26 +409,16 @@ func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout
 // workflow may override it through Row.Meta["label"].
 func (m *Model) issueLabel(r workflow.Row) string {
 	if l, ok := r.Meta["label"].(string); ok && l != "" {
-		return clipRunes(l, 16)
+		return text.Ellip(l, 16)
 	}
 	i := r.Item.(*model.Issue)
 	if names := i.Labels.Names(); len(names) > 0 {
-		return clipRunes(names[0], 16)
+		return text.Ellip(names[0], 16)
 	}
 	return "issue"
 }
 
-func clipRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		return string(r[:n])
-	}
-	return s
-}
-
 // ---- row pieces ----
-
-var ciCount = regexp.MustCompile(`^\d+`)
 
 var ciGlyph = map[byte][2]string{
 	'+': {"pass", "ci.pass"}, 'x': {"fail", "ci.fail"}, '.': {"wait", "ci.wait"},
@@ -450,9 +432,13 @@ func (m *Model) ciSegs(codes string) []text.Seg {
 	i := 0
 	for i < len(codes) {
 		count := ""
-		if c := ciCount.FindString(codes[i:]); c != "" {
-			count = c
-			i += len(c)
+		j := i
+		for j < len(codes) && codes[j] >= '0' && codes[j] <= '9' {
+			j++
+		}
+		if j > i {
+			count = codes[i:j]
+			i = j
 			if i >= len(codes) {
 				break
 			}
@@ -527,7 +513,7 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 			segs = append(segs, text.S(" ", "text"))
 		}
 		if aw, ok := L["author"]; ok {
-			a := orQ(item.Author.Login)
+			a := text.OrQ(item.Author.Login)
 			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))
 		}
 		if aw, ok := L["age"]; ok {
@@ -574,7 +560,7 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 			segs = append(segs, text.S(text.Pad(cnt, cw)+" ", "count"))
 		}
 		if aw, ok := L["author"]; ok {
-			a := orQ(item.Author.Login)
+			a := text.OrQ(item.Author.Login)
 			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))
 		}
 		if aw, ok := L["age"]; ok {
@@ -591,7 +577,27 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 	return []text.Seg{text.S(fmt.Sprintf("(%s row)", row.Kind), "faint")}
 }
 
-var headerCount = regexp.MustCompile(`^(.*) \((\d+)\)$`)
+// splitHeaderCount splits "pull requests (6)" into its name and count;
+// a header without a count keeps its whole text.
+func splitHeaderCount(txt string) (name, count string) {
+	if !strings.HasSuffix(txt, ")") {
+		return txt, ""
+	}
+	i := strings.LastIndex(txt, " (")
+	if i < 0 {
+		return txt, ""
+	}
+	n := txt[i+2 : len(txt)-1]
+	if n == "" {
+		return txt, ""
+	}
+	for _, r := range n {
+		if r < '0' || r > '9' {
+			return txt, ""
+		}
+	}
+	return txt[:i], n
+}
 
 // headerSegs draws section bars ('▌ pull requests  6 ────') and the
 // indented sub-headers (a night), which get a workflow's countdown.
@@ -602,7 +608,7 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		label := strings.TrimSpace(txt)
 		extra, more := m.wf.HeaderExtra(m, row, w)
 		segs = []text.Seg{
-			text.S("   "+boxGlyph(2)+glyphs.G("rule")+" ", "rule"),
+			text.S("   "+scenes.BoxGlyph(2)+glyphs.G("rule")+" ", "rule"),
 			text.S(glyphs.Ico("clock"), "subsection"),
 		}
 		room := w - 2 - text.SegsWidth(segs)
@@ -614,10 +620,7 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		segs = append(segs, more...)
 		segs = append(segs, text.S(extra, "faint"), text.S(" ", "text"))
 	} else {
-		name, count := txt, ""
-		if mm := headerCount.FindStringSubmatch(txt); mm != nil {
-			name, count = mm[1], mm[2]
-		}
+		name, count := splitHeaderCount(txt)
 		icon := "pr"
 		switch {
 		case strings.Contains(name, "window"):
@@ -635,13 +638,4 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		segs = append(segs, text.S(text.Ellip(name, w-2-text.SegsWidth(segs)-text.Width(tail.Text)), "section"), tail)
 	}
 	return append(segs, scenes.GleamSegs(w-1-text.SegsWidth(segs), pos)...)
-}
-
-// boxGlyph is one of the box-drawing set's characters.
-func boxGlyph(i int) string {
-	r := []rune(glyphs.G("box"))
-	if i < len(r) {
-		return string(r[i])
-	}
-	return "|"
 }

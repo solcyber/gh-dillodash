@@ -63,8 +63,8 @@ func IsRateLimit(err error) bool {
 	return ok && e.IsRateLimit()
 }
 
-// IsNetwork reports whether err is a "network error: ..." *Error.
-func IsNetwork(err error) bool {
+// isNetwork reports whether err is a "network error: ..." *Error.
+func isNetwork(err error) bool {
 	e, ok := AsError(err)
 	return ok && strings.HasPrefix(e.Message, "network error")
 }
@@ -74,14 +74,14 @@ func IsNetwork(err error) bool {
 // retrying sooner lengthens the penalty.
 const secondaryFloor = 60 * time.Second
 
-// RetryAtFromHeaders is the time to back off until, from a GitHub
+// retryAtFromHeaders is the time to back off until, from a GitHub
 // response's rate-limit headers; ok is false if the headers don't
 // indicate a rate limit.
 //
 // Secondary limits send Retry-After (delta seconds, or an HTTP date);
 // primary limits send X-RateLimit-Remaining: 0 with X-RateLimit-Reset
 // (absolute epoch).
-func RetryAtFromHeaders(h http.Header, now time.Time) (time.Time, bool) {
+func retryAtFromHeaders(h http.Header, now time.Time) (time.Time, bool) {
 	if h == nil {
 		return time.Time{}, false
 	}
@@ -124,7 +124,7 @@ func retryAt(status int, msg string, h http.Header, now time.Time) (time.Time, b
 	if status != http.StatusForbidden && status != http.StatusTooManyRequests {
 		return time.Time{}, false
 	}
-	if at, ok := RetryAtFromHeaders(h, now); ok {
+	if at, ok := retryAtFromHeaders(h, now); ok {
 		return at, true
 	}
 	if isSecondaryLimit(status, msg) {

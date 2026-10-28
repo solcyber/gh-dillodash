@@ -291,7 +291,7 @@ func (p *Prompt) drawReasonFooter(c *canvas.Canvas) {
 	default:
 		segs = []text.Seg{text.S(" "+glyphs.Ico("edit")+hint, "hint.short")}
 	}
-	keys := "esc cancels "
+	keys := "Esc cancels "
 	if p.Forbid != "" {
 		keys = fmt.Sprintf("no %s %s ", p.Forbid, glyphs.G("sep")) + keys
 	}

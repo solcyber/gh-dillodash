@@ -417,7 +417,7 @@ func Items(in Input) []*Item {
 			ago, _ := clock.ShortAge(cm.CommittedDate, now)
 			add(&Item{Kind: KindCommit, Repo: repo, ID: "commit:" + repo.Name + ":" + cm.Oid, Age: age,
 				Color: color, Anim: anim,
-				Text:  fmt.Sprintf("%s %s · %s · %s ago", repo.Name, def, shortSHA(cm.Oid), ago),
+				Text:  fmt.Sprintf("%s %s · %s · %s ago", repo.Name, def, model.ShortSHA(cm.Oid), ago),
 				Title: cm.MessageHeadline, URL: ghapi.CommitURL(in.Host, repo, cm.Oid), Urgency: 11})
 		}
 	}
@@ -431,13 +431,6 @@ func Items(in Input) []*Item {
 		add(it)
 	}
 	return items
-}
-
-func shortSHA(s string) string {
-	if len(s) > 7 {
-		return s[:7]
-	}
-	return s
 }
 
 // fhash is the placement hash of an ID: the first 32 bits of its MD5, so

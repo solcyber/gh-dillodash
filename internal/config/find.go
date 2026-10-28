@@ -6,8 +6,8 @@ import (
 	"runtime"
 )
 
-// EnvVar names the environment override for the config path.
-const EnvVar = "DILLODASH_CONFIG"
+// envVar names the environment override for the config path.
+const envVar = "DILLODASH_CONFIG"
 
 // homeDir is the home directory: $HOME, else %USERPROFILE% (Windows
 // shells rarely set HOME), else what the OS says.
@@ -52,9 +52,9 @@ func FindPath(cliPath string, env func(string) string) (path string, legacyINI s
 		}
 		return cliPath, "", nil
 	}
-	if p := env(EnvVar); p != "" {
+	if p := env(envVar); p != "" {
 		if !isFile(p) {
-			return "", "", &Error{Path: p, Why: "not found ($" + EnvVar + ")"}
+			return "", "", &Error{Path: p, Why: "not found ($" + envVar + ")"}
 		}
 		return p, "", nil
 	}
@@ -88,7 +88,7 @@ func DefaultPath(env func(string) string) string {
 // --config is given: $DILLODASH_CONFIG when set (so the dashboard reads
 // what was just written), else DefaultPath.
 func InstallPath(env func(string) string) string {
-	if p := env(EnvVar); p != "" {
+	if p := env(envVar); p != "" {
 		return p
 	}
 	return DefaultPath(env)

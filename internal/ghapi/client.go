@@ -20,11 +20,12 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
-// DefaultTimeout bounds every request.
-const DefaultTimeout = 10 * time.Second
+// defaultTimeout bounds every request.
+const defaultTimeout = 10 * time.Second
 
 // ListResult is one repo's share of ListOpen.
 type ListResult struct {
@@ -159,7 +160,7 @@ type Options struct {
 	Token string
 	// Version goes into the User-Agent ("dillodash/<version>").
 	Version string
-	// Timeout bounds each request (DefaultTimeout when zero).
+	// Timeout bounds each request (defaultTimeout when zero).
 	Timeout time.Duration
 	// BaseURL is an escape hatch for tests: when set, every REST path is
 	// resolved against it and GraphQL posts to BaseURL + "/graphql",
@@ -197,10 +198,10 @@ func (e *NoTokenError) Error() string {
 // auth.TokenForHost (env, gh config, or the keyring via gh); TokenSource
 // says which.
 func New(opts Options) (*GitHub, error) {
-	host := NormalizeHost(opts.Host)
+	host := normalizeHost(opts.Host)
 	if strings.TrimSpace(opts.Host) == "" {
 		if h, _ := auth.DefaultHost(); h != "" {
-			host = NormalizeHost(h)
+			host = normalizeHost(h)
 		}
 	}
 	token, source := opts.Token, "option"
@@ -212,7 +213,7 @@ func New(opts Options) (*GitHub, error) {
 	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
-		timeout = DefaultTimeout
+		timeout = defaultTimeout
 	}
 	version := opts.Version
 	if version == "" {
@@ -233,8 +234,8 @@ func New(opts Options) (*GitHub, error) {
 		host:        host,
 		tokenSource: source,
 		http:        hc,
-		restBase:    RESTBase(host),
-		graphqlURL:  GraphQLURL(host),
+		restBase:    restBase(host),
+		graphqlURL:  graphQLURL(host),
 	}
 	if opts.BaseURL != "" {
 		base := strings.TrimRight(opts.BaseURL, "/")
@@ -334,7 +335,7 @@ func httpError(method, rawURL string, resp *http.Response) *Error {
 	// a rate limit (headers, or a 429 / secondary-limit 403 without
 	// them): record when to retry so the caller backs off instead of
 	// hammering the wall every tick
-	if at, ok := retryAt(resp.StatusCode, e.Message, resp.Header, time.Now()); ok {
+	if at, ok := retryAt(resp.StatusCode, e.Message, resp.Header, clock.Now()); ok {
 		e.RetryAt = at
 	}
 	return e
@@ -386,15 +387,15 @@ func (c *GitHub) restRaw(ctx context.Context, path, accept string) (string, erro
 	return string(body), nil
 }
 
-// GQLError is one entry of a GraphQL response's errors[].
-type GQLError struct {
+// gqlError is one entry of a GraphQL response's errors[].
+type gqlError struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
 	Path    []any  `json:"path"`
 }
 
 // pathIs reports whether the error's path starts with the given keys.
-func (e GQLError) pathIs(keys ...string) bool {
+func (e gqlError) pathIs(keys ...string) bool {
 	if len(e.Path) < len(keys) {
 		return false
 	}
@@ -434,7 +435,7 @@ func isNull(raw json.RawMessage) bool {
 // an error. GraphQL rate limiting arrives as HTTP 200 + a RATE_LIMITED
 // error: its RetryAt comes from the response headers, or now+60s when
 // they are absent, so we still stop hammering.
-func (c *GitHub) graphql(ctx context.Context, query string, variables map[string]any) (gqlData, []GQLError, error) {
+func (c *GitHub) graphql(ctx context.Context, query string, variables map[string]any) (gqlData, []gqlError, error) {
 	rawURL := c.graphqlURL
 	payload := map[string]any{"query": query, "variables": variables}
 	body, hdrs, err := c.do(ctx, http.MethodPost, rawURL, payload, acceptJSON)
@@ -443,7 +444,7 @@ func (c *GitHub) graphql(ctx context.Context, query string, variables map[string
 	}
 	var out struct {
 		Data   gqlData    `json:"data"`
-		Errors []GQLError `json:"errors"`
+		Errors []gqlError `json:"errors"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, nil, &Error{Method: http.MethodPost, URL: rawURL,
@@ -459,7 +460,7 @@ func (c *GitHub) graphql(ctx context.Context, query string, variables map[string
 			if e0.Type == "RATE_LIMITED" || strings.Contains(strings.ToLower(e0.Message), "rate limit") {
 				// a 200 with RATE_LIMITED is a secondary limit in all but
 				// status: the headers when they say, else the floor
-				e.RetryAt, _ = retryAt(http.StatusTooManyRequests, e0.Message, hdrs, time.Now())
+				e.RetryAt, _ = retryAt(http.StatusTooManyRequests, e0.Message, hdrs, clock.Now())
 			}
 		}
 		return nil, out.Errors, e
@@ -476,7 +477,7 @@ func (c *GitHub) graphql(ctx context.Context, query string, variables map[string
 // repoNode decodes data[key] (a repository(...) field) into out. A null
 // repository means a repo typo or a token that can't see it — not
 // "nothing open".
-func repoNode(data gqlData, errs []GQLError, key string, out any) error {
+func repoNode(data gqlData, errs []gqlError, key string, out any) error {
 	ok, err := data.get(key, out)
 	if err != nil {
 		return &Error{Message: "bad response: " + err.Error()}

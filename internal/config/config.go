@@ -200,7 +200,7 @@ type ReleasePRConfig struct {
 
 // DeployComment renders deploy_approval_comment for a merged release.
 func (r *ReleasePRConfig) DeployComment(repo model.Repo, number int, sha string) string {
-	rep := strings.NewReplacer("{repo}", repo.String(), "{number}", itoa(number), "{sha}", sha)
+	rep := strings.NewReplacer("{repo}", repo.String(), "{number}", strconv.Itoa(number), "{sha}", sha)
 	return rep.Replace(r.DeployApprovalComment)
 }
 
@@ -308,5 +308,3 @@ func (e *Error) Error() string {
 	}
 	return strings.Join(parts, ": ")
 }
-
-func itoa(n int) string { return strconv.Itoa(n) }

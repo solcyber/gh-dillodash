@@ -27,11 +27,11 @@ var (
 	goos         = runtime.GOOS
 )
 
-// SplitWords splits a command line into words the way a POSIX shell
+// splitWords splits a command line into words the way a POSIX shell
 // would, enough for $EDITOR and $PAGER values: single quotes keep
 // everything literal, double quotes allow \" and \\, a backslash outside
 // quotes escapes the next character. An unterminated quote is an error.
-func SplitWords(s string) ([]string, error) {
+func splitWords(s string) ([]string, error) {
 	var out []string
 	var cur strings.Builder
 	have := false
@@ -100,7 +100,7 @@ func EditorCommand() ([]string, error) {
 			ed = "notepad"
 		}
 	}
-	argv, err := SplitWords(ed)
+	argv, err := splitWords(ed)
 	if err != nil {
 		return nil, fmt.Errorf("editor %q: %w", ed, err)
 	}
@@ -115,7 +115,7 @@ func EditorCommand() ([]string, error) {
 // less out of the box).
 func PagerCommand() []string {
 	if p := firstEnv("GH_PAGER", "PAGER"); p != "" {
-		if argv, err := SplitWords(p); err == nil && len(argv) > 0 {
+		if argv, err := splitWords(p); err == nil && len(argv) > 0 {
 			return argv
 		}
 	}
@@ -139,12 +139,13 @@ func firstEnv(names ...string) string {
 // test's stand-in).
 type exitStatus interface{ ExitCode() int }
 
-// Run runs an interactive program (editor, pager) on the real terminal
-// and returns its exit status as the error (an *exec.ExitError for a
-// non-zero exit). Ctrl-C meanwhile is swallowed here: it reaches the
-// child as well, and used to kill the dashboard too. A handler, not
-// SIG_IGN, which the child would inherit across exec.
-func Run(argv []string) error {
+// runTTY runs an interactive program (editor, pager) on the real
+// terminal and returns its exit status as the error (an *exec.ExitError
+// for a non-zero exit); the default runner of EditInTemp when the app
+// gives none (the app gives Bubble Tea's). Ctrl-C meanwhile is swallowed
+// here: it reaches the child as well. A handler, not SIG_IGN, which the
+// child would inherit across exec.
+func runTTY(argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("empty command")
 	}
@@ -167,7 +168,7 @@ func EditInTemp(seed string, run func(argv []string) error) (text string, ok boo
 		return "", false, err
 	}
 	if run == nil {
-		run = Run
+		run = runTTY
 	}
 	f, err := os.CreateTemp("", "dillodash-*.md")
 	if err != nil {

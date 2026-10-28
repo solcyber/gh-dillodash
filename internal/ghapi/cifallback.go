@@ -15,9 +15,9 @@ import (
 // ciWorkers caps the Actions calls in flight during one Annotate.
 const ciWorkers = 6
 
-// CIRecheck is how long a settled, passing SHA's cluster is trusted
+// ciRecheck is how long a settled, passing SHA's cluster is trusted
 // before the Actions API is asked again (a re-run may have happened).
-const CIRecheck = 900 * time.Second
+const ciRecheck = 900 * time.Second
 
 // CINotVisible is the warning when CI is invisible by every route.
 const CINotVisible = "CI not visible to this token"
@@ -44,7 +44,7 @@ type ciEntry struct {
 // refresh, showing the last known cluster meanwhile.
 type CIFallback struct {
 	// Recheck is how long a settled, passing SHA's cluster is trusted
-	// before the Actions API is asked again; 0 means CIRecheck. The
+	// before the Actions API is asked again; 0 means ciRecheck. The
 	// config's ci_recheck_secs sets it.
 	Recheck time.Duration
 
@@ -129,7 +129,7 @@ func (f *CIFallback) Lookup(ctx context.Context, now time.Time, pr *model.PR, fe
 	f.mu.Unlock()
 	recheck := f.Recheck
 	if recheck <= 0 {
-		recheck = CIRecheck
+		recheck = ciRecheck
 	}
 	if ok && cached.settled && len(cached.cluster.Failed) == 0 && now.Sub(cached.at) <= recheck {
 		return cached.cluster, "", nil

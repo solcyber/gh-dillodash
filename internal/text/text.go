@@ -287,11 +287,10 @@ func Pad(s string, cols int) string {
 	return s
 }
 
-// LPad right-aligns s in cols cells.
-func LPad(s string, cols int) string {
-	s = Clip(s, cols)
-	if w := Width(s); w < cols {
-		return strings.Repeat(" ", cols-w) + s
+// OrQ is s, or "?" when it is empty: a login or a name GitHub left out.
+func OrQ(s string) string {
+	if s == "" {
+		return "?"
 	}
 	return s
 }

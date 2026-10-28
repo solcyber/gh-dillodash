@@ -293,7 +293,7 @@ func revText(pr *model.PR) string {
 
 func statusOf(pr *model.PR) string {
 	if info := InfoOf(pr); info != nil && info.Status != "" {
-		return clip(info.Status, 30)
+		return text.Ellip(info.Status, 30)
 	}
 	return "queued"
 }

@@ -217,7 +217,7 @@ func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handle
 	case "squash", "rebase":
 		how = "with a " + w.cfg.MergeMethod
 	}
-	what := fmt.Sprintf("merge %s (%s -> %s at %s) %s? This DEPLOYS production.", wh, head, base, short(pr.HeadRefOid), how)
+	what := fmt.Sprintf("merge %s (%s -> %s at %s) %s? This DEPLOYS production.", wh, head, base, model.ShortSHA(pr.HeadRefOid), how)
 	if w.InReleaseWindow(app.Now()) {
 		return app.Confirm(what), true
 	}

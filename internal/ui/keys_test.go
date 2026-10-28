@@ -262,3 +262,26 @@ func TestHelpGroupsCoverTheTable(t *testing.T) {
 		}
 	}
 }
+
+// TestNoSpacedHyphenSeparators: status text uses an em dash for an
+// aside, never " - " (see CONTRIBUTING's style notes).
+func TestNoSpacedHyphenSeparators(t *testing.T) {
+	fset := token.NewFileSet()
+	files, _ := filepath.Glob("*.go")
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if ok && lit.Kind == token.STRING && strings.Contains(lit.Value, " - ") && !strings.Contains(lit.Value, "->") {
+				t.Errorf("%s: %s uses \" - \" as a separator; use an em dash", fset.Position(lit.Pos()), lit.Value)
+			}
+			return true
+		})
+	}
+}

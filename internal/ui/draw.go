@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -135,7 +135,7 @@ type part struct {
 // the GraphQL budget meter, the draining countdown to the next refresh.
 func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	refreshing := m.refreshing
-	backoff := int(time.Until(m.rateLimitedUntil).Seconds())
+	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
 	var parts []part
 	if m.detail == nil {
 		parts = append(parts, part{0, []text.Seg{text.S("  "+m.ver, "build")}})
@@ -395,7 +395,7 @@ func (m *Model) positionSegs() []text.Seg {
 // replaces it; results are blue, refusals and errors gold (with a shake),
 // and an error stays until something supersedes it.
 func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
-	backoff := int(time.Until(m.rateLimitedUntil).Seconds())
+	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
 	age := fx.Now() - m.statusAt
 	var segs []text.Seg
 	switch {

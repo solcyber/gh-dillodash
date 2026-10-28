@@ -249,7 +249,7 @@ func TestNetworkErrors(t *testing.T) {
 	c := s.client(t)
 	s.Close()
 	_, err := c.Whoami(context.Background())
-	if !IsNetwork(err) {
+	if !isNetwork(err) {
 		t.Fatalf("closed server: %v", err)
 	}
 	if e, _ := AsError(err); e.Status != 0 || !strings.HasPrefix(e.Error(), "network error: ") {
@@ -270,7 +270,7 @@ func TestNetworkErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = fast.Whoami(context.Background())
-	if !IsNetwork(err) || !strings.Contains(err.Error(), "timed out") {
+	if !isNetwork(err) || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("timeout: %v", err)
 	}
 
@@ -293,7 +293,7 @@ func TestNetworkErrors(t *testing.T) {
 		}
 	})
 	_, err = drop.client(t).Whoami(context.Background())
-	if !IsNetwork(err) {
+	if !isNetwork(err) {
 		t.Fatalf("dropped mid-body: %v", err)
 	}
 
@@ -301,7 +301,7 @@ func TestNetworkErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = s.client(t).Whoami(ctx)
-	if !IsNetwork(err) {
+	if !isNetwork(err) {
 		t.Fatalf("cancelled: %v", err)
 	}
 }
@@ -311,7 +311,7 @@ func TestTruncatedBody(t *testing.T) {
 	s.jsonOK("GET", "/user", `{"trunc`)
 	_, err := s.client(t).Whoami(context.Background())
 	e, ok := AsError(err)
-	if !ok || !strings.HasPrefix(e.Message, "bad response from GET ") || IsNetwork(err) {
+	if !ok || !strings.HasPrefix(e.Message, "bad response from GET ") || isNetwork(err) {
 		t.Fatalf("truncated JSON: %v", err)
 	}
 	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {

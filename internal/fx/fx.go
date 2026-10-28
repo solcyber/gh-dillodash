@@ -19,6 +19,7 @@ package fx
 import (
 	"math"
 	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
@@ -292,19 +293,7 @@ func Ramp(prefix string, n int, t float64) string {
 	if i > n-1 {
 		i = n - 1
 	}
-	return prefix + itoa(i)
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b []byte
-	for i > 0 {
-		b = append([]byte{byte('0' + i%10)}, b...)
-		i /= 10
-	}
-	return string(b)
+	return prefix + strconv.Itoa(i)
 }
 
 // Cell is one particle on screen.

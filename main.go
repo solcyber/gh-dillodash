@@ -29,6 +29,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/markdown"
+	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/ui"
@@ -680,7 +681,7 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 		fmt.Fprintln(w, "warning:", warn)
 	}
 	if stamped && !force && old.Spec() == src.Spec() && old.SHA == sha {
-		fmt.Fprintf(w, "%s is current: %s @ %s (pulled %s)\n", path, src.Spec(), short(sha), old.At.Local().Format("2006-01-02 15:04"))
+		fmt.Fprintf(w, "%s is current: %s @ %s (pulled %s)\n", path, src.Spec(), model.ShortSHA(sha), old.At.Local().Format("2006-01-02 15:04"))
 		return nil
 	}
 	src.SHA, src.At = sha, clock.Now()
@@ -692,14 +693,7 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 	if err := config.WriteFileAtomic(path, config.Stamp(src, data), 0o600); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "installed %s from %s @ %s\n", path, src.Spec(), short(sha))
+	fmt.Fprintf(w, "installed %s from %s @ %s\n", path, src.Spec(), model.ShortSHA(sha))
 	fmt.Fprintln(w, "next: gh dillodash config check")
 	return nil
-}
-
-func short(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
 }

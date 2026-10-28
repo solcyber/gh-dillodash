@@ -269,8 +269,8 @@ func TestRefreshErrorBacksOff(t *testing.T) {
 	if !strings.Contains(h.screen(), "couldn't load acme/infra") {
 		t.Errorf("screen:\n%s", h.screen())
 	}
-	if h.m.failStreak != 1 {
-		t.Errorf("failStreak = %d", h.m.failStreak)
+	if h.m.backoff.Streak() != 1 {
+		t.Errorf("streak = %d", h.m.backoff.Streak())
 	}
 }
 
@@ -335,8 +335,8 @@ func TestWorkflowRateLimitPausesRefresh(t *testing.T) {
 	if !h.m.loaded || h.m.errText != "" {
 		t.Fatalf("the list still lands: loaded=%v err=%q", h.m.loaded, h.m.errText)
 	}
-	if !h.m.rateLimitedUntil.Equal(until) {
-		t.Errorf("rateLimitedUntil = %v, want %v", h.m.rateLimitedUntil, until)
+	if got := h.m.backoff.Until(); !got.Equal(until) {
+		t.Errorf("backoff until = %v, want %v", got, until)
 	}
 	if !strings.Contains(h.m.warn, "rate limited") || !strings.Contains(h.m.warn, "stub: partial") {
 		t.Errorf("warn %q", h.m.warn)

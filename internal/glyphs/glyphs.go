@@ -189,7 +189,8 @@ func G(name string) string {
 	return s
 }
 
-// Missed lists every unknown name G was asked for, sorted.
+// Missed lists every unknown name G was asked for, sorted (test
+// support: the glyph tests assert nothing is missed).
 func Missed() []string {
 	mu.RLock()
 	defer mu.RUnlock()

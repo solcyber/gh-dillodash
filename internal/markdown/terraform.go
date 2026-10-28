@@ -20,14 +20,19 @@ var (
 	tfNoteRE       = regexp.MustCompile(`^\s*# .* (will be created|will be destroyed|` +
 		`must be replaced|will be updated in-place|will be read during apply|has moved to)`)
 	windowVerdictLineRE = regexp.MustCompile(`^(Window \([^)]*\):\s*)\*\*([^*]+)\*\*(.*)$`)
-	// approveCmdRE is the validator's shape: only a comment the dispatcher
-	// would accept counts as the operative approval.
-	approveCmdRE = regexp.MustCompile(`^/approve [ \t\r\n\f\v]*([0-9a-f]{64})` +
-		`((?:[ \t]+--(?:confirm-destroys=[0-9]+|outside-window="[^"\r\n]*"))*)` +
-		`[ \t\r\n\f\v]*$`)
+	// approveCmdRE is ApproveCmdRE: only a comment the dispatcher would
+	// accept counts as the operative approval.
+	approveCmdRE = ApproveCmdRE
 	// approveRefusedRE is apply-dispatch's reply when it turns an /approve down.
 	approveRefusedRE = regexp.MustCompile(`^\*\*/approve (refused|not routed|not dispatched):\*\*`)
 )
+
+// ApproveCmdRE is the validator's shape of an /approve command line: the
+// 64-hex plan id and its optional --confirm-destroys / --outside-window
+// flags. The widgets package highlights the same shape.
+var ApproveCmdRE = regexp.MustCompile(`^/approve [ \t\r\n\f\v]*([0-9a-f]{64})` +
+	`((?:[ \t]+--(?:confirm-destroys=[0-9]+|outside-window="[^"\r\n]*"))*)` +
+	`[ \t\r\n\f\v]*$`)
 
 // VerdictStyle is the style for a window verdict: "verdict.notrev" for a
 // not-revertible one, "verdict.disruptive" for a disruptive one, else

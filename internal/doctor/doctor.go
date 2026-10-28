@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -34,7 +35,7 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 	var pulled bool
 	if raw, err := os.ReadFile(cfg.Path); err == nil {
 		if src, pulled = config.ParseSource(raw); pulled {
-			fmt.Fprintf(w, "  source: %s @ %s, pulled %s\n", src.Spec(), short7(src.SHA), ago(src.At))
+			fmt.Fprintf(w, "  source: %s @ %s, pulled %s\n", src.Spec(), model.ShortSHA(src.SHA), ago(src.At))
 		}
 	}
 	for _, warn := range cfg.Warnings {
@@ -173,23 +174,9 @@ func verbose(err error) string {
 	return err.Error()
 }
 
-func short7(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
-}
-
 func ago(t time.Time) string {
 	if t.IsZero() {
 		return "at an unknown time"
 	}
-	d := time.Since(t)
-	switch {
-	case d < time.Hour:
-		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%d hours ago", int(d.Hours()))
-	}
-	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+	return clock.Ago(t, clock.Now())
 }

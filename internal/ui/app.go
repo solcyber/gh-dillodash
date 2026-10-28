@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -146,7 +147,7 @@ func (m *Model) idleWakeMS() int {
 	if (m.loaded && !m.refreshing) || (!m.loaded && m.errText != "") {
 		at(now + frac(m.nextRefreshAt-now))
 	}
-	if hold := time.Until(m.rateLimitedUntil).Seconds(); hold > 0 {
+	if hold := m.backoff.RateLimitWait(clock.Now()).Seconds(); hold > 0 {
 		at(now + frac(hold))
 		at(now + hold)
 	}
@@ -177,7 +178,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case showModalMsg:
 		m.modal = msg.modal
 		m.modalDone = msg.done
-		m.fx.Start("menu", 0.2, nil)
+		if p, ok := msg.modal.(*widgets.Pick); ok {
+			p.Open(m.fx) // the menu pops; prompts and confirms just appear
+		}
 	case redrawMsg:
 	case execMsg:
 		return m, m.handleExec(msg)
@@ -203,7 +206,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() tea.View {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	c := canvas.New(max(1, m.w), max(1, m.h))
+	w, h := max(1, m.w), max(1, m.h)
+	if m.canvas == nil || m.canvas.W != w || m.canvas.H != h {
+		m.canvas = canvas.New(w, h)
+	} else {
+		m.canvas.Clear() // one allocation per resize, not per frame
+	}
+	c := m.canvas
 	m.draw(c)
 	v := tea.NewView(c.Render(render))
 	v.AltScreen = true

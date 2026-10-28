@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -23,8 +24,9 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
-// TickMS is the getch timeout while something animates (spinners);
-// tickMS() slows it to 400ms when nothing does. Drives the refresh clock.
+// TickMS is the frame interval while something animates (spinners,
+// running CI); tickMS() stretches it when nothing does and idleWakeMS()
+// sleeps to the next countdown boundary or the refresh.
 const TickMS = 100
 
 // Views.
@@ -111,16 +113,15 @@ type Model struct {
 	statusAt   float64
 
 	// refresh
-	refreshing       bool
-	refreshAgain     bool
-	ciFlush          bool
-	nextRefreshAt    float64
-	lastRefresh      float64
-	lastRefreshWall  string
-	rateLimitedUntil time.Time
-	ci               *ghapi.CIFallback
-	ciClusters       map[model.Ident]model.CICluster
-	failStreak       int
+	refreshing      bool
+	refreshAgain    bool
+	ciFlush         bool
+	nextRefreshAt   float64
+	lastRefresh     float64
+	lastRefreshWall string
+	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
+	ci              *ghapi.CIFallback
+	ciClusters      map[model.Ident]model.CICluster
 
 	approvedByMe map[model.Ident]string // ident -> head SHA at the time
 
@@ -164,6 +165,11 @@ type Model struct {
 
 	wfState map[string]any
 
+	// refreshStamp names the last landed refresh (the fortress rebuilds
+	// its map when it changes)
+	refreshStamp string
+	// canvas is the frame buffer View reuses between frames
+	canvas *canvas.Canvas
 	// tickGen is the frame clock's generation (retick orphans old ticks)
 	tickGen int
 	// helpTop is the help/message overlay's scroll offset; lastMsg the
@@ -216,6 +222,7 @@ func New(ctx context.Context, o Options) *Model {
 		detailFrom:      ViewList,
 		statusKind:      "info",
 		ci:              &ghapi.CIFallback{Recheck: time.Duration(o.Config.Reviews.CIRecheckSecs) * time.Second},
+		backoff:         ghapi.Backoff{Refresh: time.Duration(o.Config.Display.RefreshSecs) * time.Second},
 		deployCache:     deploys.Cache{StuckAfter: deployStuck(o.Config)},
 		ciClusters:      map[model.Ident]model.CICluster{},
 		approvedByMe:    map[model.Ident]string{},

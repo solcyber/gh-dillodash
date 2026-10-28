@@ -38,7 +38,7 @@ func TestCompute(t *testing.T) {
 			map[int64][]model.PendingDeployment{1: {pend("stg", 1, true)}}, "waiting", "approve: stg"},
 	}
 	for _, c := range cases {
-		st := Compute(c.runs, c.pending, now)
+		st := compute(c.runs, c.pending, now)
 		if st.Phase != c.phase || st.Text != c.text {
 			t.Errorf("%s: phase %q text %q, want %q %q", c.name, st.Phase, st.Text, c.phase, c.text)
 		}
@@ -47,8 +47,8 @@ func TestCompute(t *testing.T) {
 
 func TestFmtSecs(t *testing.T) {
 	for d, want := range map[time.Duration]string{12 * time.Second: "12s", 7 * time.Minute: "7m", 3*time.Hour + 5*time.Minute: "3h05m", -5 * time.Second: "0s"} {
-		if got := FmtSecs(d); got != want {
-			t.Errorf("FmtSecs(%v) = %q, want %q", d, got, want)
+		if got := fmtSecs(d); got != want {
+			t.Errorf("fmtSecs(%v) = %q, want %q", d, got, want)
 		}
 	}
 }
@@ -56,7 +56,7 @@ func TestFmtSecs(t *testing.T) {
 func TestComputeWithStuckThreshold(t *testing.T) {
 	now := time.Date(2026, 10, 27, 23, 10, 0, 0, time.UTC)
 	runs := []model.WorkflowRun{run(1, "deploy", "in_progress", "", 10*time.Minute, now)}
-	if st := Compute(runs, nil, now); st.Phase != "running" {
+	if st := compute(runs, nil, now); st.Phase != "running" {
 		t.Errorf("default threshold: %q", st.Phase)
 	}
 	if st := ComputeWith(runs, nil, now, 5*time.Minute); st.Phase != "stuck" || st.Text != "stuck? 10m" {

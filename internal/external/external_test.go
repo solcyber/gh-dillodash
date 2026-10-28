@@ -81,13 +81,13 @@ func TestSplitWords(t *testing.T) {
 		{`trail\`, nil, true},
 	}
 	for _, c := range cases {
-		got, err := SplitWords(c.in)
+		got, err := splitWords(c.in)
 		if (err != nil) != c.err {
-			t.Errorf("SplitWords(%q): err %v", c.in, err)
+			t.Errorf("splitWords(%q): err %v", c.in, err)
 			continue
 		}
 		if strings.Join(got, "|") != strings.Join(c.want, "|") || len(got) != len(c.want) {
-			t.Errorf("SplitWords(%q) = %q, want %q", c.in, got, c.want)
+			t.Errorf("splitWords(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -375,15 +375,15 @@ func TestRunReportsExit(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs sh")
 	}
-	if err := Run([]string{"sh", "-c", "exit 3"}); err == nil {
+	if err := runTTY([]string{"sh", "-c", "exit 3"}); err == nil {
 		t.Fatal("non-zero exit must be an error")
 	} else if es, ok := err.(exitStatus); !ok || es.ExitCode() != 3 {
 		t.Errorf("exit status: %v", err)
 	}
-	if err := Run([]string{"true"}); err != nil {
+	if err := runTTY([]string{"true"}); err != nil {
 		t.Errorf("zero exit: %v", err)
 	}
-	if err := Run(nil); err == nil {
+	if err := runTTY(nil); err == nil {
 		t.Error("empty argv")
 	}
 	// through EditInTemp, a real non-zero exit is ok=false

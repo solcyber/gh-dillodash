@@ -248,7 +248,7 @@ func (p *Pick) Draw(c *canvas.Canvas, f *fx.Fx) {
 		}, left+iw+1, isSel, false)
 	}
 	sep := glyphs.G("sep")
-	hint := fmt.Sprintf("j/k move %s enter choose %s 1-9 pick %s esc cancels", sep, sep, sep)
+	hint := fmt.Sprintf("j/k move %s Enter picks %s 1-9 jump %s Esc cancels", sep, sep, sep)
 	if n > room {
 		hint += fmt.Sprintf("  (%d-%d of %d)", p.first+1, p.first+len(shown), n)
 	}

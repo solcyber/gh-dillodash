@@ -694,16 +694,6 @@ func (w *Workflow) NightPhrase(now time.Time) string {
 // where is "repo#N": a release lives in another repo than the reviews.
 func where(pr *model.PR) string { return model.Ref(pr.Repo, pr.Number, true) }
 
-func short(sha string) string {
-	if len(sha) > 8 {
-		return sha[:8]
-	}
-	if sha == "" {
-		return "?"
-	}
-	return sha
-}
-
 func plural(n int, one, many string) string {
 	if n == 1 {
 		return one

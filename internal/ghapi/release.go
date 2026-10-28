@@ -79,7 +79,7 @@ func (c *GitHub) releaseRepo(ctx context.Context, repo model.Repo, prod, stage s
 	vars["prodRef"] = refName(prod)
 	vars["stageRef"] = refName(stage)
 	var data gqlData
-	var errs []GQLError
+	var errs []gqlError
 	var err error
 	for attempt := 1; attempt <= 2; attempt++ {
 		data, errs, err = c.graphql(ctx, releaseQuery, vars)
@@ -89,7 +89,7 @@ func (c *GitHub) releaseRepo(ctx context.Context, repo model.Repo, prod, stage s
 		if IsRateLimit(err) {
 			return ReleaseRepo{}, err
 		}
-		if attempt == 2 || !IsNetwork(err) || ctx.Err() != nil {
+		if attempt == 2 || !isNetwork(err) || ctx.Err() != nil {
 			return ReleaseRepo{Err: err}, nil
 		}
 	}

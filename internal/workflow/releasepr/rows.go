@@ -290,7 +290,7 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 			c, _ := r.Item.(*model.PR).Get(ExtCI).(model.CICluster)
 			return text.SegsText(ciSegs(c.Glyphs))
 		}, 14),
-		"author": maxw(items, func(r workflow.Row) string { return orQ(r.Item.(*model.PR).Author.Login) }, 14),
+		"author": maxw(items, func(r workflow.Row) string { return text.OrQ(r.Item.(*model.PR).Author.Login) }, 14),
 		"age":    3,
 	}
 	// narrow: the repo goes last; the chip (needs approval) never
@@ -344,13 +344,6 @@ func (w *Workflow) kindChipStyle(pr *model.PR, ktext string) string {
 		return "chip.queued"
 	}
 	return "chip.label"
-}
-
-func orQ(s string) string {
-	if s == "" {
-		return "?"
-	}
-	return s
 }
 
 func authorStyle(app workflow.App, login string) string {
@@ -442,7 +435,7 @@ func (w *Workflow) releaseSegs(app workflow.App, row workflow.Row, L workflow.La
 		segs = append(segs, text.S(" ", "text"))
 	}
 	if aw, ok := L["author"]; ok {
-		a := orQ(pr.Author.Login)
+		a := text.OrQ(pr.Author.Login)
 		segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", authorStyle(app, a)))
 	}
 	if aw, ok := L["age"]; ok {
@@ -610,7 +603,7 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	if base == "" {
 		base = w.cfg.ProductionBranch
 	}
-	segs = append(segs, text.S("  ", "text"), text.S(orQ(pr.HeadRefName), "md.inline"),
+	segs = append(segs, text.S("  ", "text"), text.S(text.OrQ(pr.HeadRefName), "md.inline"),
 		text.S(" "+glyphs.G("arrow")+" ", "faint"), text.S(base, "muted"))
 	src := listed
 	if src == nil {
@@ -644,7 +637,7 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 		if sha == "" {
 			sha = MergeSHA(pr)
 		}
-		sha = short(sha)
+		sha = model.ShortSHA(sha)
 		dep, ok := deployOf(pr, listed)
 		if !ok {
 			out = append(out, scenes.CardLines([]text.Seg{text.S(fmt.Sprintf("deploys on %s: not read yet (D reads them now)", sha), "faint")}, width, inner)...)

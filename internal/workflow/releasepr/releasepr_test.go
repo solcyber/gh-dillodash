@@ -526,7 +526,7 @@ func TestMergeConfirm(t *testing.T) {
 	app.Confirms = []bool{true}
 	ok, handled := w.MergeConfirm(app, mergeableRelease())
 	if !ok || !handled || len(app.Questions) != 1 || !strings.Contains(app.Questions[0], "DEPLOYS production") ||
-		!strings.Contains(app.Questions[0], "634f4548") || !strings.Contains(app.Questions[0], "admin-portal#133") ||
+		!strings.Contains(app.Questions[0], "634f454") || !strings.Contains(app.Questions[0], "admin-portal#133") ||
 		!strings.Contains(app.Questions[0], "as a merge commit") {
 		t.Errorf("in the window: %v %v %q", ok, handled, app.Questions)
 	}
@@ -1021,7 +1021,7 @@ func TestDetailCards(t *testing.T) {
 	}
 	m := st.Find(model.Ident{Repo: portal, Number: 133})
 	card := flat(w.DetailCards(app, m, m, 80))
-	if !strings.Contains(card, "deploys on "+short(mergedSHA)) || !strings.Contains(card, "approve: prod") || !strings.Contains(card, "Migrate") || !strings.Contains(card, "waiting for prod") {
+	if !strings.Contains(card, "deploys on "+model.ShortSHA(mergedSHA)) || !strings.Contains(card, "approve: prod") || !strings.Contains(card, "Migrate") || !strings.Contains(card, "waiting for prod") {
 		t.Errorf("the merged card lists the deploy and its runs:\n%s", card)
 	}
 	for _, l := range w.DetailCards(app, m, m, 80) {

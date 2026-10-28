@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
@@ -73,7 +75,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	pr, ok := d.(*model.PR)
 	if !ok {
 		if i, ok := d.(*model.Issue); ok {
-			app.Notice(fmt.Sprintf("%s is an issue — nothing to approve. c comments, t tags someone.", m.where(m.repoOf(i), i.Number)))
+			app.Notice(fmt.Sprintf("%s is an issue — nothing to approve; c comments, t tags someone", m.where(m.repoOf(i), i.Number)))
 		}
 		return
 	}
@@ -84,15 +86,15 @@ func (m *Model) doApprove(app *lockedApp) {
 	}
 	if state != "OPEN" {
 		// merged/closed while you were reading: a review is meaningless
-		app.Notice(fmt.Sprintf("%s is %s — nothing to approve.", where, strings.ToLower(state)))
+		app.Notice(fmt.Sprintf("%s is %s — nothing to approve", where, strings.ToLower(state)))
 		return
 	}
 	if pr.IsDraft {
-		app.Notice(fmt.Sprintf("PR %s is a draft — GitHub reviews refuse drafts.", where))
+		app.Notice(fmt.Sprintf("%s is a draft — GitHub refuses reviews on drafts", where))
 		return
 	}
 	if strings.EqualFold(pr.Author.Login, m.me) {
-		app.Notice(fmt.Sprintf("you authored %s — a self-approval counts for nothing.", where))
+		app.Notice(fmt.Sprintf("you authored %s — a self-approval counts for nothing", where))
 		return
 	}
 	if app.IApproved(pr) {
@@ -102,7 +104,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	if m.wf.Approve(app, pr, app.DetailListed()) {
 		return
 	}
-	if !app.Confirm(fmt.Sprintf("Submit a GitHub review approval of %s as %s?", where, m.me)) {
+	if !app.Confirm(fmt.Sprintf("submit a GitHub review approval of %s as %s?", where, m.me)) {
 		app.Notice("approve cancelled")
 		return
 	}
@@ -155,7 +157,7 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 		}
 		body = txt
 	} else {
-		t, ok := app.Prompt(fmt.Sprintf("comment on %s (enter posts, Esc cancels):", where), workflow.PromptOpts{})
+		t, ok := app.Prompt(fmt.Sprintf("comment on %s (Enter posts, Esc cancels):", where), workflow.PromptOpts{})
 		if !ok {
 			app.Notice("comment cancelled")
 			return
@@ -169,7 +171,7 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 	// one endpoint for both kinds: the issue-comment API is the
 	// conversation thread for issues AND pull requests
 	if err := m.gh.Comment(m.ctx, repo, number, body); err != nil {
-		app.Fail("comment NOT posted: " + err.Error())
+		app.Fail("comment not posted: " + err.Error())
 		return
 	}
 	app.OK("commented on " + where)
@@ -240,7 +242,7 @@ func (m *Model) mergeMethod() string {
 func (m *Model) doMerge(app *lockedApp) {
 	pr, ok := app.Detail().(*model.PR)
 	if !ok {
-		app.Notice("M merges a pull request; open one first")
+		app.Notice("M merges a PR; open one first")
 		return
 	}
 	repo := m.repoOf(pr)
@@ -260,7 +262,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice(where + " is a draft")
 		return
 	case pr.ReviewDecision != "APPROVED" && !app.LocalApproved(pr):
-		app.Notice(where + " is not approved yet (a is approve)")
+		app.Notice(where + " is not approved yet (a approves)")
 		return
 	case !mergeable[pr.MergeStateStatus]:
 		app.Notice(fmt.Sprintf("%s is not mergeable: GitHub says %s", where, strings.ToLower(pr.MergeStateStatus)))
@@ -271,7 +273,7 @@ func (m *Model) doMerge(app *lockedApp) {
 	if base == "" {
 		base = "the base branch"
 	}
-	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s?", where, orQ(pr.HeadRefName), base, short(head), m.mergeMethod())
+	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod())
 	ok, handled := m.wf.MergeConfirm(app, pr)
 	if !handled {
 		ok = app.Confirm(what)
@@ -290,19 +292,9 @@ func (m *Model) doMerge(app *lockedApp) {
 	pr.MergeCommit = &model.MergeCommit{Oid: res.SHA}
 	m.detailVer++
 	m.mu.Unlock()
-	app.OK(fmt.Sprintf("merged %s as %s; D approves a deployment that waits on an environment", where, short(res.SHA)))
+	app.OK(fmt.Sprintf("merged %s as %s; D approves a deployment that waits on an environment", where, model.ShortSHA(res.SHA)))
 	app.Celebrate(true)
 	app.Refresh(true)
-}
-
-func short(sha string) string {
-	if len(sha) > 8 {
-		return sha[:8]
-	}
-	if sha == "" {
-		return "?"
-	}
-	return sha
 }
 
 // mergeSHA is the merge commit of a merged PR, or "".
@@ -331,7 +323,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		}
 	}
 	if pr == nil {
-		app.Notice("D approves the deployments of a merged pull request; select or open one first")
+		app.Notice("D approves the deployments of a merged PR; select or open one first")
 		return
 	}
 	repo := m.repoOf(pr)
@@ -341,14 +333,14 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		app.Notice(where + " is not merged yet (M merges it)")
 		return
 	}
-	app.Flash(fmt.Sprintf("reading %s's deploys on %s...", where, short(sha)))
+	app.Flash(fmt.Sprintf("reading %s's deploys on %s...", where, model.ShortSHA(sha)))
 	st, err := m.deployCache.Fetch(m.ctx, m.gh, repo, sha, true, app.Now())
 	if err != nil {
 		hint := ""
 		if strings.Contains(err.Error(), "not accessible by personal access token") {
-			hint = " - your token needs Actions: Read on " + repo.Name
+			hint = " — your token needs Actions: Read on " + repo.Name
 		}
-		app.Fail(fmt.Sprintf("could not read %s's deploys: %s%s", where, err, hint))
+		app.Fail(fmt.Sprintf("couldn't read %s's deploys: %s%s", where, err, hint))
 		return
 	}
 	m.mu.Lock()
@@ -364,28 +356,28 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	if len(mine) == 0 {
 		switch {
 		case len(st.Waits) > 0:
-			app.Notice(fmt.Sprintf("%s: %d wait(s) on %s, but %s is not a reviewer of %s", where, len(st.Waits), short(sha), m.me, strings.Join(st.Envs(), ", ")))
+			app.Notice(fmt.Sprintf("%s: %s on %s, but %s is not a reviewer of %s", where, plural(len(st.Waits), "wait"), model.ShortSHA(sha), m.me, strings.Join(st.Envs(), ", ")))
 		case st.Phase == "running" || st.Phase == "none":
-			app.Notice(fmt.Sprintf("%s: nothing waits on %s yet (%s) - dillodash says when it does", where, short(sha), st.Text))
+			app.Notice(fmt.Sprintf("%s: nothing waits on %s yet (%s) — dillodash says when it does", where, model.ShortSHA(sha), st.Text))
 			app.RefreshSoon(m.deployRefresh())
 		case st.Phase == "done" || st.Phase == "cancelled":
-			app.OK(fmt.Sprintf("%s: %s - every run on %s finished", where, st.Text, short(sha)))
+			app.OK(fmt.Sprintf("%s: %s — every run on %s finished", where, st.Text, model.ShortSHA(sha)))
 		default:
-			app.Notice(fmt.Sprintf("%s: nothing waits on %s - %s (the card lists the runs)", where, short(sha), st.Text))
+			app.Notice(fmt.Sprintf("%s: nothing waits on %s — %s (the card lists the runs)", where, model.ShortSHA(sha), st.Text))
 		}
 		return
 	}
 	lines := make([]string, len(mine))
 	for i, w := range mine {
-		lines[i] = fmt.Sprintf("%s (%s, run %d)", w.EnvName, clipRunes(orQ(w.Run.Name), 40), w.Run.ID)
+		lines[i] = fmt.Sprintf("%s (%s, run %d)", w.EnvName, text.Ellip(text.OrQ(w.Run.Name), 40), w.Run.ID)
 	}
-	if !app.Confirm(fmt.Sprintf("approve %d deployment(s) of %s on merge %s as %s?\n%s", len(mine), where, short(sha), m.me, strings.Join(lines, "\n"))) {
+	if !app.Confirm(fmt.Sprintf("approve %s of %s on merge %s as %s?\n%s", plural(len(mine), "deployment"), where, model.ShortSHA(sha), m.me, strings.Join(lines, "\n"))) {
 		app.Notice("deployment approval cancelled")
 		return
 	}
-	comment := m.wf.DeployComment(pr, short(sha))
+	comment := m.wf.DeployComment(pr, model.ShortSHA(sha))
 	if comment == "" {
-		comment = fmt.Sprintf("dillodash: %s merged as %s", where, short(sha))
+		comment = fmt.Sprintf("dillodash: %s merged as %s", where, model.ShortSHA(sha))
 	}
 	done := 0
 	var failed []string
@@ -400,15 +392,8 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	if len(failed) > 0 {
 		app.Fail(fmt.Sprintf("approved %d of %d; failed: %s", done, len(mine), strings.Join(failed, "; ")))
 	} else {
-		envs := map[string]bool{}
-		for _, w := range mine {
-			envs[w.EnvName] = true
-		}
-		names := make([]string, 0, len(envs))
-		for e := range envs {
-			names = append(names, e)
-		}
-		app.OK(fmt.Sprintf("approved %d deployment(s) of %s (%s); dillodash watches for the next", done, where, strings.Join(names, ", ")))
+		names := envNames(mine)
+		app.OK(fmt.Sprintf("approved %s of %s (%s); dillodash watches for the next", plural(done, "deployment"), where, strings.Join(names, ", ")))
 		app.Celebrate(false)
 	}
 	app.Refresh(true)
@@ -556,7 +541,7 @@ func (m *Model) startFilter(app *lockedApp) {
 	m.mu.Lock()
 	before := m.filter
 	m.mu.Unlock()
-	out, ok := app.Prompt("filter (words match #number, title, author, labels; enter keeps, Esc restores):", workflow.PromptOpts{
+	out, ok := app.Prompt("filter (words match #number, title, author, labels; Enter keeps, Esc restores):", workflow.PromptOpts{
 		Initial: before,
 		OnChange: func(t string) { // on the UI goroutine, lock held
 			m.filter = t
@@ -635,7 +620,7 @@ func (m *Model) copyURL() {
 	if where := external.CopyToClipboard(url); where != "" {
 		m.ok(fmt.Sprintf("copied %s to the %s", url, where))
 	} else {
-		m.ok("couldn't copy — the URL is " + url)
+		m.notice("couldn't copy — the URL is " + url)
 	}
 }
 
@@ -651,6 +636,28 @@ func (m *Model) openInBrowser() {
 	if where := external.CopyToClipboard(url); where != "" {
 		m.ok(fmt.Sprintf("no browser on this host (SSH?) — copied %s to the %s", url, where))
 	} else {
-		m.ok("no browser here: " + url)
+		m.notice("no browser here — the URL is " + url)
 	}
+}
+
+// plural is "1 deployment" / "3 deployments".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// envNames is the sorted, deduplicated environment names of the waits.
+func envNames(waits []deploys.Wait) []string {
+	set := map[string]bool{}
+	for _, w := range waits {
+		set[w.EnvName] = true
+	}
+	names := make([]string, 0, len(set))
+	for e := range set {
+		names = append(names, e)
+	}
+	sort.Strings(names)
+	return names
 }

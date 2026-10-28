@@ -24,7 +24,7 @@ var (
 func TestRetryAtFromHeaders(t *testing.T) {
 	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 	// Secondary limit: Retry-After is a delta in seconds.
-	at, ok := RetryAtFromHeaders(http.Header{"Retry-After": {"42"}}, now)
+	at, ok := retryAtFromHeaders(http.Header{"Retry-After": {"42"}}, now)
 	if !ok || !at.Equal(now.Add(42*time.Second)) {
 		t.Errorf("Retry-After -> now+delta: %v %v", at, ok)
 	}
@@ -33,24 +33,24 @@ func TestRetryAtFromHeaders(t *testing.T) {
 	h := http.Header{}
 	h.Set("X-RateLimit-Remaining", "0")
 	h.Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
-	at, ok = RetryAtFromHeaders(h, now)
+	at, ok = retryAtFromHeaders(h, now)
 	if !ok || at.Unix() != reset {
 		t.Errorf("Remaining=0 -> Reset epoch: %v %v", at, ok)
 	}
 	// Budget left, or no headers at all: not a rate limit.
-	if _, ok := RetryAtFromHeaders(http.Header{"X-Ratelimit-Remaining": {"57"}}, now); ok {
+	if _, ok := retryAtFromHeaders(http.Header{"X-Ratelimit-Remaining": {"57"}}, now); ok {
 		t.Error("Remaining>0 -> not a rate limit")
 	}
-	if _, ok := RetryAtFromHeaders(nil, now); ok {
+	if _, ok := retryAtFromHeaders(nil, now); ok {
 		t.Error("no headers -> not a rate limit")
 	}
-	if at, ok := RetryAtFromHeaders(http.Header{"Retry-After": {"Wed, 21 Oct 2015 07:28:00 GMT"}}, now); !ok || at.Year() != 2015 {
+	if at, ok := retryAtFromHeaders(http.Header{"Retry-After": {"Wed, 21 Oct 2015 07:28:00 GMT"}}, now); !ok || at.Year() != 2015 {
 		t.Errorf("an HTTP-date Retry-After is parsed: %v %v", at, ok)
 	}
-	if _, ok := RetryAtFromHeaders(http.Header{"Retry-After": {"soon"}}, now); ok {
+	if _, ok := retryAtFromHeaders(http.Header{"Retry-After": {"soon"}}, now); ok {
 		t.Error("an unparsable Retry-After is ignored")
 	}
-	if _, ok := RetryAtFromHeaders(http.Header{"X-Ratelimit-Remaining": {"0"}}, now); ok {
+	if _, ok := retryAtFromHeaders(http.Header{"X-Ratelimit-Remaining": {"0"}}, now); ok {
 		t.Error("Remaining=0 without Reset is not a rate limit")
 	}
 }
@@ -77,14 +77,14 @@ func TestErrorShape(t *testing.T) {
 		t.Errorf("resp.Status message: %q", got)
 	}
 	n := &Error{Message: "network error: timed out"}
-	if n.Error() != "network error: timed out" || !IsNetwork(n) {
+	if n.Error() != "network error: timed out" || !isNetwork(n) {
 		t.Errorf("network error shape: %q", n.Error())
 	}
 	wrapped := errors.Join(errors.New("outer"), &Error{RetryAt: time.Now()})
 	if !IsRateLimit(wrapped) {
 		t.Error("IsRateLimit sees through wrapping")
 	}
-	if IsRateLimit(errors.New("plain")) || IsNetwork(nil) {
+	if IsRateLimit(errors.New("plain")) || isNetwork(nil) {
 		t.Error("non-Errors are neither")
 	}
 }
@@ -97,7 +97,7 @@ func TestBackoff(t *testing.T) {
 	if b.Wait(now) != 0 || !b.Until().IsZero() {
 		t.Error("fresh backoff is unconstrained")
 	}
-	plain := &Error{Message: "refresh failed: kaboom"}
+	var plain time.Time // no RetryAt: an ordinary failure
 	// first failure retries in ~15s
 	if got := b.Fail(now, plain); !got.Equal(now.Add(15 * time.Second)) {
 		t.Errorf("first failure: %v", got.Sub(now))
@@ -126,7 +126,7 @@ func TestBackoff(t *testing.T) {
 	}
 	// a rate limit holds until GitHub's reset, whatever the streak
 	rl := &Error{Status: 403, Message: "API rate limit exceeded", RetryAt: now.Add(100 * time.Second)}
-	if got := b.Fail(now, rl); !got.Equal(rl.RetryAt) {
+	if got := b.Fail(now, rl.RetryAt); !got.Equal(rl.RetryAt) {
 		t.Errorf("rate limit: %v", got)
 	}
 	if b.RateLimitWait(now) != 100*time.Second || b.Wait(now.Add(50*time.Second)) != 50*time.Second {
@@ -143,11 +143,13 @@ func TestBackoff(t *testing.T) {
 	if u.Wait(now) != 3840*time.Second {
 		t.Errorf("uncapped: %v", u.Wait(now))
 	}
-	// a wrapped non-Error counts as a plain failure
+	// a wall named on an otherwise clean call (a workflow hit it after
+	// the list landed): the streak resets, the wall stands
 	w := &Backoff{}
-	w.Fail(now, errors.New("x"))
-	if w.Streak() != 1 {
-		t.Error("plain error counted")
+	w.Fail(now, plain)
+	w.RateLimit(now.Add(time.Minute))
+	if w.Streak() != 0 || w.RateLimitWait(now) != time.Minute || w.Wait(now) != time.Minute {
+		t.Errorf("RateLimit: streak %d wall %v wait %v", w.Streak(), w.RateLimitWait(now), w.Wait(now))
 	}
 }
 
@@ -207,7 +209,7 @@ func TestCIFallbackCache(t *testing.T) {
 		t.Errorf("passing settled re-polled: %d", s.calls)
 	}
 	// ...until the TTL
-	f.age("s9", CIRecheck+time.Second)
+	f.age("s9", ciRecheck+time.Second)
 	f.Annotate(ctx, now.Add(time.Minute), []*model.PR{pr}, s.fetch)
 	if s.calls != 3 {
 		t.Errorf("TTL re-poll: %d", s.calls)
@@ -304,7 +306,7 @@ func TestCIFallbackLatchAndRateLimit(t *testing.T) {
 		t.Fatalf("seed: %+v", cl)
 	}
 	gw := &runsScript{err: &Error{Status: 502, Message: "Bad Gateway"}}
-	cl, warn, err = f.Annotate(context.Background(), now.Add(2*CIRecheck), []*model.PR{infraPR}, gw.fetch)
+	cl, warn, err = f.Annotate(context.Background(), now.Add(2*ciRecheck), []*model.PR{infraPR}, gw.fetch)
 	if err != nil || cl[0].Glyphs != "+" || warn != "" || f.Disabled(infra) != "" {
 		t.Errorf("502 keeps the last cluster and does not latch: %+v %q %v %q", cl, warn, err, f.Disabled(infra))
 	}
@@ -398,7 +400,7 @@ func TestWebURLs(t *testing.T) {
 	if got := CommitURL("github.com", infra, "abc123"); got != "https://github.com/acme/infra/commit/abc123" {
 		t.Errorf("commit: %s", got)
 	}
-	if got := WebURL("github.com", infra, "", ""); got != "https://github.com/acme/infra" {
+	if got := webURL("github.com", infra, "", ""); got != "https://github.com/acme/infra" {
 		t.Errorf("repo: %s", got)
 	}
 	if got := TreeURL("github.com", infra, "feat/a b#1"); got != "https://github.com/acme/infra/tree/feat/a%20b%231" {
@@ -407,14 +409,14 @@ func TestWebURLs(t *testing.T) {
 	if got := CompareURL("github.com", infra, "main", "fix/50%"); got != "https://github.com/acme/infra/compare/main...fix/50%25" {
 		t.Errorf("escaped compare: %s", got)
 	}
-	if got := WebURL("github.com", model.Repo{Owner: "a&b", Name: "c d"}, "", ""); got != "https://github.com/a&b/c%20d" {
+	if got := webURL("github.com", model.Repo{Owner: "a&b", Name: "c d"}, "", ""); got != "https://github.com/a&b/c%20d" {
 		t.Errorf("escaped owner/name: %s", got)
 	}
-	if RESTBase("github.com") != "https://api.github.com/" || RESTBase("ghe.acme.test") != "https://ghe.acme.test/api/v3/" {
-		t.Errorf("rest bases: %s %s", RESTBase("github.com"), RESTBase("ghe.acme.test"))
+	if restBase("github.com") != "https://api.github.com/" || restBase("ghe.acme.test") != "https://ghe.acme.test/api/v3/" {
+		t.Errorf("rest bases: %s %s", restBase("github.com"), restBase("ghe.acme.test"))
 	}
-	if GraphQLURL("github.com") != "https://api.github.com/graphql" || GraphQLURL("ghe.acme.test") != "https://ghe.acme.test/api/graphql" {
-		t.Errorf("graphql urls: %s %s", GraphQLURL("github.com"), GraphQLURL("ghe.acme.test"))
+	if graphQLURL("github.com") != "https://api.github.com/graphql" || graphQLURL("ghe.acme.test") != "https://ghe.acme.test/api/graphql" {
+		t.Errorf("graphql urls: %s %s", graphQLURL("github.com"), graphQLURL("ghe.acme.test"))
 	}
 }
 

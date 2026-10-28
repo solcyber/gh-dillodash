@@ -93,16 +93,16 @@ func RefreshInterval(secs int) time.Duration {
 	return RefreshEvery
 }
 
-// Compute is the pure part: runs on the sha, and the pending deployments
+// compute is the pure part: runs on the sha, and the pending deployments
 // of the runs that wait. Phase priority: waiting, failed, stuck, running,
 // done, cancelled, none (a cancelled run beside a successful one is
 // usually superseded). A run queued or running longer than StuckAfter
 // is stuck; ComputeWith takes the threshold.
-func Compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time) State {
+func compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time) State {
 	return ComputeWith(runs, pending, now, StuckAfter)
 }
 
-// ComputeWith is Compute with the stuck threshold given (zero or less
+// ComputeWith is compute with the stuck threshold given (zero or less
 // means StuckAfter).
 func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time, stuckAfter time.Duration) State {
 	if stuckAfter <= 0 {
@@ -146,10 +146,10 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 				if age > stuckFor {
 					stuckFor = age
 				}
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, FmtSecs(age)), "chip.rolled", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, fmtSecs(age)), "chip.rolled", r.ID})
 			} else {
 				phases["running"] = true
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, FmtSecs(age)), "chip.queued", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, fmtSecs(age)), "chip.queued", r.ID})
 			}
 		case r.Conclusion == "success" || r.Conclusion == "skipped" || r.Conclusion == "neutral":
 			phases["done"] = true
@@ -180,7 +180,7 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	case phases["failed"]:
 		st.Phase, st.Text = "failed", "deploy failed"
 	case phases["stuck"]:
-		st.Phase, st.Text = "stuck", "stuck? "+FmtSecs(stuckFor)
+		st.Phase, st.Text = "stuck", "stuck? "+fmtSecs(stuckFor)
 	case phases["running"]:
 		st.Phase, st.Text = "running", "deploying"
 	case phases["done"]:
@@ -194,8 +194,8 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	return st
 }
 
-// FmtSecs is 12s, 7m, 3h05m: a run's age.
-func FmtSecs(d time.Duration) string {
+// fmtSecs is 12s, 7m, 3h05m: a run's age.
+func fmtSecs(d time.Duration) string {
 	secs := int(d.Seconds())
 	if secs < 0 {
 		secs = 0
