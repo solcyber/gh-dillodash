@@ -4,6 +4,8 @@ package fake
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sync"
 
@@ -70,6 +72,8 @@ type Client struct {
 	FortressData map[model.Repo]ghapi.FortressData
 	// Releases is ReleasePRs' answer.
 	Releases map[model.Repo]ghapi.ReleaseRepo
+	// FileData is FileContents' answer, keyed "owner/name:path".
+	FileData map[string][]byte
 
 	// Fail makes the named op return the error: whoami, list, pr_detail,
 	// issue_detail, users, comments, labelled, approve, comment, merge,
@@ -448,4 +452,22 @@ func (f *Client) ReleasePRs(ctx context.Context, repos []model.Repo, prodBranch,
 		out[r] = rr
 	}
 	return out, nil
+}
+
+// FileContents serves FileData; the sha is derived from the bytes.
+func (f *Client) FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error) {
+	if err := f.fail("contents"); err != nil {
+		return nil, "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Reads != nil {
+		f.Reads["contents"]++
+	}
+	data, ok := f.FileData[repo.String()+":"+path]
+	if !ok {
+		return nil, "", &ghapi.Error{Method: "GET", URL: repo.String() + "/contents/" + path, Status: 404, Message: "Not Found"}
+	}
+	sum := sha256.Sum256(data)
+	return append([]byte(nil), data...), hex.EncodeToString(sum[:])[:40], nil
 }

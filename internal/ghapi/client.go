@@ -138,6 +138,9 @@ type Client interface {
 	TagRefs(ctx context.Context, repo model.Repo, prefix string) ([]string, error)
 	OrgRepos(ctx context.Context, org string) ([]model.RepoListing, error)
 	Rulesets(ctx context.Context, repo model.Repo) ([]model.Ruleset, error)
+	// FileContents reads one file from a repo (its default branch, or ref):
+	// the bytes and the blob sha.
+	FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error)
 
 	Fortress(ctx context.Context, repos []model.Repo) (map[model.Repo]FortressData, error)
 	// ReleasePRs reads every repo's release PRs into prodBranch and the

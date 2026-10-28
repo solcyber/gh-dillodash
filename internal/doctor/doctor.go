@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -19,6 +20,13 @@ import (
 func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) error {
 	fmt.Fprintf(w, "dillodash %s\n", version)
 	fmt.Fprintf(w, "config: %s\n", cfg.Path)
+	var src config.Source
+	var pulled bool
+	if raw, err := os.ReadFile(cfg.Path); err == nil {
+		if src, pulled = config.ParseSource(raw); pulled {
+			fmt.Fprintf(w, "  source: %s @ %s, pulled %s\n", src.Spec(), short7(src.SHA), ago(src.At))
+		}
+	}
 	for _, warn := range cfg.Warnings {
 		fmt.Fprintf(w, "  warning: %s\n", warn)
 	}
@@ -43,6 +51,15 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 		fmt.Fprintf(w, "  (config expects %s: gh auth switch)", cfg.GitHub.Login)
 	}
 	fmt.Fprintln(w)
+	if pulled {
+		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {
+			fmt.Fprintf(w, "  source: could not check %s: %s\n", src.Spec(), err)
+		} else if sha != src.SHA {
+			fmt.Fprintf(w, "  source: OUTDATED — %s has a newer %s; run: gh dillodash config pull\n", src.Repo, src.Path)
+		} else {
+			fmt.Fprintln(w, "  source: current")
+		}
+	}
 	failed := false
 	for _, repo := range cfg.Reviews.Repos {
 		fmt.Fprintf(w, "repo %s:\n", repo)
@@ -115,4 +132,25 @@ func short(err error) string {
 		return s[i+2:]
 	}
 	return s
+}
+
+func short7(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
+func ago(t time.Time) string {
+	if t.IsZero() {
+		return "at an unknown time"
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%d hours ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
 }

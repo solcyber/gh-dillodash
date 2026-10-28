@@ -121,7 +121,7 @@ func TestSubcommandExitCodes(t *testing.T) {
 		code int
 		want string
 	}{
-		{[]string{"config"}, 2, "check, init or migrate"},
+		{[]string{"config"}, 2, "check, pull, init or migrate"},
 		{[]string{"config", "bogus"}, 2, `unknown subcommand "bogus"`},
 		{[]string{"font"}, 2, "install or check"},
 		{[]string{"font", "bogus"}, 2, `unknown subcommand "bogus"`},

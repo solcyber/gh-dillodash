@@ -60,6 +60,28 @@ defaults to the first review repo (with a warning when there are several);
 times are `HH:MM`, zones are IANA names, and the window's
 `cutoff < release_from < start < end` on one day.
 
+## Installing the config from a repo
+
+An organization can keep its config in a repository its members can read
+(private is fine: the fetch goes through the `gh` token) and install it
+with one command:
+
+```sh
+gh dillodash config pull acme/dash-config            # config.toml at the repo root
+gh dillodash config pull acme/dash-config:team/x.toml
+gh dillodash config pull                             # refresh from the recorded source
+```
+
+The pulled file is validated with the same parser the dashboard uses and
+refused if it does not pass, so a broken commit never replaces a working
+config. The installed copy starts with two comment lines recording the
+source, the blob sha and the time; a bare `config pull` reads them, and
+`config check` says `source: current` or `OUTDATED` after asking GitHub
+for the file's current sha. `--config PATH` installs elsewhere,
+`--host HOST` reads from a GitHub Enterprise Server, `--force` reinstalls
+an unchanged file. Personal settings (`--icons`, `--motion`, `--refresh`)
+stay on the command line, so the pulled file is the whole config.
+
 ## Precedence and errors
 
 A flag beats the config, which beats the default. Unknown keys and tables

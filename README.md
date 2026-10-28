@@ -38,6 +38,8 @@ repos = ["acme/infra", "acme/web-portal"]
 ```
 
 Everything else is optional and documented in [`config.example.toml`](config.example.toml).
+An organization can keep its config in a repo and install it with
+`gh dillodash config pull owner/repo` (see [docs/configuration.md](docs/configuration.md)).
 
 ## What you see
 

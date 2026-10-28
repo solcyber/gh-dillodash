@@ -2,6 +2,7 @@ package ghapi
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -318,4 +319,36 @@ func (c *GitHub) Rulesets(ctx context.Context, repo model.Repo) ([]model.Ruleset
 		return nil, err
 	}
 	return out, nil
+}
+
+// FileContents reads one file through the contents API.
+func (c *GitHub) FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error) {
+	var out struct {
+		Type     string `json:"type"`
+		Encoding string `json:"encoding"`
+		Content  string `json:"content"`
+		SHA      string `json:"sha"`
+	}
+	segs := strings.Split(strings.Trim(path, "/"), "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	p := repoPath(repo, "contents/"+strings.Join(segs, "/"))
+	if ref != "" {
+		p += "?ref=" + url.QueryEscape(ref)
+	}
+	if err := c.restJSON(ctx, http.MethodGet, p, nil, &out); err != nil {
+		return nil, "", err
+	}
+	if out.Type != "file" {
+		return nil, "", fmt.Errorf("%s in %s is a %s, not a file", path, repo, out.Type)
+	}
+	if out.Encoding != "base64" {
+		return nil, "", fmt.Errorf("%s in %s: unexpected encoding %q", path, repo, out.Encoding)
+	}
+	data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(out.Content, "\n", ""))
+	if err != nil {
+		return nil, "", fmt.Errorf("%s in %s: %w", path, repo, err)
+	}
+	return data, out.SHA, nil
 }
