@@ -6,10 +6,13 @@
 package demo
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -85,6 +88,52 @@ resource "aws_iam_role_policy" "warehouse_read" {
 - [ ] approved
 `
 
+// Config is the demo's config: the two repos and all three workflows on.
+func Config() *config.Config {
+	cfg := config.Default()
+	cfg.Reviews.Repos = Repos
+	cfg.TerraformApprove = config.DefaultTerraformApprove()
+	mw := config.DefaultMaintenanceWindow()
+	mw.ManifestRepo = Repos[0]
+	cfg.MaintenanceWindow = mw
+	rp := config.DefaultReleasePR()
+	rp.Auto = false
+	rp.Repos = []model.Repo{Repos[1]}
+	rp.Org = "acme"
+	rp.ApprovalQueuesForWindow = true
+	cfg.ReleasePR = rp
+	return cfg
+}
+
+// night is the next window night as YYYY-MM-DD: tonight before the 21:00
+// cutoff in New York, else tomorrow.
+func night() (string, time.Time) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		loc = time.UTC
+	}
+	now := time.Now().In(loc)
+	day := now
+	if now.Hour() >= 21 {
+		day = now.Add(24 * time.Hour)
+	}
+	start := time.Date(day.Year(), day.Month(), day.Day(), 23, 0, 0, 0, loc)
+	return day.Format("2006-01-02"), start.UTC()
+}
+
+func hexID(seed int) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("dillodash-demo-plan-%d", seed)))
+	return hex.EncodeToString(sum[:])
+}
+
+func digest(stack string, id int, destroys int, verdict string) string {
+	return fmt.Sprintf("### plan `%s`\n\nPlan-id: `%s`\nPlan: 3 to add, 1 to change, %d to destroy.\nWindow (policy; live): **%s**\nhttps://github.com/acme/infra/actions/runs/4062542\n", stack, hexID(id), destroys, verdict)
+}
+
+func bot(body string, age time.Duration) model.Comment {
+	return model.Comment{Author: actor("github-actions"), CreatedAt: at(age), Body: body}
+}
+
 // Client builds the fake GitHub.
 func Client() *fake.Client {
 	infra, portal := Repos[0], Repos[1]
@@ -139,6 +188,40 @@ func Client() *fake.Client {
 		}
 		gh.Diffs[p.Ident()] = "diff --git a/terraform/live/prod/07-warehouse/iam.tf b/terraform/live/prod/07-warehouse/iam.tf\n" + gh.Files[p.Ident()][0].Patch
 	}
+	// workflows: plan digests, a queued PR with its night's manifest, a release repo
+	nightDate, start := night()
+	ta := gh.PRs[infraPRs[0].Ident()]
+	ta.Comments.Nodes = append([]model.Comment{bot(digest("prod/07-warehouse", 1, 0, "non-disruptive"), 12*time.Hour), bot(digest("nonprod/07-warehouse", 2, 0, "non-disruptive"), 12*time.Hour)}, ta.Comments.Nodes...)
+	ta.Comments.TotalCount = len(ta.Comments.Nodes)
+	tb := gh.PRs[infraPRs[1].Ident()]
+	tb.Comments.Nodes = append([]model.Comment{bot(digest("prod/03-mail", 3, 1, "disruptive · NOT revertible"), 2*time.Hour)}, tb.Comments.Nodes...)
+	tb.Comments.TotalCount = len(tb.Comments.Nodes)
+	queued := infraPRs[2]
+	queued.Labels.Nodes = append(queued.Labels.Nodes, model.Label{Name: "window:queued"}, model.Label{Name: "window:scheduled"})
+	marker := fmt.Sprintf("<!-- window-queue {\"night\": %q, \"plan_id\": %q, \"stacks\": [\"nonprod/15-window-canary\"], \"queued_at\": %q, \"revertible\": true} -->", nightDate, hexID(4), at(28*time.Hour).UTC().Format(time.RFC3339))
+	qc := []model.Comment{bot(digest("nonprod/15-window-canary", 4, 0, "disruptive · revertible"), 30*time.Hour), bot("Queued for the maintenance window of "+nightDate+".\n\n"+marker, 28*time.Hour)}
+	gh.Comments = map[model.Ident][]model.Comment{queued.Ident(): qc}
+	qd := gh.PRs[queued.Ident()]
+	qd.Comments.Nodes = append(qc, qd.Comments.Nodes...)
+	qd.Comments.TotalCount = len(qd.Comments.Nodes)
+	manifest := &model.Issue{Repo: infra, Number: 3600, Title: "Window " + nightDate + " 23:00 ET", State: "OPEN", CreatedAt: at(30 * time.Hour), UpdatedAt: at(2 * time.Hour), Author: actor("github-actions")}
+	manifest.Labels.Nodes = []model.Label{{Name: "window-manifest"}}
+	manifest.Body = fmt.Sprintf("Tonight's window.\n\n<!-- window-manifest:begin\n{\"night\": %q, \"phase\": \"open\", \"attendees\": [\"carol\"], \"items\": [{\"id\": \"#3550\", \"repo\": \"infra\", \"pr\": 3550, \"flag\": \"scheduled\", \"revertible\": true, \"start_utc\": %q, \"release_by_utc\": %q, \"status\": \"\", \"reasons\": []}]}\nwindow-manifest:end -->", nightDate, start.Add(4*time.Minute).Format(time.RFC3339), start.Add(14*time.Minute).Format(time.RFC3339))
+	manifest.Comments.Nodes = []model.Comment{bot("@carol is attending the night of "+nightDate+".", 3*time.Hour)}
+	manifest.Comments.TotalCount = 1
+	gh.Labelled = map[model.Repo]map[string][]*model.Issue{infra: {"window-manifest": {manifest}}}
+	infraIssues := append([]*model.Issue{manifest}, issues[:2]...)
+	gh.Open[infra] = ghapi.ListResult{PRs: infraPRs, Issues: infraIssues}
+	gh.Issues[manifest.Ident()] = manifest
+	rel := *gh.PRs[portalPRs[0].Ident()]
+	rel.Labels = model.Labels{}
+	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
+	gh.Tags = map[model.Repo][]string{portal: {"go/905", "hold/907"}}
+	gh.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 3, TotalCommits: 3, Commits: []ghapi.CompareCommit{
+		{SHA: "bbbb0001", Message: "Merge pull request #905 from acme/feat-search", Parents: []string{"aaaa0001", "dddd0001"}},
+		{SHA: "bbbb0002", Message: "fix: referral code on signup (#907)", Parents: []string{"bbbb0001"}},
+		{SHA: "cccc0003", Message: "chore: bump deps (#910)", Parents: []string{"bbbb0002"}},
+	}}}
 	for _, i := range issues {
 		d := *i
 		d.Body = "Seen on three accounts since the deploy at 14:10. Rolling back is not an option: the migration already ran."

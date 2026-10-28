@@ -256,8 +256,7 @@ func dashboard(args []string) error {
 
 // runDemo opens the dashboard on the offline fixture.
 func runDemo(ctx context.Context, f flags) error {
-	cfg := config.Default()
-	cfg.Reviews.Repos = demo.Repos
+	cfg := demo.Config()
 	if f.icons != "" {
 		cfg.Display.Icons = f.icons
 	}

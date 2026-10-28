@@ -17,11 +17,11 @@ Fixture names changed to the acme vocabulary; assertions did not.
 | `test_approve.py`: prompt editing (^U, ^W, wide chars), confirm, menus, reason meter | yes | `internal/widgets` |
 | `test_approve.py`: editor round trip, clipboard, open URL | yes | `internal/external` |
 | `test_approve.py`: the generic approve, comment, tag, merge and deploy flows | yes | `internal/ui` (`ui_test.go`), `internal/deploys` |
-| `test_approve.py`: `/approve` bodies, refusals, plan-sets, ceremonies, `--outside-window` | workflow port | `internal/workflow/terraformapprove` |
-| `test_plan_candidates.py`, `test_adr0138.py` (plan liveness, sets, ceremonies, apply outcomes) | workflow port | `internal/workflow/terraformapprove` |
-| `test_window_queue.py` | workflow port | `internal/workflow/maintenancewindow` |
-| `test_approve.py`: release approve, `M` in and out of the window, `D`, stage units | workflow port | `internal/workflow/releasepr` |
-| `test_render.py`, `test_tui.py`: fortress mode | fortress port | `internal/fortress`, `internal/ui/fortress_test.go` |
+| `test_approve.py`: `/approve` bodies, refusals, plan-sets, ceremonies, `--outside-window` | yes (160 checks) | `internal/workflow/terraformapprove` |
+| `test_plan_candidates.py`, `test_adr0138.py` (plan liveness, sets, ceremonies, apply outcomes) | yes (160 checks) | `internal/workflow/terraformapprove` |
+| `test_window_queue.py` | yes (155 checks) | `internal/workflow/maintenancewindow` |
+| `test_approve.py`: release approve, `M` in and out of the window, `D`, stage units | yes (25 tests) | `internal/workflow/releasepr` |
+| `test_render.py`, `test_tui.py`: fortress mode | yes (26 tests) | `internal/fortress`, `internal/ui/fortress_test.go` |
 | `test_tui.py`: end-to-end on a pty across tiers and glyph sets | partly | `internal/ui/ui_test.go` drives the model offline; a pty run is `go run . --demo` |
 | `test_install.py`: the font installer's platform matrix | yes | `internal/fonts` |
 | `test_fonts.py`: checksums, glyph coverage | yes | `internal/fonts` |
