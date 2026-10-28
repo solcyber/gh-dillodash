@@ -1151,3 +1151,43 @@ func TestStateCIPRs(t *testing.T) {
 		t.Error("the release workflow provides deploys (D in the list bar)")
 	}
 }
+
+func TestListOtherPRsFalseHidesThem(t *testing.T) {
+	w, app, _ := fixture(t, true)
+	all := w.Sections(app, nil, "alice")
+	has := func(rows []workflow.Row, n int) bool {
+		for _, r := range rows {
+			if p, ok := r.Item.(*model.PR); ok && p.Number == n {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(all, 951) {
+		t.Fatal("the fixture's docs PR (951) lists by default")
+	}
+	w.cfg.ListOtherPRs = false
+	some := w.Sections(app, nil, "alice")
+	if has(some, 951) {
+		t.Error("list_other_prs = false hides PRs that are not releases")
+	}
+	if !has(some, 44) || !has(some, 45) {
+		t.Error("releases and hotfixes still list")
+	}
+	if all[0].Item != some[0].Item {
+		t.Errorf("the header count is releases only either way: %v vs %v", all[0].Item, some[0].Item)
+	}
+}
+
+func TestDeployStuckSecsReachesTheCache(t *testing.T) {
+	cfg := newCfg(false)
+	cfg.ReleasePR.DeployStuckSecs = 600
+	w := New(&workflow.Context{Config: cfg, Repos: cfg.Reviews.Repos})
+	if w.deploy.Stuck() != 10*time.Minute {
+		t.Errorf("deploy stuck = %v", w.deploy.Stuck())
+	}
+	cfg.ReleasePR.DeployRefreshSecs = 0
+	if w.refreshEvery() != deploys.RefreshEvery {
+		t.Errorf("refreshEvery default = %v", w.refreshEvery())
+	}
+}

@@ -234,6 +234,7 @@ func New(ctx *workflow.Context) *Workflow {
 		w.win = ctx.Config.MaintenanceWindow
 	}
 	w.nowRE = ReleaseNowRE(cfg.ReleaseNowCommand, cfg.ReleaseNowMinReason)
+	w.deploy.StuckAfter = time.Duration(cfg.DeployStuckSecs) * time.Second
 	return w
 }
 
@@ -499,10 +500,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 }
 
 func (w *Workflow) refreshEvery() time.Duration {
-	if w.cfg.DeployRefreshSecs > 0 {
-		return time.Duration(w.cfg.DeployRefreshSecs) * time.Second
-	}
-	return deploys.RefreshEvery
+	return deploys.RefreshInterval(w.cfg.DeployRefreshSecs)
 }
 
 // stateOf is the applied state as the app holds it.

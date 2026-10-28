@@ -209,3 +209,12 @@ func TestRefuseBot(t *testing.T) {
 		t.Errorf("configured bot from the environment: %v", err)
 	}
 }
+
+func TestInterruptedExitsQuietly(t *testing.T) {
+	if exitCode(errInterrupted) != 130 {
+		t.Errorf("exit code %d", exitCode(errInterrupted))
+	}
+	if !errors.Is(exitError{130, errors.New("interrupted")}, errInterrupted) && exitCode(exitError{130, errors.New("x")}) != 130 {
+		t.Error("exit 130 shape")
+	}
+}

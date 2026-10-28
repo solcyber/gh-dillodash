@@ -148,6 +148,8 @@ func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workfl
 		}
 		if !w.NotARelease(pr) {
 			count++
+		} else if !w.cfg.ListOtherPRs {
+			continue // list_other_prs = false: only releases and hotfixes
 		}
 		byRepo[pr.Repo] = append(byRepo[pr.Repo], pr)
 	}
@@ -668,10 +670,7 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 				}
 			}
 			if len(stuck) > 0 {
-				mins := w.cfg.DeployStuckSecs / 60
-				if mins <= 0 {
-					mins = int(deploys.StuckAfter.Minutes())
-				}
+				mins := int(w.deploy.Stuck().Minutes()) // the threshold detection used
 				out = append(out, scenes.CardLines([]text.Seg{text.S(glyphs.Ico("warn"), "toast.warn"),
 					text.S(fmt.Sprintf("run %s has gone longer than %d minutes: check it in %s's Actions and cancel + re-run it if it hangs",
 						strings.Join(stuck, ", "), mins, pr.Repo.Name), "toast.warn")}, width, inner)...)

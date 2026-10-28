@@ -164,8 +164,10 @@ type Model struct {
 
 	wfState map[string]any
 
-	// the running action, if any
-	action bool
+	// the running action, if any; quitArmedAt is when q was last pressed
+	// during one (a second press within quitArmSecs quits anyway)
+	action      bool
+	quitArmedAt float64
 
 	// tp scripts prompt answers in tests; sendFn replaces the program
 	tp     *testPrompter
@@ -204,7 +206,8 @@ func New(ctx context.Context, o Options) *Model {
 		view:            ViewList,
 		detailFrom:      ViewList,
 		statusKind:      "info",
-		ci:              &ghapi.CIFallback{},
+		ci:              &ghapi.CIFallback{Recheck: time.Duration(o.Config.Reviews.CIRecheckSecs) * time.Second},
+		deployCache:     deploys.Cache{StuckAfter: deployStuck(o.Config)},
 		ciClusters:      map[model.Ident]model.CICluster{},
 		approvedByMe:    map[model.Ident]string{},
 		users:           map[model.Repo][]model.Actor{},
@@ -329,6 +332,24 @@ func (m *Model) reposText() string {
 		}
 	}
 	return out
+}
+
+// deployStuck is the release config's deploy_stuck_secs, or zero for
+// the deploys package's default.
+func deployStuck(cfg *config.Config) time.Duration {
+	if cfg != nil && cfg.ReleasePR != nil && cfg.ReleasePR.DeployStuckSecs > 0 {
+		return time.Duration(cfg.ReleasePR.DeployStuckSecs) * time.Second
+	}
+	return 0
+}
+
+// deployRefresh is how soon to look again while a deploy waits or runs:
+// the release config's deploy_refresh_secs, else the default.
+func (m *Model) deployRefresh() time.Duration {
+	if m.cfg != nil && m.cfg.ReleasePR != nil {
+		return deploys.RefreshInterval(m.cfg.ReleasePR.DeployRefreshSecs)
+	}
+	return deploys.RefreshEvery
 }
 
 // spansOwners reports whether the repos belong to more than one owner.

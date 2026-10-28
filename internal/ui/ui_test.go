@@ -11,12 +11,14 @@ import (
 	"github.com/charmbracelet/colorprofile"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/theme"
+	"github.com/solcyber/gh-dillodash/internal/widgets"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
@@ -343,5 +345,81 @@ func TestWorkflowRateLimitPausesRefresh(t *testing.T) {
 	h.key('r')
 	if !strings.Contains(h.m.status, "held") {
 		t.Errorf("r while rate limited: status %q", h.m.status)
+	}
+}
+
+// TestCtrlCInterrupts: raw mode delivers ctrl-c as a key; it quits as an
+// interrupt (exit 130), q quits normally, and inside a prompt ctrl-c
+// only cancels the prompt.
+func TestCtrlCInterrupts(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	cmd := h.m.handleKey(widgets.Key{Name: "ctrl+c"})
+	if cmd == nil {
+		t.Fatal("ctrl+c returned no command")
+	}
+	if _, ok := cmd().(tea.InterruptMsg); !ok {
+		t.Errorf("ctrl+c -> %T, want InterruptMsg", cmd())
+	}
+	cmd = h.m.handleKey(widgets.Key{Rune: 'q'})
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Errorf("q -> %T, want QuitMsg", cmd())
+	}
+	h.m.modal = widgets.NewPrompt("x", "")
+	h.m.modalDone = make(chan struct{})
+	if cmd := h.m.handleKey(widgets.Key{Name: "ctrl+c"}); cmd != nil {
+		t.Error("in a prompt ctrl+c belongs to the prompt")
+	}
+	if h.m.modal != nil {
+		t.Error("the prompt should have cancelled")
+	}
+}
+
+// TestQuitMidActionArmsThenQuits: q during an action warns first and
+// quits on a second press within the arming window.
+func TestQuitMidActionArmsThenQuits(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.action = true
+	h.m.mu.Unlock()
+	if cmd := h.m.handleKey(widgets.Key{Rune: 'q'}); cmd != nil {
+		t.Fatal("first q while an action runs must not quit")
+	}
+	if !strings.Contains(h.m.status, "still running") {
+		t.Errorf("status %q", h.m.status)
+	}
+	if cmd := h.m.handleKey(widgets.Key{Rune: 'q'}); cmd == nil {
+		t.Error("second q within the window quits")
+	}
+	h.m.quitArmedAt = -100
+	if cmd := h.m.handleKey(widgets.Key{Rune: 'q'}); cmd != nil {
+		t.Error("after the window the first press warns again")
+	}
+}
+
+// TestConfigKnobsAreWired: ci_recheck_secs, deploy_stuck_secs and
+// deploy_refresh_secs reach the code that uses them.
+func TestConfigKnobsAreWired(t *testing.T) {
+	cfg := config.Default()
+	cfg.Reviews.Repos = []model.Repo{infra}
+	cfg.Reviews.CIRecheckSecs = 60
+	cfg.ReleasePR = config.DefaultReleasePR()
+	cfg.ReleasePR.DeployStuckSecs = 120
+	cfg.ReleasePR.DeployRefreshSecs = 7
+	m := New(context.Background(), Options{Config: cfg, GH: fake.New("alice"), Me: "alice"})
+	if m.ci.Recheck != time.Minute {
+		t.Errorf("Recheck = %v", m.ci.Recheck)
+	}
+	if m.deployCache.Stuck() != 2*time.Minute {
+		t.Errorf("deploy stuck = %v", m.deployCache.Stuck())
+	}
+	if m.deployRefresh() != 7*time.Second {
+		t.Errorf("deploy refresh = %v", m.deployRefresh())
+	}
+	cfg.ReleasePR = nil
+	m = New(context.Background(), Options{Config: cfg, GH: fake.New("alice"), Me: "alice"})
+	if m.deployCache.Stuck() != deploys.StuckAfter || m.deployRefresh() != deploys.RefreshEvery {
+		t.Error("defaults without release_pr")
 	}
 }

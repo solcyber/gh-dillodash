@@ -109,7 +109,9 @@ func main() {
 	bi, ok := debug.ReadBuildInfo()
 	version = resolveVersion(version, bi, ok)
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "dillodash:", err)
+		if !errors.Is(err, errInterrupted) {
+			fmt.Fprintln(os.Stderr, "dillodash:", err)
+		}
 		os.Exit(exitCode(err))
 	}
 }
@@ -135,11 +137,18 @@ func exitCode(err error) int {
 // and the command is done.
 var errHelp = errors.New("help requested")
 
+// errInterrupted is the exit-130 error: ctrl-c or SIGINT ended the
+// command, and main prints nothing for it.
+var errInterrupted = exitError{130, errors.New("interrupted")}
+
 // run dispatches the command line; nil means exit 0.
 func run(args []string) error {
 	err := dispatch(args)
-	if errors.Is(err, errHelp) {
+	switch {
+	case errors.Is(err, errHelp):
 		return nil
+	case errors.Is(err, ui.ErrInterrupted), errors.Is(err, context.Canceled):
+		return errInterrupted
 	}
 	return err
 }
@@ -281,15 +290,19 @@ func setupDisplay(cfg *config.Config) {
 	scenes.Mascot = cfg.Display.Mascot
 }
 
+// dashboard runs the TUI. Signals are handled in two phases: before the
+// TUI a signal context covers the auth check and the login pause, and
+// it is stopped before ui.Run, because Bubble Tea handles SIGINT and
+// SIGTERM itself while the terminal is in raw mode and masks them while
+// $PAGER or $EDITOR has the terminal (a ctrl-c inside less must not kill
+// the dashboard behind it).
 func dashboard(args []string) error {
 	f, err := parseFlags(args)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	if f.demo {
-		return runDemo(ctx, f)
+		return runDemo(context.Background(), f)
 	}
 	cfg, err := loadConfig(f)
 	if err != nil {
@@ -299,10 +312,15 @@ func dashboard(args []string) error {
 	if err != nil {
 		return exitError{2, fmt.Errorf("%w\nSign in first: gh auth login", err)}
 	}
+	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	// fail fast (and loudly, outside the TUI) if the token is bad, and
 	// warn if gh's active account is not the one the config expects
-	me, err := gh.Whoami(ctx)
+	me, err := gh.Whoami(sig)
 	if err != nil {
+		if sig.Err() != nil {
+			return errInterrupted
+		}
 		return fmt.Errorf("GitHub auth failed: %w (gh auth status shows the account)", err)
 	}
 	if err := refuseBot(cfg, me, gh.TokenSource()); err != nil {
@@ -313,16 +331,17 @@ func dashboard(args []string) error {
 		fmt.Fprintln(os.Stderr, "actions will be performed as", me, "(gh auth switch changes it); ctrl-c now to abort")
 		select {
 		case <-time.After(3 * time.Second):
-		case <-ctx.Done():
-			return exitError{130, errors.New("aborted")}
+		case <-sig.Done():
+			return errInterrupted
 		}
 	}
+	stop() // from here Bubble Tea owns the signals
 	setupDisplay(cfg)
 	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
 	if err != nil {
 		return exitError{2, err}
 	}
-	return ui.Run(ctx, ui.Options{
+	return ui.Run(context.Background(), ui.Options{
 		Config:    cfg,
 		GH:        gh,
 		Workflows: wf,
@@ -389,7 +408,9 @@ func configCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		return doctor.Run(context.Background(), os.Stdout, cfg, version)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return doctor.Run(ctx, os.Stdout, cfg, version)
 	case "pull":
 		rest := args[1:]
 		spec := ""

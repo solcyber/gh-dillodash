@@ -357,7 +357,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 			app.Notice(fmt.Sprintf("%s: %d wait(s) on %s, but %s is not a reviewer of %s", where, len(st.Waits), short(sha), m.me, strings.Join(st.Envs(), ", ")))
 		case st.Phase == "running" || st.Phase == "none":
 			app.Notice(fmt.Sprintf("%s: nothing waits on %s yet (%s) - dillodash says when it does", where, short(sha), st.Text))
-			app.RefreshSoon(deploys.RefreshEvery)
+			app.RefreshSoon(m.deployRefresh())
 		case st.Phase == "done" || st.Phase == "cancelled":
 			app.OK(fmt.Sprintf("%s: %s - every run on %s finished", where, st.Text, short(sha)))
 		default:
@@ -402,7 +402,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		app.Celebrate(false)
 	}
 	app.Refresh(true)
-	app.RefreshSoon(deploys.RefreshEvery)
+	app.RefreshSoon(m.deployRefresh())
 }
 
 // ---- changed files / diffs ----

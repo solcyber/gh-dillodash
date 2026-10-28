@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -17,13 +18,48 @@ import (
 
 type tickMsg struct{}
 
-// Run starts the dashboard and blocks until it quits.
+// ErrInterrupted is Run's error when the dashboard was interrupted
+// (ctrl-c, or SIGINT): main exits 130 without a message.
+var ErrInterrupted = errors.New("interrupted")
+
+// Run starts the dashboard and blocks until it quits. Bubble Tea owns
+// the process signals while the TUI is up (SIGTERM quits, SIGINT
+// interrupts, both are masked while $PAGER or $EDITOR has the terminal),
+// so the context given here is not a signal context: it is the parent
+// of the workers' context, which is cancelled when the dashboard ends so
+// a refresh or action in flight stops with it.
 func Run(ctx context.Context, o Options) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	m := New(ctx, o)
-	p := tea.NewProgram(m, tea.WithContext(ctx))
+	p := tea.NewProgram(m)
 	m.prog = p
 	_, err := p.Run()
+	if errors.Is(err, tea.ErrInterrupted) {
+		return ErrInterrupted
+	}
 	return err
+}
+
+// quitArmSecs is how long a second q or ctrl-c has to confirm quitting
+// while an action is still talking to GitHub.
+const quitArmSecs = 3
+
+// requestQuit is q (or ctrl-c): quit, unless an action is mid-flight,
+// when the first press warns and the second within quitArmSecs quits
+// anyway (a request already sent to GitHub completes regardless; only
+// its outcome goes unseen).
+func (m *Model) requestQuit(interrupt bool) tea.Cmd {
+	armed := m.quitArmedAt > 0 && fx.Now()-m.quitArmedAt <= quitArmSecs
+	if m.action && !armed {
+		m.quitArmedAt = fx.Now()
+		m.notice("an action is still running — press again within 3s to quit anyway (a request already sent completes regardless)")
+		return nil
+	}
+	if interrupt {
+		return tea.Interrupt
+	}
+	return tea.Quit
 }
 
 // Init starts the first refresh, the splash and the tick clock.
@@ -129,6 +165,11 @@ func isEsc(k widgets.Key) bool   { return k.Name == "esc" }
 
 // handleKey dispatches a key (lock held).
 func (m *Model) handleKey(k widgets.Key) tea.Cmd {
+	if k.Name == "ctrl+c" && m.modal == nil {
+		// raw mode delivers ctrl-c as a key, not a signal; a modal owns
+		// it (it cancels the prompt) and everywhere else it quits
+		return m.requestQuit(true)
+	}
 	if m.modal != nil {
 		if m.modal.Handle(k) {
 			close(m.modalDone)
@@ -161,6 +202,9 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		return nil
 	}
 	if m.action {
+		if m.view == ViewList && k.Rune == 'q' {
+			return m.requestQuit(false) // warns once, quits on the second press
+		}
 		return nil // an action is mid-flight: its modal owns the keys
 	}
 	page := max(1, m.h-4)
@@ -189,7 +233,7 @@ func (m *Model) listKey(k widgets.Key, page int, app *lockedApp) tea.Cmd {
 	}
 	switch {
 	case k.Rune == 'q':
-		return tea.Quit
+		return m.requestQuit(false)
 	case isEsc(k):
 		if m.filter != "" {
 			m.filter = ""

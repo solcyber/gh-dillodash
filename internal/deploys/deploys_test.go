@@ -52,3 +52,27 @@ func TestFmtSecs(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeWithStuckThreshold(t *testing.T) {
+	now := time.Date(2026, 10, 27, 23, 10, 0, 0, time.UTC)
+	runs := []model.WorkflowRun{run(1, "deploy", "in_progress", "", 10*time.Minute, now)}
+	if st := Compute(runs, nil, now); st.Phase != "running" {
+		t.Errorf("default threshold: %q", st.Phase)
+	}
+	if st := ComputeWith(runs, nil, now, 5*time.Minute); st.Phase != "stuck" || st.Text != "stuck? 10m" {
+		t.Errorf("5m threshold: %q %q", st.Phase, st.Text)
+	}
+	if st := ComputeWith(runs, nil, now, 0); st.Phase != "running" {
+		t.Errorf("zero means the default: %q", st.Phase)
+	}
+	var c *Cache
+	if c.Stuck() != StuckAfter || (&Cache{StuckAfter: time.Minute}).Stuck() != time.Minute {
+		t.Error("Cache.Stuck")
+	}
+}
+
+func TestRefreshInterval(t *testing.T) {
+	if RefreshInterval(0) != RefreshEvery || RefreshInterval(-1) != RefreshEvery || RefreshInterval(45) != 45*time.Second {
+		t.Error("RefreshInterval")
+	}
+}
