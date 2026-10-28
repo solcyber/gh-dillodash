@@ -128,7 +128,7 @@ func TestDetailSurvivesVanishingPR(t *testing.T) {
 	if h.m.view != ViewDetail {
 		t.Fatalf("view = %s", h.m.view)
 	}
-	id := model.Ident{Repo: "infra", Number: 101}
+	id := model.Ident{Repo: infra, Number: 101}
 	h.gh.Open[infra] = ghapi.ListResult{PRs: h.gh.Open[infra].PRs[1:], Issues: h.gh.Open[infra].Issues}
 	delete(h.gh.PRs, id)
 	h.key('r')
@@ -248,5 +248,69 @@ func TestErrorMessagesNameTheThing(t *testing.T) {
 	h.key('a')
 	if !strings.Contains(h.m.errText, "review approval of #101 failed") || !strings.Contains(h.m.errText, "Pull requests") {
 		t.Errorf("approve errText = %q", h.m.errText)
+	}
+}
+
+// TestGotoOwnerQualified: ":" accepts owner/repo#N, and tells two repos
+// with the same name under different owners apart.
+func TestGotoOwnerQualified(t *testing.T) {
+	beta := model.Repo{Owner: "beta", Name: "infra"}
+	h := newHarness(t, infra, beta)
+	h.load()
+	if !h.m.multiOwner {
+		t.Fatal("two owners should set multiOwner")
+	}
+	for _, tc := range []struct{ typed, ref string }{
+		{"acme/infra#101", "acme/infra#101"},
+		{"beta/infra#101", "beta/infra#101"},
+		{"#101", "acme/infra#101"}, // the first repo is the default
+	} {
+		h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return tc.typed, true }
+		h.key(':')
+		if h.m.view != ViewDetail || h.m.detailRef() != tc.ref {
+			t.Fatalf("%q: view=%s ref=%s", tc.typed, h.m.view, h.m.detailRef())
+		}
+		h.named("esc")
+	}
+	// the list rows carry the owner too
+	if s := h.screen(); !strings.Contains(s, "acme/infra#101") || !strings.Contains(s, "beta/infra#101") {
+		t.Errorf("rows lack owner-qualified refs:\n%s", s)
+	}
+}
+
+// TestWhereQualifiesForeignRepo: with one review repo, a PR from any
+// other repo (a release repo) still gets its repo in the heading.
+func TestWhereQualifiesForeignRepo(t *testing.T) {
+	h := newHarness(t, infra)
+	h.load()
+	if got := h.m.where(infra, 5); got != "#5" {
+		t.Errorf("own repo: %q", got)
+	}
+	if got := h.m.where(portal, 5); got != "web-portal#5" {
+		t.Errorf("foreign repo: %q", got)
+	}
+	h.m.mu.Lock()
+	h.m.multi = true
+	h.m.mu.Unlock()
+	if got := h.m.where(infra, 5); got != "infra#5" {
+		t.Errorf("multi: %q", got)
+	}
+	h.m.mu.Lock()
+	h.m.multi, h.m.repos = false, nil
+	h.m.mu.Unlock()
+	if got := h.m.where(portal, 5); got != "web-portal#5" {
+		t.Errorf("no repos: %q", got)
+	}
+	// and the detail heading of a foreign PR shows it
+	h.m.mu.Lock()
+	h.m.repos = []model.Repo{infra}
+	foreign := pr(portal, 7, "release 2026.10", "bob", false)
+	h.m.showDetail(foreign, "pr", 0, nil)
+	h.m.mu.Unlock()
+	if s := h.screen(); !strings.Contains(s, "web-portal#7") {
+		t.Errorf("heading lacks the repo:\n%s", s)
+	}
+	if ref := h.m.detailRef(); ref != "web-portal#7" {
+		t.Errorf("detailRef = %q", ref)
 	}
 }

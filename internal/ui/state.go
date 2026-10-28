@@ -7,6 +7,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,10 +79,12 @@ type Model struct {
 	me    string
 	repos []model.Repo
 	multi bool
-	host  string
-	ctx   context.Context
-	prog  *tea.Program
-	ver   string
+	// multiOwner: the review repos span owners, so refs carry the owner
+	multiOwner bool
+	host       string
+	ctx        context.Context
+	prog       *tea.Program
+	ver        string
 
 	fx         *fx.Fx
 	w, h       int
@@ -193,6 +196,7 @@ func New(ctx context.Context, o Options) *Model {
 		me:              o.Me,
 		repos:           repos,
 		multi:           len(repos) > 1,
+		multiOwner:      spansOwners(repos),
 		host:            o.Host,
 		ctx:             ctx,
 		ver:             o.Version,
@@ -327,7 +331,24 @@ func (m *Model) reposText() string {
 	return out
 }
 
-// where is "#N" or "repo#N" for status messages.
+// spansOwners reports whether the repos belong to more than one owner.
+func spansOwners(repos []model.Repo) bool {
+	for _, r := range repos[min(1, len(repos)):] {
+		if !strings.EqualFold(r.Owner, repos[0].Owner) {
+			return true
+		}
+	}
+	return false
+}
+
+// where names a PR or issue for headings and status messages: "#N" when
+// repo is the only review repo, "repo#N" when several are configured or
+// the item comes from elsewhere (a release repo), and "owner/repo#N"
+// when the configured repos span owners.
 func (m *Model) where(repo model.Repo, n int) string {
-	return model.Ref(repo, n, m.multi)
+	if m.multiOwner {
+		return model.Ident{Repo: repo, Number: n}.String()
+	}
+	foreign := len(m.repos) == 0 || repo != m.repos[0]
+	return model.Ref(repo, n, m.multi || foreign)
 }

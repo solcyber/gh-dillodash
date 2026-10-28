@@ -196,7 +196,7 @@ func (f *Client) PRDetail(ctx context.Context, repo model.Repo, number int) (*mo
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	p, ok := f.PRs[model.Ident{Repo: repo.Name, Number: number}]
+	p, ok := f.PRs[model.Ident{Repo: repo, Number: number}]
 	if !ok {
 		return nil, &ghapi.Error{Message: fmt.Sprintf("#%d is not a pull request in %s", number, repo)}
 	}
@@ -213,7 +213,7 @@ func (f *Client) IssueDetail(ctx context.Context, repo model.Repo, number int) (
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	i, ok := f.Issues[model.Ident{Repo: repo.Name, Number: number}]
+	i, ok := f.Issues[model.Ident{Repo: repo, Number: number}]
 	if !ok {
 		return nil, &ghapi.Error{Message: fmt.Sprintf("#%d is not an issue in %s", number, repo)}
 	}
@@ -240,7 +240,7 @@ func (f *Client) PRComments(ctx context.Context, repo model.Repo, number int) ([
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]model.Comment(nil), f.Comments[model.Ident{Repo: repo.Name, Number: number}]...), nil
+	return append([]model.Comment(nil), f.Comments[model.Ident{Repo: repo, Number: number}]...), nil
 }
 
 // IssuesWithLabel serves Labelled, at most first of them.
@@ -355,7 +355,7 @@ func (f *Client) PRFiles(ctx context.Context, repo model.Repo, number int) ([]mo
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]model.PRFile(nil), f.Files[model.Ident{Repo: repo.Name, Number: number}]...), nil
+	return append([]model.PRFile(nil), f.Files[model.Ident{Repo: repo, Number: number}]...), nil
 }
 
 // PRDiff serves Diffs.
@@ -365,7 +365,7 @@ func (f *Client) PRDiff(ctx context.Context, repo model.Repo, number int) (strin
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.Diffs[model.Ident{Repo: repo.Name, Number: number}], nil
+	return f.Diffs[model.Ident{Repo: repo, Number: number}], nil
 }
 
 // Compare serves Compares["base...head"].

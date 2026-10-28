@@ -344,7 +344,7 @@ func Items(in Input) []*Item {
 				continue
 			}
 			head(repo, p.HeadRefName)
-			if seen[model.Ident{Repo: repo.Name, Number: p.Number}] {
+			if seen[model.Ident{Repo: repo, Number: p.Number}] {
 				continue
 			}
 			id := PRID(repo, p.Number)

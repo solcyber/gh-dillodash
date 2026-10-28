@@ -98,7 +98,7 @@ type Stage struct {
 }
 
 // Ident identifies the stage row across refreshes.
-func (s *Stage) Ident() model.Ident { return model.Ident{Repo: s.Repo.Name, Number: 0} }
+func (s *Stage) Ident() model.Ident { return model.Ident{Repo: s.Repo, Number: 0} }
 
 // State is one refresh's result: the release PRs of every enrolled
 // repo (each annotated with ExtRel, ExtCI and, when merged, ExtDeploy),

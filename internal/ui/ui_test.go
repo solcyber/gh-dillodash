@@ -181,7 +181,7 @@ func TestApproveIsAPlainReview(t *testing.T) {
 	if !strings.Contains(h.m.status, "review-approved #101") {
 		t.Errorf("status = %q", h.m.status)
 	}
-	if !h.m.localApproved(h.gh.PRs[model.Ident{Repo: "infra", Number: 101}]) {
+	if !h.m.localApproved(h.gh.PRs[model.Ident{Repo: infra, Number: 101}]) {
 		t.Error("not marked approved locally")
 	}
 	// a declined confirmation posts nothing
@@ -196,7 +196,7 @@ func TestApproveRefusesDraftAndSelf(t *testing.T) {
 	h := newHarness(t)
 	h.load()
 	h.key('j') // the draft
-	h.gh.PRs[model.Ident{Repo: "infra", Number: 102}] = h.gh.Open[infra].PRs[1]
+	h.gh.PRs[model.Ident{Repo: infra, Number: 102}] = h.gh.Open[infra].PRs[1]
 	h.named("enter")
 	h.key('a')
 	if len(h.gh.Approvals) != 0 || !strings.Contains(h.m.status, "draft") {

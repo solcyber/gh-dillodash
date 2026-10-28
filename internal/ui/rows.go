@@ -263,13 +263,14 @@ func abs(x int) int {
 
 // ---- layout ----
 
-// numText is the "#N" / "repo#N" column text of an item.
+// numText is the "#N" / "repo#N" / "owner/repo#N" column text of an item
+// (the same rule as where, so a row and its heading agree).
 func (m *Model) numText(row workflow.Row) string {
 	switch v := row.Item.(type) {
 	case *model.PR:
-		return model.Ref(v.Repo, v.Number, m.multi)
+		return m.where(v.Repo, v.Number)
 	case *model.Issue:
-		return model.Ref(v.Repo, v.Number, m.multi)
+		return m.where(v.Repo, v.Number)
 	}
 	return ""
 }

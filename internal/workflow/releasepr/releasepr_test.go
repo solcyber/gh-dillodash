@@ -713,7 +713,7 @@ func TestRefreshAndSections(t *testing.T) {
 	if q := st.QueuedForWindow(); len(q) != 1 || q[0].Number != 42 {
 		t.Errorf("QueuedForWindow: %v", q)
 	}
-	if len(st.Releases) != 5 || st.Find(model.Ident{Repo: "web-portal", Number: 7}) != nil {
+	if len(st.Releases) != 5 || st.Find(model.Ident{Repo: portal, Number: 7}) != nil {
 		t.Errorf("an 18-hour-old merge is dropped: %d", len(st.Releases))
 	}
 	for _, pr := range st.Releases {
@@ -721,13 +721,13 @@ func TestRefreshAndSections(t *testing.T) {
 			t.Errorf("#%d carries its rel info", pr.Number)
 		}
 	}
-	if InfoOf(st.Find(model.Ident{Repo: "web-portal", Number: 45})).Kind != KindHotfix || st.Find(model.Ident{Repo: "web-portal", Number: 45}).Get(ExtIcon) != "hotfix" {
+	if InfoOf(st.Find(model.Ident{Repo: portal, Number: 45})).Kind != KindHotfix || st.Find(model.Ident{Repo: portal, Number: 45}).Get(ExtIcon) != "hotfix" {
 		t.Error("the hotfix is a hotfix with its icon")
 	}
-	if InfoOf(st.Find(model.Ident{Repo: "web-portal", Number: 951})).Kind != KindOther {
+	if InfoOf(st.Find(model.Ident{Repo: portal, Number: 951})).Kind != KindOther {
 		t.Error("the docs branch is 'other'")
 	}
-	m := st.Find(model.Ident{Repo: "web-portal", Number: 133})
+	m := st.Find(model.Ident{Repo: portal, Number: 133})
 	dep, ok := m.Get(ExtDeploy).(deploys.State)
 	if !ok || dep.Phase != "waiting" || dep.Text != "approve: prod" || dep.SHA != mergedSHA {
 		t.Errorf("the merged release's deploy state: %+v %v", dep, ok)
@@ -894,7 +894,7 @@ func TestRowsRenderAndFit(t *testing.T) {
 			}
 		}
 	}
-	items := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: "web-portal", Number: 951})}}
+	items := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: portal, Number: 951})}}
 	L := kinds[RowRelease].Layout(app, items, 120, 4, 0)
 	segs := kinds[RowRelease].Segs(app, items[0], L, 120, 0)
 	txt := text.SegsText(segs)
@@ -924,7 +924,7 @@ func TestRowsRenderAndFit(t *testing.T) {
 	if _, ok := L40["age"]; ok {
 		t.Error("narrow: the age drops first")
 	}
-	hot := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: "web-portal", Number: 45})}}
+	hot := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: portal, Number: 45})}}
 	segs = kinds[RowRelease].Segs(app, hot[0], kinds[RowRelease].Layout(app, hot, 120, 4, 0), 120, 0)
 	txt = text.SegsText(segs)
 	attn := false
@@ -975,15 +975,15 @@ func TestRowsRenderAndFit(t *testing.T) {
 func TestClassifyAndChips(t *testing.T) {
 	w, app, st := fixture(t, true)
 	_ = app
-	c := w.Classify(st.Find(model.Ident{Repo: "web-portal", Number: 44}), nil, "alice", false)
+	c := w.Classify(st.Find(model.Ident{Repo: portal, Number: 44}), nil, "alice", false)
 	if c == nil || c.Label != LabelNeeds || c.Style != "chip.await" || !c.NeedsYou || c.Done {
 		t.Errorf("an open release needs approval: %+v", c)
 	}
-	c = w.Classify(st.Find(model.Ident{Repo: "web-portal", Number: 951}), nil, "alice", false)
+	c = w.Classify(st.Find(model.Ident{Repo: portal, Number: 951}), nil, "alice", false)
 	if c == nil || c.Label != LabelOther || c.Style != "chip.state" || c.NeedsYou || !c.Done {
 		t.Errorf("not a release: %+v", c)
 	}
-	c = w.Classify(st.Find(model.Ident{Repo: "web-portal", Number: 42}), nil, "alice", false)
+	c = w.Classify(st.Find(model.Ident{Repo: portal, Number: 42}), nil, "alice", false)
 	if c == nil || c.Label != "approved by carol" || c.Style != "chip.approved" {
 		t.Errorf("approved by carol: %+v", c)
 	}
@@ -1003,7 +1003,7 @@ func TestClassifyAndChips(t *testing.T) {
 		t.Error("EnrichDetail copies the rel info by identity")
 	}
 	detail2 := &model.PR{Repo: portal, Number: 133}
-	w.EnrichDetail(context.Background(), app.Fake, detail2, st.Find(model.Ident{Repo: "web-portal", Number: 133}))
+	w.EnrichDetail(context.Background(), app.Fake, detail2, st.Find(model.Ident{Repo: portal, Number: 133}))
 	if _, ok := detail2.Get(ExtDeploy).(deploys.State); !ok || detail2.Get(ExtIcon) != "release" {
 		t.Error("EnrichDetail copies the deploy state and icon from the listed row")
 	}
@@ -1019,7 +1019,7 @@ func TestDetailCards(t *testing.T) {
 		}
 		return b.String()
 	}
-	m := st.Find(model.Ident{Repo: "web-portal", Number: 133})
+	m := st.Find(model.Ident{Repo: portal, Number: 133})
 	card := flat(w.DetailCards(app, m, m, 80))
 	if !strings.Contains(card, "deploys on "+short(mergedSHA)) || !strings.Contains(card, "approve: prod") || !strings.Contains(card, "Migrate") || !strings.Contains(card, "waiting for prod") {
 		t.Errorf("the merged card lists the deploy and its runs:\n%s", card)
@@ -1034,19 +1034,19 @@ func TestDetailCards(t *testing.T) {
 	if card = flat(w.DetailCards(app, unread, nil, 80)); !strings.Contains(card, "not read yet") {
 		t.Errorf("a merged release without a read says D reads it:\n%s", card)
 	}
-	hot := st.Find(model.Ident{Repo: "web-portal", Number: 45})
+	hot := st.Find(model.Ident{Repo: portal, Number: 45})
 	if card = flat(w.DetailCards(app, hot, hot, 80)); !strings.Contains(card, "emergency by definition") || !strings.Contains(card, "hotfix/login") {
 		t.Errorf("the hotfix card:\n%s", card)
 	}
-	other := st.Find(model.Ident{Repo: "web-portal", Number: 951})
+	other := st.Find(model.Ident{Repo: portal, Number: 951})
 	if card = flat(w.DetailCards(app, other, other, 80)); !strings.Contains(card, "refuse anything else") || !strings.Contains(card, "not a release") {
 		t.Errorf("the non-release card:\n%s", card)
 	}
-	rel := st.Find(model.Ident{Repo: "web-portal", Number: 44})
+	rel := st.Find(model.Ident{Repo: portal, Number: 44})
 	if card = flat(w.DetailCards(app, rel, rel, 80)); !strings.Contains(card, "queues it for tonight's") || !strings.Contains(card, "/release-now") {
 		t.Errorf("the release card says what a does:\n%s", card)
 	}
-	q := st.Find(model.Ident{Repo: "web-portal", Number: 42})
+	q := st.Find(model.Ident{Repo: portal, Number: 42})
 	if card = flat(w.DetailCards(app, q, q, 80)); !strings.Contains(card, "queued") {
 		t.Errorf("a queued release shows its window chip:\n%s", card)
 	}

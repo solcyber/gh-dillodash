@@ -186,3 +186,22 @@ func TestDecisionLabel(t *testing.T) {
 		t.Errorf("chip styles: %v", ChipForLabel)
 	}
 }
+
+func TestIdentCarriesOwner(t *testing.T) {
+	a := &PR{Repo: Repo{Owner: "acme", Name: "api"}, Number: 5}
+	b := &PR{Repo: Repo{Owner: "beta", Name: "api"}, Number: 5}
+	if a.Ident() == b.Ident() {
+		t.Fatal("same name under two owners must be two idents")
+	}
+	seen := map[Ident]bool{a.Ident(): true}
+	if seen[b.Ident()] {
+		t.Fatal("map keyed by Ident conflated two owners")
+	}
+	if got := a.Ident().String(); got != "acme/api#5" {
+		t.Errorf("String() = %q", got)
+	}
+	i := &Issue{Repo: a.Repo, Number: 5}
+	if i.Ident() != a.Ident() {
+		t.Error("a PR and an issue with the same number share the row identity")
+	}
+}

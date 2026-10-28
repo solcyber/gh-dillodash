@@ -327,7 +327,7 @@ func (m *Model) noteDeltas() {
 	}
 }
 
-func identKey(n model.Ident) string { return fmt.Sprintf("%s#%d", n.Repo, n.Number) }
+func identKey(n model.Ident) string { return n.String() }
 
 // manualRefresh is the 'r' key: refresh now, but if GitHub has us in a
 // rate-limit backoff, say so instead of silently doing nothing.

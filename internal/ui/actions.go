@@ -480,11 +480,12 @@ func (m *Model) openDiffPager(app *lockedApp) {
 
 // ---- go to, filter, search ----
 
-var gotoRE = regexp.MustCompile(`^(?:([\w.-]+)#|#?\s*)(\d+)$`)
+// gotoRE: "12", "#12", "repo#12" or "owner/repo#12".
+var gotoRE = regexp.MustCompile(`^(?:([\w.-]+(?:/[\w.-]+)?)#|#?\s*)(\d+)$`)
 
 // doGoto opens any #N (or repo#N): the PR first, then the issue.
 func (m *Model) doGoto(app *lockedApp) {
-	txt, _ := app.Prompt("go to # (a PR or issue number, or repo#N; Esc cancels):", workflow.PromptOpts{})
+	txt, _ := app.Prompt("go to # (a PR or issue number, repo#N or owner/repo#N; Esc cancels):", workflow.PromptOpts{})
 	txt = strings.TrimSpace(txt)
 	if txt == "" {
 		return
