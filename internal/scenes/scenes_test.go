@@ -101,7 +101,7 @@ func TestSplashLogotypeAndMascot(t *testing.T) {
 	if !strings.ContainsAny(c.Text(ay+3), ball) {
 		t.Errorf("no ball at t=0.3: %q", c.Text(ay+3))
 	}
-	if strings.Contains(c.Text(ay), "__.------.__") {
+	if strings.Contains(c.Text(ay), strings.TrimSpace(glyphs.Armadillo[0])) {
 		t.Error("armadillo shown during the roll-in")
 	}
 
@@ -144,7 +144,7 @@ func TestSplashAmos(t *testing.T) {
 		t.Error("no sprite cells in color")
 	}
 	for r := 0; r < 30; r++ {
-		if strings.Contains(c.Text(r), "__.------.__") {
+		if strings.Contains(c.Text(r), strings.TrimSpace(glyphs.Armadillo[0])) {
 			t.Error("line art drawn alongside the sprite")
 		}
 	}
@@ -155,7 +155,7 @@ func TestSplashAmos(t *testing.T) {
 	}
 	found := false
 	for r := 0; r < 20; r++ {
-		found = found || strings.Contains(c.Text(r), "__.------.__")
+		found = found || strings.Contains(c.Text(r), strings.TrimSpace(glyphs.Armadillo[0]))
 	}
 	if !found {
 		t.Error("no line art on the short terminal")

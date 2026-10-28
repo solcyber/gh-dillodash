@@ -2,21 +2,23 @@ package glyphs
 
 import "strings"
 
-// Armadillo is the mascot, facing right.
+// Armadillo is the mascot, facing right: the domed, banded shell high on
+// the left, the head low on the right, four stubby legs. It follows the
+// sprite in assets/amos-rough.pdf for terminals without color.
 var Armadillo = []string{
-	`            __.------.__`,
-	`        .-'' |  |  |  | ''-.__`,
-	"       /  |  |  |  |  |  |  ' o`.",
-	`      (___|__|__|__|__|__|___.--'`,
-	`         \\  \\         //  //`,
+	`           _.--==--.__`,
+	`        .-'   \   \    '-.___`,
+	`      .'   \   \   \        '-.____`,
+	`     (______\___\___\_________(  o   >`,
+	`        |_|  |_|       |_|  |_|`,
 }
 
 // ArmadilloStep is the other pair of legs forward: two frames make a walk.
 var ArmadilloStep = append(append([]string{}, Armadillo[:len(Armadillo)-1]...),
-	`         //  //         \\  \\`)
+	`       |_|    |_|     |_|    |_|`)
 
 var mirrorRunes = map[rune]rune{
-	'(': ')', ')': '(', '/': '\\', '\\': '/', '`': '\'', '\'': '`',
+	'(': ')', ')': '(', '/': '\\', '\\': '/', '`': '\'', '\'': '`', '<': '>', '>': '<',
 }
 
 // Mirror is ASCII art facing the other way: every row padded to the

@@ -1,5 +1,6 @@
 // Package amos draws Amos, the dillodash armadillo. The sprite comes from
-// assets/amos.png through cmd/gen-amos; it is rendered with half-block
+// assets/amos.png (rendered from assets/amos-rough.pdf) through
+// cmd/gen-amos; it is rendered with half-block
 // characters, two art pixels per terminal cell, in Amos's own colors (the
 // colorblind palette rules apply to status, not to the mascot). Terminals
 // without color get the line-art armadillo from the glyphs package instead;

@@ -30,7 +30,7 @@ internal/fonts              the embedded Nerd Font, its licences and the install
 internal/doctor             `config check`
 internal/demo               the offline fixture behind --demo and the screenshot
 internal/hygiene            the private-terms test over the whole tree
-cmd/gen-amos                regenerates the Amos sprite from assets/amos.png
+cmd/gen-amos                regenerates the Amos sprite from assets/amos.png (rendered from assets/amos-rough.pdf)
 cmd/screenshot              renders docs/screenshot.png from the demo fixture
 ```
 
