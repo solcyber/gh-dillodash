@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,7 +72,7 @@ func TestMigrateINI(t *testing.T) {
 	if rp.Auto || !reflect.DeepEqual(rp.Repos, wantRepos) || rp.Org != "acme" || rp.DiscoverTTLSecs != 3600 {
 		t.Errorf("release_pr = %+v", rp)
 	}
-	if !strings.HasSuffix(rp.Cache, "/.cache/pr-dash/release-repos.json") {
+	if !strings.HasSuffix(filepath.ToSlash(rp.Cache), "/.cache/pr-dash/release-repos.json") {
 		t.Errorf("cache = %q", rp.Cache)
 	}
 
