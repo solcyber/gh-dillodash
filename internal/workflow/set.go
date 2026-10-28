@@ -83,15 +83,28 @@ func NewSet(ctx *Context, items ...Workflow) (*Set, error) {
 	return s, nil
 }
 
-// coreKeys are bound by the dashboard itself and may not be taken.
+// coreKeys are bound by the dashboard itself and may not be taken: the
+// ui package's key table, view:key (a test keeps the two equal).
 var coreKeys = map[string]bool{
-	"list:j": true, "list:k": true, "list:g": true, "list:G": true, "list:q": true,
-	"list:/": true, "list:A": true, "list:d": true, "list:y": true, "list:o": true, "list:r": true,
-	"detail:a": true, "detail:c": true, "detail:C": true, "detail:t": true, "detail:f": true,
-	"detail:v": true, "detail:/": true, "detail:n": true, "detail:N": true, "detail:m": true,
-	"detail:y": true, "detail:o": true, "detail:r": true, "detail:q": true, "detail:h": true,
-	"detail:M": true, "detail:D": true, "list:D": true,
-	"any:?": true, "any::": true,
+	"list:/": true, "list::": true, "list:A": true, "list:D": true, "list:G": true, "list:d": true, "list:g": true, "list:j": true,
+	"list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:y": true,
+	"detail:/": true, "detail:C": true, "detail:D": true, "detail:G": true, "detail:M": true, "detail:N": true, "detail:a": true, "detail:c": true,
+	"detail:f": true, "detail:g": true, "detail:h": true, "detail:j": true, "detail:k": true, "detail:m": true, "detail:n": true, "detail:o": true,
+	"detail:q": true, "detail:r": true, "detail:t": true, "detail:v": true, "detail:y": true,
+	"issue:/": true, "issue:C": true, "issue:G": true, "issue:N": true, "issue:c": true, "issue:g": true, "issue:h": true, "issue:j": true,
+	"issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:t": true, "issue:y": true,
+	"any::": true, "any:?": true,
+}
+
+// CoreKeyIDs lists the view:key pairs the dashboard reserves, sorted;
+// the ui package's tests keep it equal to its key table.
+func CoreKeyIDs() []string {
+	out := make([]string, 0, len(coreKeys))
+	for k := range coreKeys {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Get returns an enabled workflow by name, or nil.

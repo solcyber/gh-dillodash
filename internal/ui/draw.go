@@ -424,59 +424,8 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 	c.PutSegs(h-2, x, segs, w, false, false)
 }
 
-// keys bar labels per view; workflows add theirs.
-var coreKeys = map[string][][2]string{
-	ViewList:     {{"j/k", "move"}, {"↵", "open"}, {"/", "filter"}, {":", "go to #"}, {"A", "approved"}, {"d", "fortress"}, {"y", "copy url"}, {"r", "refresh"}, {"q", "quit"}},
-	ViewDetail:   {{"a", "approve"}, {"M", "merge"}, {"D", "deploys"}, {"c/C", "comment"}, {"t", "tag"}, {"f", "files"}, {"v", "diff"}, {"/", "search"}, {"m", "raw"}, {"y", "url"}, {"r", "refresh"}, {"q", "back"}},
-	"issue":      {{"c/C", "comment"}, {"t", "tag"}, {"/", "search"}, {"m", "raw"}, {"y", "url"}, {"r", "refresh"}, {"q", "back"}},
-	ViewFiles:    {{"j/k", "move"}, {"↵", "view diff"}, {"v", "full diff"}, {"r", "reload"}, {"q", "back"}},
-	ViewPatch:    {{"j/k", "scroll"}, {"/", "search"}, {"v", "full diff"}, {"q", "back"}},
-	ViewFortress: {{"hjkl", "look"}, {"tab", "next"}, {"↵", "open"}, {"+/-", "zoom"}, {"c", "city"}, {"y", "url"}, {"r", "refresh"}, {"d", "back"}},
-}
-
-// keysFor merges the core keys with the workflows' for a view. The
-// list shows D while a workflow lists merged PRs with deployments to
-// approve (release_pr), the way the window workflow adds w.
-func (m *Model) keysFor(view string) [][2]string {
-	keys := append([][2]string(nil), coreKeys[view]...)
-	if view == ViewList && m.wf.ProvidesDeploys() {
-		for i, k := range keys {
-			if k[0] == "d" {
-				keys = append(keys[:i], append([][2]string{{"D", "deploys"}}, keys[i:]...)...)
-				break
-			}
-		}
-	}
-	wfKeys := m.wf.Keys(view)
-	if view == "issue" {
-		wfKeys = nil
-	}
-	// workflow keys slot in before the trailing navigation keys (y/r/q)
-	cut := len(keys)
-	for i, k := range keys {
-		if k[0] == "y" || k[0] == "f" || k[0] == "d" {
-			cut = i
-			break
-		}
-	}
-	var extra [][2]string
-	for _, k := range wfKeys {
-		extra = append(extra, [2]string{k.Ch, k.Label})
-	}
-	out := append([][2]string{}, keys[:cut]...)
-	out = append(out, extra...)
-	out = append(out, keys[cut:]...)
-	if glyphs.Active() == glyphs.ASCII {
-		for i := range out {
-			if out[i][0] == "↵" {
-				out[i][0] = "enter"
-			}
-		}
-	}
-	return out
-}
-
-// drawKeys: an htop-style key bar; trims to the width but keeps ? help.
+// drawKeys: an htop-style key bar from the key table, trimmed to the
+// width by priority (navigation goes first, q and ? never go).
 func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 	view := m.view
 	if view == ViewDetail && m.detailKind == "issue" {
@@ -484,27 +433,15 @@ func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 	}
 	help := []text.Seg{text.S(" ? ", "chip.key"), text.S(" help ", "keylabel")}
 	room := w - 1 - text.SegsWidth(help)
+	cells := func(it barItem) int { return text.Width(" "+it.key+" ") + text.Width(" "+it.label+" ") }
 	var segs []text.Seg
-	for _, k := range m.keysFor(view) {
-		piece := []text.Seg{text.S(" "+k[0]+" ", "chip.key"), text.S(" "+k[1]+" ", "keylabel")}
-		if text.SegsWidth(segs)+text.SegsWidth(piece) > room {
-			break
-		}
-		segs = append(segs, piece...)
+	for _, it := range trimBar(m.barFor(view), room, cells) {
+		segs = append(segs, text.S(" "+it.key+" ", "chip.key"), text.S(" "+it.label+" ", "keylabel"))
+	}
+	if text.SegsWidth(segs) > room {
+		segs = nil // not even q fits: the help chip alone
 	}
 	c.PutSegs(h-1, 0, append(segs, help...), 0, false, false)
-}
-
-var coreHelp = [][2]string{
-	{"list", "j/k g/G pgup/pgdn  move   enter  open   /  filter (live)"},
-	{"", "A  PRs approved by others   D  approve a merged row's deployments   r  refresh   q  quit"},
-	{"detail", "a  approve   c  comment   C  comment in $EDITOR   t  tag"},
-	{"", "f  files   v  diff in $PAGER   /  search, n/N   m  raw markdown"},
-	{"", "M  merge an approved PR   D  approve its waiting deployments"},
-	{"fortress", "d  a Dwarf Fortress map of PRs, issues, branches, commits: hjkl look, tab next, + zoom, c city"},
-	{"files", "enter  the file's diff   v  whole PR diff   r  reload"},
-	{"anywhere", ":  go to #N   y  copy url   o  open url   ?  this help"},
-	{"prompts", "enter submits   esc cancels   ^U ^W edit   menus: j/k, 1-9"},
 }
 
 // drawHelp paints the help overlay.
@@ -518,11 +455,25 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		ci = append(ci, text.S(" "+names[code], "muted"), sp)
 	}
 	var rows [][]text.Seg
-	helpRows := append([][2]string{}, coreHelp[:5]...)
-	helpRows = append(helpRows, m.wf.HelpRows()...)
-	helpRows = append(helpRows, coreHelp[5:]...)
-	for _, kv := range helpRows {
-		rows = append(rows, []text.Seg{label(kv[0]), text.S(kv[1], "text")})
+	// the key table's groups, the workflows' rows after detail, each
+	// wrapped to the box so a narrow terminal gets more rows, not less
+	textW := max(20, min(w-2, 92)-14)
+	addLines := func(name string, lines []string) {
+		for i, line := range lines {
+			l := name
+			if i > 0 {
+				l = ""
+			}
+			rows = append(rows, []text.Seg{label(l), text.S(line, "text")})
+		}
+	}
+	for _, g := range helpGroups() {
+		addLines(g.label, packEntries(g.entries, textW))
+		if g.label == "detail" {
+			for _, kv := range m.wf.HelpRows() {
+				addLines(kv[0], widgets.Wrap(kv[1], textW))
+			}
+		}
 	}
 	status := []text.Seg{label("status")}
 	status = append(status, scenes.Chip("awaiting review", "chip.await")...)
