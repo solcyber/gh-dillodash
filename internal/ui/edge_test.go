@@ -8,6 +8,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
@@ -313,4 +314,102 @@ func TestWhereQualifiesForeignRepo(t *testing.T) {
 	if ref := h.m.detailRef(); ref != "web-portal#7" {
 		t.Errorf("detailRef = %q", ref)
 	}
+}
+
+// TestNarrowLayouts: at 50 and 40 columns the list keeps its titles and
+// the bar keeps its help chip; files keep their base name; the help
+// scrolls when it overflows.
+func TestNarrowLayouts(t *testing.T) {
+	h := newHarness(t)
+	p := h.gh.Open[infra].PRs[0]
+	h.gh.Files = map[model.Ident][]model.PRFile{p.Ident(): {{Filename: "terraform/environments/production/eu-west-1/modules/iam/deploy-role/main.tf", Status: "modified", Additions: 3, Deletions: 1}}}
+	h.load()
+	for _, sz := range [][2]int{{50, 12}, {40, 10}} {
+		h.m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
+		s := h.screen()
+		lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+		if !strings.Contains(lines[0], "dillodash") {
+			t.Errorf("%dx%d: header lost the name:\n%s", sz[0], sz[1], s)
+		}
+		if !strings.Contains(s, "#101") || !strings.Contains(s, "widen") {
+			t.Errorf("%dx%d: the title vanished:\n%s", sz[0], sz[1], s)
+		}
+		bar := strings.TrimRight(lines[len(lines)-1], " ")
+		if !strings.HasSuffix(bar, "?  help") {
+			t.Errorf("%dx%d: bar %q", sz[0], sz[1], bar)
+		}
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 50, Height: 12})
+	h.named("enter")
+	if s := h.screen(); !strings.Contains(strings.Split(s, "\n")[0], "#101") {
+		t.Errorf("detail header at 50 cols:\n%s", s)
+	}
+	h.key('f')
+	if s := h.screen(); !strings.Contains(s, "main.tf") {
+		t.Errorf("files at 50 cols lose the base name:\n%s", s)
+	}
+	h.named("esc")
+	h.named("esc")
+	// the help at 80x12 overflows and scrolls
+	h.m.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+	h.key('?')
+	if h.m.overlay != "help" {
+		t.Fatal("help not open")
+	}
+	if s := h.screen(); !strings.Contains(s, "j/k scroll") {
+		t.Errorf("overflowing help shows the scroll hint:\n%s", s)
+	}
+	h.key('j')
+	h.key('j')
+	h.key('j')
+	if h.m.helpTop != 3 || h.m.overlay != "help" {
+		t.Errorf("j scrolls the help: top=%d overlay=%q", h.m.helpTop, h.m.overlay)
+	}
+	h.key('x')
+	if h.m.overlay != "" {
+		t.Error("any other key closes it")
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+}
+
+func TestFilterChipSurvivesNarrow(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	h.m.mu.Lock()
+	h.m.filter = "widen"
+	h.m.refilter()
+	h.m.mu.Unlock()
+	lines := strings.Split(h.screen(), "\n")
+	if !strings.Contains(lines[1], "widen") {
+		t.Errorf("summary row at 60 cols lost the filter chip: %q", lines[1])
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+}
+
+func TestStatusEllipsisAndMessageOverlay(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	long := "approval failed: " + strings.Repeat("the token lacks a permission ", 10) + "END"
+	h.m.mu.Lock()
+	h.m.fail(long)
+	h.m.mu.Unlock()
+	lines := strings.Split(h.screen(), "\n")
+	status := strings.TrimRight(lines[len(lines)-2], " ")
+	if !strings.HasSuffix(status, text.Ellipsis) || strings.Contains(status, "END") {
+		t.Errorf("a long error ends in an ellipsis: %q", status)
+	}
+	h.key('e')
+	if h.m.overlay != "message" {
+		t.Fatalf("e opens the message overlay, got %q", h.m.overlay)
+	}
+	if s := h.screen(); !strings.Contains(s, "END") || !strings.Contains(s, "last message") {
+		t.Errorf("the overlay shows the whole message:\n%s", s)
+	}
+	h.named("esc")
+	if h.m.overlay != "" {
+		t.Error("esc closes it")
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 }

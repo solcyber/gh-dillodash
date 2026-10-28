@@ -134,7 +134,9 @@ var bindings = []binding{
 	{Views: []string{anyView}, Keys: []widgets.Key{R(':')}, Group: "any",
 		Help: ":  go to #N", Doc: "go to `#N`, `repo#N` or `owner/repo#N`: a PR first, then an issue"},
 	{Views: []string{anyView}, Keys: []widgets.Key{R('?')}, Group: "any",
-		Help: "?  this help", Doc: "help: every key, the glyph legend, the version"},
+		Help: "?  this help (j/k scroll it)", Doc: "help: every key, the glyph legend, the version; `j`/`k` scroll it when it overflows"},
+	{Views: []string{anyView}, Keys: []widgets.Key{R('e')}, Group: "any",
+		Help: "e  the last message in full", Doc: "the last status or error message in full (the status line cuts a long one with an ellipsis)"},
 	{Views: []string{anyView}, Keys: []widgets.Key{K("ctrl+c")}, Group: "any",
 		Help: "ctrl-c  quit", Doc: "quit (interrupt); inside a prompt it cancels the prompt"},
 }

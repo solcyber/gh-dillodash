@@ -1,6 +1,9 @@
 package text
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestWidthAndClip(t *testing.T) {
 	cases := []struct {
@@ -71,5 +74,39 @@ func TestSegs(t *testing.T) {
 	hits := OverlayHits([]Seg{S("find me here", "t")}, []Span{{5, 7, true}})
 	if len(hits) != 3 || hits[1].Text != "me" || hits[1].Extra&Reverse == 0 || hits[0].Extra != 0 {
 		t.Errorf("OverlayHits = %+v", hits)
+	}
+}
+
+func TestEllipLeft(t *testing.T) {
+	if got := EllipLeft("short", 10); got != "short" {
+		t.Errorf("fits: %q", got)
+	}
+	got := EllipLeft("a/very/long/path/to/name.tf", 12)
+	if Width(got) != 12 || !strings.HasSuffix(got, "to/name.tf") || !strings.HasPrefix(got, Ellipsis) {
+		t.Errorf("ascii: %q (width %d)", got, Width(got))
+	}
+	got = EllipLeft("日本語のファイル名.txt", 9)
+	if Width(got) > 9 || !strings.HasSuffix(got, ".txt") {
+		t.Errorf("cjk: %q (width %d)", got, Width(got))
+	}
+	if got := EllipLeft("abcdef", 1); Width(got) > 1 {
+		t.Errorf("one cell: %q", got)
+	}
+	if got := EllipLeft("abcdef", 0); got != "" {
+		t.Errorf("zero: %q", got)
+	}
+}
+
+func TestEllipSegs(t *testing.T) {
+	segs := []Seg{S("hello ", "a"), S("world", "b")}
+	if got := EllipSegs(segs, 20); len(got) != 2 {
+		t.Errorf("fits: %+v", got)
+	}
+	got := EllipSegs(segs, 8)
+	if SegsWidth(got) != 8 || !strings.HasSuffix(SegsText(got), Ellipsis) || got[len(got)-1].Style != "b" {
+		t.Errorf("cut: %+v", got)
+	}
+	if got := EllipSegs(segs, 1); SegsWidth(got) > 1 {
+		t.Errorf("one cell: %+v", got)
 	}
 }

@@ -317,6 +317,9 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 	if numW < 2 {
 		numW = 2
 	}
+	if m.multi || m.multiOwner {
+		numW = min(numW, 18) // a long repo#N is clipped from the left, keeping #N
+	}
 	repoW := 0
 	if m.multi {
 		for _, r := range m.rows {
@@ -358,7 +361,7 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 			"author": maxw(prs, author, 14),
 			"age":    3,
 		}
-		lay["pr"] = fit(cols, w, numW, "diff", "age", "author")
+		lay["pr"] = fit(cols, w, numW, "diff", "age", "author", "ci", "chip")
 	}
 	if iss := byKind["issue"]; len(iss) > 0 {
 		cols := workflow.Layout{
@@ -369,7 +372,7 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 			"author": maxw(iss, author, 14),
 			"age":    3,
 		}
-		lay["issue"] = fit(cols, w, numW, "age", "author")
+		lay["issue"] = fit(cols, w, numW, "age", "author", "count", "chip")
 	}
 	for kind, rk := range m.wf.RowKinds() {
 		if items := byKind[kind]; len(items) > 0 && rk.Layout != nil {
@@ -386,8 +389,13 @@ func orQ(s string) string {
 	return s
 }
 
-// fit drops columns in order until the title keeps 24 cells.
+// fit drops columns in order until the title keeps 24 cells (16 under
+// 60 columns, where every cell counts).
 func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout {
+	minTitle := 24
+	if w < 60 {
+		minTitle = 16
+	}
 	fixed := func() int { // gutter 2 + icon 2 + "#num " + each column + its gap
 		n := 4 + numW + 1
 		for _, v := range cols {
@@ -396,7 +404,7 @@ func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout
 		return n
 	}
 	for _, name := range dropOrder {
-		if w-fixed() >= 24 {
+		if w-fixed() >= minTitle {
 			break
 		}
 		delete(cols, name)
@@ -504,12 +512,16 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		if g := glyphs.G(icon); g != "" {
 			segs = append(segs, text.S(g+" ", "icon."+icon))
 		}
-		segs = append(segs, text.S(text.Pad(m.numText(row), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num")))
-		segs = append(segs, text.PadSegs(scenes.GlintChip(label, style, pos, ambient, mono), L["chip"])...)
-		segs = append(segs, text.S(" ", "text"))
+		segs = append(segs, text.S(text.Pad(text.EllipLeft(m.numText(row), L["num"]), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num")))
+		if cw, ok := L["chip"]; ok {
+			segs = append(segs, text.PadSegs(scenes.GlintChip(label, style, pos, ambient, mono), cw)...)
+			segs = append(segs, text.S(" ", "text"))
+		}
 		c, _ := m.ciOf(item)
-		segs = append(segs, text.PadSegs(m.ciSegs(c.Glyphs), L["ci"])...)
-		segs = append(segs, text.S(" ", "text"))
+		if cw, ok := L["ci"]; ok {
+			segs = append(segs, text.PadSegs(m.ciSegs(c.Glyphs), cw)...)
+			segs = append(segs, text.S(" ", "text"))
+		}
 		if dw, ok := L["diff"]; ok {
 			segs = append(segs, text.PadSegs(diffSegs(item), dw)...)
 			segs = append(segs, text.S(" ", "text"))
@@ -532,7 +544,7 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		if len(c.Failed) > 0 {
 			suffix = "  " + glyphs.G("fail") + " " + strings.Join(c.Failed, ", ")
 		}
-		room := w - 3 - text.SegsWidth(segs)
+		room := max(0, w-3-text.SegsWidth(segs))
 		sw := min(text.Width(suffix), max(0, room-16))
 		segs = append(segs, text.S(text.Ellip(item.Title, room-sw), tstyle))
 		if suffix != "" {
@@ -549,14 +561,18 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		if g := glyphs.G("issue"); g != "" {
 			segs = append(segs, text.S(g+" ", "icon.issue"))
 		}
-		segs = append(segs, text.S(text.Pad(m.numText(row), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num.issue")))
-		segs = append(segs, text.PadSegs(scenes.Chip(m.issueLabel(row), "chip.label"), L["chip"])...)
-		segs = append(segs, text.S(" ", "text"))
-		cnt := ""
-		if n := item.Comments.TotalCount; n > 0 {
-			cnt = glyphs.Ico("comment") + fmt.Sprint(n)
+		segs = append(segs, text.S(text.Pad(text.EllipLeft(m.numText(row), L["num"]), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num.issue")))
+		if cw, ok := L["chip"]; ok {
+			segs = append(segs, text.PadSegs(scenes.Chip(m.issueLabel(row), "chip.label"), cw)...)
+			segs = append(segs, text.S(" ", "text"))
 		}
-		segs = append(segs, text.S(text.Pad(cnt, L["count"])+" ", "count"))
+		if cw, ok := L["count"]; ok {
+			cnt := ""
+			if n := item.Comments.TotalCount; n > 0 {
+				cnt = glyphs.Ico("comment") + fmt.Sprint(n)
+			}
+			segs = append(segs, text.S(text.Pad(cnt, cw)+" ", "count"))
+		}
 		if aw, ok := L["author"]; ok {
 			a := orQ(item.Author.Login)
 			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))

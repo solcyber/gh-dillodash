@@ -236,6 +236,28 @@ func toKey(k tea.KeyPressMsg) widgets.Key {
 	return widgets.Key{Name: s}
 }
 
+// overlayKey: the help and message overlays scroll with j/k and the
+// paging keys; any other key closes them.
+func (m *Model) overlayKey(k widgets.Key) {
+	page := max(1, m.h-6)
+	switch {
+	case k.Rune == 'j' || k.Name == "down":
+		m.helpTop++
+	case k.Rune == 'k' || k.Name == "up":
+		m.helpTop = max(0, m.helpTop-1)
+	case k.Name == "pgdn" || k.Rune == ' ':
+		m.helpTop += page
+	case k.Name == "pgup":
+		m.helpTop = max(0, m.helpTop-page)
+	case k.Rune == 'g' || k.Name == "home":
+		m.helpTop = 0
+	case k.Rune == 'G' || k.Name == "end":
+		m.helpTop = 1 << 20 // the drawer clamps it to the end
+	default:
+		m.overlay, m.helpTop = "", 0
+	}
+}
+
 func isEnter(k widgets.Key) bool { return k.Name == "enter" }
 func isEsc(k widgets.Key) bool   { return k.Name == "esc" }
 
@@ -261,12 +283,20 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	// any key ends the release launch and still does its own job
 	m.fx.Stop("launch")
 	if m.overlay != "" {
-		m.overlay = "" // any key closes the help
+		m.overlayKey(k)
 		return nil
 	}
 	if k.Rune == '?' {
-		m.overlay = "help"
+		m.overlay, m.helpTop = "help", 0
 		m.fx.Start("help", 0.2, nil)
+		return nil
+	}
+	if k.Rune == 'e' {
+		if m.lastMsg == "" {
+			m.notice("no message yet")
+		} else {
+			m.overlay, m.helpTop = "message", 0
+		}
 		return nil
 	}
 	if m.action {

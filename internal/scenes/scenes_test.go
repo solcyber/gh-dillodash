@@ -676,3 +676,13 @@ func TestMascotNone(t *testing.T) {
 		t.Error("mascot ascii must not use the sprite")
 	}
 }
+
+func TestCardTopTruncatesTitle(t *testing.T) {
+	line := CardTop("a title far wider than the card itself", 20)
+	if w := text.SegsWidth(line.Segs); w != 20 {
+		t.Errorf("card top width %d, want 20: %q", w, line.Text())
+	}
+	if !strings.HasSuffix(line.Text(), BoxGlyph(1)) {
+		t.Errorf("the corner survives: %q", line.Text())
+	}
+}

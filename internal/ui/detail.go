@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
@@ -303,7 +304,7 @@ func (m *Model) currentHits() []hit {
 				hay := t
 				needle := q
 				if fold {
-					hay, needle = strings.ToLower(t), strings.ToLower(q)
+					hay, needle = foldRunes(t), foldRunes(q)
 				}
 				off := 0
 				for {
@@ -350,6 +351,17 @@ func (m *Model) searchStep(step int) {
 	} else {
 		m.scroll = target
 	}
+}
+
+// foldRunes lower-cases rune by rune: unlike strings.ToLower it never
+// changes the rune count (İ, ß), so a hit's rune offsets stay aligned
+// with the line they overlay.
+func foldRunes(s string) string {
+	r := []rune(s)
+	for i, c := range r {
+		r[i] = unicode.ToLower(c)
+	}
+	return string(r)
 }
 
 // applySearch sets a new query (after the prompt) and jumps to the first

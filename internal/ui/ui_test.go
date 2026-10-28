@@ -674,3 +674,27 @@ func TestCommentInlineCancelAndBlank(t *testing.T) {
 		t.Errorf("blank: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
 	}
 }
+
+// TestSearchOffsetsSurviveCaseFolding: a line whose lower-casing changes
+// its rune count (İ) must not shift the hit overlay.
+func TestSearchOffsetsSurviveCaseFolding(t *testing.T) {
+	h := newHarness(t)
+	d := h.gh.PRs[h.gh.Open[infra].PRs[0].Ident()]
+	d.Body = "Deploy to İstanbul and STRASSE first.\n"
+	h.load()
+	h.named("enter")
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "istanbul", true }
+	h.key('/')
+	_ = h.screen() // the detail lines are laid out by the frame
+	h.m.mu.Lock()
+	hits := h.m.currentHits()
+	h.m.mu.Unlock()
+	if len(hits) != 1 {
+		t.Fatalf("hits %+v", hits)
+	}
+	line := h.m.detailLines[hits[0].line].Text()
+	runes := []rune(line)
+	if got := string(runes[hits[0].start:hits[0].end]); got != "İstanbul" {
+		t.Errorf("hit covers %q in %q", got, line)
+	}
+}

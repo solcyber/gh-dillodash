@@ -173,7 +173,8 @@ func ShortAge(t time.Time, now time.Time) (label, style string) {
 		{86400, "h", 3600, "age.1"},
 		{7 * 86400, "d", 86400, "age.2"},
 		{60 * 86400, "d", 86400, "age.3"},
-		{math.Inf(1), "w", 7 * 86400, "age.3"},
+		{365 * 86400, "w", 7 * 86400, "age.3"},
+		{math.Inf(1), "y", 365 * 86400, "age.3"}, // "52w" and "9y" fit the 3-cell column
 	}
 	for _, s := range steps {
 		if secs < s.limit {

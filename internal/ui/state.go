@@ -166,6 +166,10 @@ type Model struct {
 
 	// tickGen is the frame clock's generation (retick orphans old ticks)
 	tickGen int
+	// helpTop is the help/message overlay's scroll offset; lastMsg the
+	// last status or error, whole, for the e overlay
+	helpTop int
+	lastMsg string
 	// manualPending: r was pressed, so the next landing says "refreshed at"
 	manualPending bool
 
@@ -239,6 +243,7 @@ func (m *Model) setStatus(msg string) {
 	m.statusAt = fx.Now()
 	if msg != "" {
 		m.errText = ""
+		m.lastMsg = msg
 		m.fx.Start("toast", 0.25, nil)
 	}
 }
@@ -257,6 +262,7 @@ func (m *Model) notice(msg string) {
 
 func (m *Model) fail(msg string) {
 	m.errText = msg
+	m.lastMsg = msg
 	m.status = ""
 	m.fx.Start("toast", 0.25, nil)
 	m.fx.Start("toast.shake", 0.3, nil)

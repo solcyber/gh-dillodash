@@ -45,7 +45,8 @@
 | list, detail, diff, fortress | `r` | refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed) |
 | list | `q` | quit (press twice while an action is still talking to GitHub) |
 | any | `:` | go to `#N`, `repo#N` or `owner/repo#N`: a PR first, then an issue |
-| any | `?` | help: every key, the glyph legend, the version |
+| any | `?` | help: every key, the glyph legend, the version; `j`/`k` scroll it when it overflows |
+| any | `e` | the last status or error message in full (the status line cuts a long one with an ellipsis) |
 | any | ctrl+c | quit (interrupt); inside a prompt it cancels the prompt |
 | list, detail | `w` | with `maintenance_window`: `/attend`, `/release` or `/window-cancel` on the night's manifest issue, or open it |
 | prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |

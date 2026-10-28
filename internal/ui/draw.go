@@ -60,8 +60,11 @@ func (m *Model) draw(c *canvas.Canvas) {
 	scenes.Wipe(c, m.fx, h, w)
 	m.drawStatus(c, h, w)
 	m.drawKeys(c, h, w)
-	if m.overlay == "help" {
+	switch m.overlay {
+	case "help":
 		m.drawHelp(c, h, w)
+	case "message":
+		m.drawMessage(c, h, w)
 	}
 	if m.modal != nil {
 		m.modal.Draw(c, m.fx)
@@ -192,7 +195,7 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 		left = append([]text.Seg{text.S(" "+glyphs.Ico("logo"), logo)}, m.appNameSegs(refreshing)...)
 		left = append(left, text.S(" ", "hdr.app"))
 		left = append(left, pl("hdr.sep.app")...)
-		left = append(left, text.S(" "+m.reposText()+" ", "hdr.repo"))
+		left = append(left, text.S(" "+text.Ellip(m.reposText(), max(10, w/3))+" ", "hdr.repo"))
 		left = append(left, pl("hdr.sep.repo")...)
 		minLeft = text.SegsWidth(left)
 	}
@@ -290,7 +293,8 @@ func (m *Model) drawSubheader(c *canvas.Canvas, w int) {
 			segs = append(segs, text.S(crumb, "crumb"), text.S("files", here(ViewFiles)))
 		}
 		if m.view == ViewPatch && len(m.files) > 0 {
-			segs = append(segs, text.S(crumb, "crumb"), text.S(m.files[m.fileSel].Filename, "crumb.here"))
+			room := max(8, w-text.SegsWidth(m.positionSegs())-2-text.SegsWidth(segs)-text.Width(crumb))
+			segs = append(segs, text.S(crumb, "crumb"), text.S(text.EllipLeft(m.files[m.fileSel].Filename, room), "crumb.here"))
 		}
 		if m.view == ViewDetail && m.raw {
 			segs = append(segs, text.S("   raw", "budget.low"))
@@ -333,7 +337,14 @@ func (m *Model) summarySegs() []text.Seg {
 		}
 		return "sum.muted"
 	}
-	segs := []text.Seg{text.S(fmt.Sprintf(" %s%d need you", glyphs.Ico("shield"), need), attn(need, "sum.attn")), sep}
+	segs := []text.Seg{text.S(fmt.Sprintf(" %s%d need you", glyphs.Ico("shield"), need), attn(need, "sum.attn"))}
+	if m.filter != "" {
+		// right after the count, so a narrow row still shows the filter
+		// is on (it would be the first thing clipped at the end)
+		segs = append(segs, text.S("  ", "text"))
+		segs = append(segs, scenes.Chip(glyphs.Ico("filter")+m.filter, "chip.filter")...)
+	}
+	segs = append(segs, sep)
 	if wf := m.wf.SummarySegs(m); len(wf) > 0 {
 		segs = append(segs, wf...)
 		segs = append(segs, sep)
@@ -343,10 +354,6 @@ func (m *Model) summarySegs() []text.Seg {
 		text.S(fmt.Sprintf("%s%d issues", glyphs.Ico("issue"), issues), "sum.muted"))
 	if m.showAll {
 		segs = append(segs, sep, text.S("showing approved (A)", "sum.info"))
-	}
-	if m.filter != "" {
-		segs = append(segs, text.S("  ", "text"))
-		segs = append(segs, scenes.Chip(glyphs.Ico("filter")+m.filter, "chip.filter")...)
 	}
 	return segs
 }
@@ -393,7 +400,7 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 	var segs []text.Seg
 	switch {
 	case backoff > 0:
-		segs = []text.Seg{text.S(fmt.Sprintf(" %sGitHub rate limit hit — refresh paused %ds (auto-resumes; raise refresh_secs if this recurs)", glyphs.Ico("warn"), backoff), "toast.warn")}
+		segs = []text.Seg{text.S(fmt.Sprintf(" %srate limited by GitHub — refresh paused %ds; raise refresh_secs if it recurs", glyphs.Ico("warn"), backoff), "toast.warn")}
 	case m.errText != "":
 		segs = []text.Seg{text.S(" ", "text"), text.S(" "+glyphs.G("err")+" ", "chip.err"), text.S(" "+m.errText, "toast.warn")}
 	case m.status != "" && m.statusKind == "spin":
@@ -421,7 +428,35 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 	if shake, ok := m.fx.T("toast.shake"); ok {
 		x = max(0, fx.ShakeDX(shake))
 	}
-	c.PutSegs(h-2, x, segs, w, false, false)
+	// a message wider than the line ends in an ellipsis: e shows it whole
+	c.PutSegs(h-2, x, text.EllipSegs(segs, max(0, w-1-x)), w, false, false)
+}
+
+// drawMessage is the e overlay: the last status or error message in
+// full, wrapped, scrollable like the help.
+func (m *Model) drawMessage(c *canvas.Canvas, h, w int) {
+	bw := min(w-2, 100)
+	lines := widgets.Wrap(m.lastMsg, max(10, bw-4))
+	bh := min(h-2, len(lines)+4)
+	top, left, iw := widgets.DrawBox(c, max(1, (h-bh)/2), max(0, (w-bw)/2), bh, bw, glyphs.Ico("info")+"last message", "logo", "menu.title", -1)
+	m.overlayDraw(c, lines, top, left, iw, bh)
+}
+
+// overlayDraw paints rows from the scroll offset into a box and the
+// hint under them: how to scroll when they overflow, else any key.
+func (m *Model) overlayDraw(c *canvas.Canvas, lines []string, top, left, iw, bh int) {
+	room := max(0, bh-4)
+	m.helpTop = max(0, min(m.helpTop, len(lines)-room))
+	for i := 0; i < room && m.helpTop+i < len(lines); i++ {
+		c.PutSegs(top+1+i, left, []text.Seg{text.S(lines[m.helpTop+i], "text")}, left+iw, false, false)
+	}
+	if bh >= 5 {
+		hint := "any key closes"
+		if len(lines) > room {
+			hint = fmt.Sprintf("j/k scroll (%d-%d of %d)   any other key closes", m.helpTop+1, min(len(lines), m.helpTop+room), len(lines))
+		}
+		c.PutSegs(top+bh-3, left, []text.Seg{text.S(hint, "menu.hint")}, left+iw, false, false)
+	}
 }
 
 // drawKeys: an htop-style key bar from the key table, trimmed to the
@@ -496,7 +531,7 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 	for _, r := range rows {
 		widest = max(widest, text.SegsWidth(r))
 	}
-	bw := min(w-2, max(92, widest+4))
+	bw := min(w-2, max(min(92, w-2), widest+4))
 	full := min(h-2, len(rows)+4)
 	t, ok := m.fx.T("help")
 	bh := min(h-2, widgets.PopHeight(full, t, ok))
@@ -505,14 +540,17 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		ants = fx.Wave(2.5, 0)
 	}
 	top, left, iw := widgets.DrawBox(c, max(1, (h-bh)/2), max(0, (w-bw)/2), bh, bw, glyphs.Ico("logo")+"dillodash keys", "logo", "menu.title", ants)
-	for i, segs := range rows {
-		if i >= bh-4 {
-			break
-		}
-		c.PutSegs(top+1+i, left, segs, left+iw, false, false)
+	room := max(0, bh-4)
+	m.helpTop = max(0, min(m.helpTop, len(rows)-room))
+	for i := 0; i < room && m.helpTop+i < len(rows); i++ {
+		c.PutSegs(top+1+i, left, rows[m.helpTop+i], left+iw, false, false)
 	}
-	if bh == full {
-		c.PutSegs(top+bh-3, left, []text.Seg{text.S("any key closes", "menu.hint")}, left+iw, false, false)
+	if bh >= 5 && bh == full {
+		hint := "any key closes"
+		if len(rows) > room {
+			hint = fmt.Sprintf("j/k scroll (%d-%d of %d)   any other key closes", m.helpTop+1, min(len(rows), m.helpTop+room), len(rows))
+		}
+		c.PutSegs(top+bh-3, left, []text.Seg{text.S(hint, "menu.hint")}, left+iw, false, false)
 	}
 }
 
@@ -701,7 +739,18 @@ func (m *Model) drawFiles(c *canvas.Canvas, h, w int) {
 			text.S(text.Pad(fmt.Sprintf("+%d", a), aw)+" ", addS),
 			text.S(text.Pad(fmt.Sprintf("%s%d", minus, d), dw)+" ", delS)}
 		segs = append(segs, bar...)
-		segs = append(segs, text.S("  ", "text"), text.S(dir, "path.dir"), text.S(base, "path.base"))
+		segs = append(segs, text.S("  ", "text"))
+		// the base name is the useful part: a path too wide for the row
+		// loses its directories from the left, never its end
+		room := max(0, w-1-text.SegsWidth(segs))
+		if text.Width(dir)+text.Width(base) > room {
+			if text.Width(base) >= room {
+				dir, base = "", text.EllipLeft(base, room)
+			} else {
+				dir = text.EllipLeft(dir, room-text.Width(base))
+			}
+		}
+		segs = append(segs, text.S(dir, "path.dir"), text.S(base, "path.base"))
 		c.PutSegs(y, 0, segs, w-1, sel, false)
 	}
 	if n > visible {
