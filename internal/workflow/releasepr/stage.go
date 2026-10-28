@@ -52,11 +52,11 @@ func (w *Workflow) stageSummary(ctx context.Context, gh ghapi.Client, repo model
 
 // StageUnits is what the staging branch carries ahead of production,
 // from a compare page (prod...stage) and the go/<N> and hold/<N> tag
-// names: one unit per staging PR (a merge commit or a squash whose
-// subject names the PR), counted by tag. The compare page carries no
-// parent links, so the units are the commits whose subject names a PR
-// rather than a first-parent walk; side commits inside a merged branch
-// are left out either way.
+// names: walk the first-parent chain from the head (the page's last
+// commit) while it stays on the page, one unit per first-parent commit
+// (a staging PR's merge commit or squash; its PR number from the
+// subject), and count them by tag. Side commits inside a merged branch
+// are not on the chain and do not count.
 func StageUnits(compare ghapi.CompareResult, goTags, holdTags []string, goPrefix, holdPrefix string) Units {
 	goSet := tagSet(goTags, goPrefix)
 	holdSet := tagSet(holdTags, holdPrefix)
@@ -68,24 +68,41 @@ func StageUnits(compare ghapi.CompareResult, goTags, holdTags []string, goPrefix
 		ahead = len(compare.Commits)
 	}
 	out := Units{Ahead: ahead, Truncated: ahead > len(compare.Commits)}
+	bySHA := make(map[string]ghapi.CompareCommit, len(compare.Commits))
 	for _, c := range compare.Commits {
-		subject, _, _ := strings.Cut(c.Message, "\n")
-		m := unitPR.FindStringSubmatch(subject)
-		if m == nil {
-			continue
+		bySHA[c.SHA] = c
+	}
+	sha := ""
+	if n := len(compare.Commits); n > 0 {
+		sha = compare.Commits[n-1].SHA
+	}
+	seen := map[string]bool{}
+	for sha != "" && !seen[sha] {
+		c, ok := bySHA[sha]
+		if !ok {
+			break // production, or past the page
 		}
-		n := m[1]
-		if n == "" {
-			n = m[2]
+		seen[sha] = true
+		subject, _, _ := strings.Cut(c.Message, "\n")
+		n := ""
+		if m := unitPR.FindStringSubmatch(subject); m != nil {
+			n = m[1]
+			if n == "" {
+				n = m[2]
+			}
 		}
 		out.Units++
 		switch {
-		case goSet[n]:
+		case n != "" && goSet[n]:
 			out.Go++
-		case holdSet[n]:
+		case n != "" && holdSet[n]:
 			out.Hold++
 		default:
 			out.Untagged++
+		}
+		sha = ""
+		if len(c.Parents) > 0 {
+			sha = c.Parents[0]
 		}
 	}
 	return out

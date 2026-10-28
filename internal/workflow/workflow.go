@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -149,6 +150,8 @@ type App interface {
 	// RefreshSoon pulls the next refresh in to at most d from now.
 	RefreshSoon(d time.Duration)
 	Width() int
+	// Fx is the effect set, for row renderers (number pulses, glints).
+	Fx() *fx.Fx
 	// EditInEditor runs $EDITOR seeded with text; ok false on cancel.
 	EditInEditor(seed string) (string, bool, error)
 	// RunExternal runs argv on the terminal (a pager).

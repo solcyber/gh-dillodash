@@ -67,7 +67,7 @@ func NewMap(key string, w, h int, zoom string, lanes int, cx float64) *Map {
 	var rows int
 	if zoom == ZoomFit {
 		m.spr = (y1 - y0) / float64(max(1, h)) // units per row
-		cpu = 2.0 / m.spr                     // cols per unit
+		cpu = 2.0 / m.spr                      // cols per unit
 		// widen (not to scale) so each lane gets room for its glyphs
 		need := float64(max(lanes*6, 24)) / ((mx1 - mx0) * 0.7 * cpu)
 		m.xfac = math.Min(3.0, math.Max(1.0, need))

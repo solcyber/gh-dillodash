@@ -11,6 +11,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -21,10 +22,11 @@ import (
 type App struct {
 	mu sync.Mutex
 
-	Cfg   *config.Config
-	Fake  *fake.Client
-	User  string
-	RepoL []model.Repo
+	Cfg     *config.Config
+	Effects *fx.Fx
+	Fake    *fake.Client
+	User    string
+	RepoL   []model.Repo
 
 	// Scripted answers, consumed in order; an empty queue answers false /
 	// "" (cancel) / -1.
@@ -75,7 +77,7 @@ func New(cfg *config.Config, user string, repos ...model.Repo) *App {
 	if len(repos) == 0 {
 		repos = cfg.Reviews.Repos
 	}
-	return &App{Cfg: cfg, Fake: fake.New(user), User: user, RepoL: repos, States: map[string]any{},
+	return &App{Cfg: cfg, Effects: fx.New(), Fake: fake.New(user), User: user, RepoL: repos, States: map[string]any{},
 		Approved: map[model.Ident]string{}, ViewName: "detail", Kind: "pr", WidthN: 120, Sel: -1}
 }
 
@@ -193,6 +195,7 @@ func (a *App) Refresh(again bool) {
 }
 func (a *App) RefreshSoon(d time.Duration) { a.mu.Lock(); a.Soon = append(a.Soon, d); a.mu.Unlock() }
 func (a *App) Width() int                  { return a.WidthN }
+func (a *App) Fx() *fx.Fx                  { return a.Effects }
 func (a *App) Context() context.Context    { return context.Background() }
 func (a *App) BumpDetail()                 { a.mu.Lock(); a.Bumps++; a.mu.Unlock() }
 func (a *App) EditInEditor(seed string) (string, bool, error) {

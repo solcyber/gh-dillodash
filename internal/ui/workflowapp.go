@@ -36,6 +36,7 @@ func (m *Model) Config() *config.Config {
 func (m *Model) Now() time.Time           { return clock.Now() }
 func (m *Model) Context() context.Context { return m.ctx }
 func (m *Model) Width() int               { return m.w }
+func (m *Model) Fx() *fx.Fx               { return m.fx }
 func (m *Model) State(name string) any    { return m.wfState[name] }
 func (m *Model) SetState(name string, s any) {
 	m.wfState[name] = s
@@ -123,6 +124,7 @@ func (a *lockedApp) Config() *config.Config      { return a.m.cfg }
 func (a *lockedApp) Now() time.Time              { return clock.Now() }
 func (a *lockedApp) Context() context.Context    { return a.m.ctx }
 func (a *lockedApp) Width() int                  { defer a.lock()(); return a.m.w }
+func (a *lockedApp) Fx() *fx.Fx                  { return a.m.fx }
 func (a *lockedApp) State(name string) any       { defer a.lock()(); return a.m.wfState[name] }
 func (a *lockedApp) SetState(name string, s any) { defer a.lock()(); a.m.wfState[name] = s }
 func (a *lockedApp) AllPRs() []*model.PR         { defer a.lock()(); return a.m.allPRs }

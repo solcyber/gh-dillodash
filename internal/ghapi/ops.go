@@ -252,6 +252,9 @@ func (c *GitHub) Compare(ctx context.Context, repo model.Repo, base, head string
 			Commit struct {
 				Message string `json:"message"`
 			} `json:"commit"`
+			Parents []struct {
+				SHA string `json:"sha"`
+			} `json:"parents"`
 		} `json:"commits"`
 	}
 	path := repoPath(repo, "compare/"+url.PathEscape(base)+"..."+url.PathEscape(head)+"?per_page=250")
@@ -260,7 +263,11 @@ func (c *GitHub) Compare(ctx context.Context, repo model.Repo, base, head string
 	}
 	res := CompareResult{AheadBy: raw.AheadBy, BehindBy: raw.BehindBy, TotalCommits: raw.TotalCommits}
 	for _, cm := range raw.Commits {
-		res.Commits = append(res.Commits, CompareCommit{SHA: cm.SHA, Message: cm.Commit.Message})
+		cc := CompareCommit{SHA: cm.SHA, Message: cm.Commit.Message}
+		for _, p := range cm.Parents {
+			cc.Parents = append(cc.Parents, p.SHA)
+		}
+		res.Commits = append(res.Commits, cc)
 	}
 	return res, nil
 }

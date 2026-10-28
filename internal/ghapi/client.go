@@ -49,6 +49,8 @@ type MergeResult struct {
 type CompareCommit struct {
 	SHA     string
 	Message string
+	// Parents are the parent shas (first parent first).
+	Parents []string
 }
 
 // CompareResult is REST compare base...head (the first page, up to 250

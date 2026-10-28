@@ -418,7 +418,11 @@ func (w *Workflow) releaseSegs(app workflow.App, row workflow.Row, L workflow.La
 	if g := glyphs.G(icon); g != "" {
 		segs = append(segs, text.S(g+" ", "icon.pr"))
 	}
-	segs = append(segs, text.S(text.Pad(fmt.Sprintf("#%d", pr.Number), L["num"])+" ", "num"))
+	numStyle := "num"
+	if f := app.Fx(); f != nil {
+		numStyle = scenes.NumStyle(f, fmt.Sprintf("%s#%d", pr.Repo.Name, pr.Number), "num")
+	}
+	segs = append(segs, text.S(text.Pad(fmt.Sprintf("#%d", pr.Number), L["num"])+" ", numStyle))
 	if rw, ok := L["repo"]; ok {
 		segs = append(segs, text.S(text.Pad(text.Ellip(pr.Repo.Name, rw), rw)+" ", "stack"))
 	}

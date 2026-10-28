@@ -20,10 +20,10 @@ type stub struct {
 	state State
 }
 
-func (s *stub) Name() string                { return s.name }
-func (s *stub) Order() int                  { return s.order }
+func (s *stub) Name() string                 { return s.name }
+func (s *stub) Order() int                   { return s.order }
 func (s *stub) RowKinds() map[string]RowKind { return s.kinds }
-func (s *stub) Keys() []Key                 { return s.keys }
+func (s *stub) Keys() []Key                  { return s.keys }
 func (s *stub) Classify(pr *model.PR, _ *model.PR, _ string, _ bool) *Classification {
 	if s.label == "" {
 		return nil
