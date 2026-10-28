@@ -1,0 +1,13 @@
+# local config and secrets never belong here
+config.toml
+*.token
+# build output
+/gh-dillodash
+/gh-dillodash.exe
+dist/
+*.test
+*.out
+# editors / OS
+.DS_Store
+.idea/
+.vscode/
