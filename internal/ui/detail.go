@@ -230,18 +230,6 @@ func (m *Model) timeline(events []event, width int) []text.Line {
 	return lines
 }
 
-// cardLines wraps segments inside a card's vertical rules (workflows'
-// cards use it too).
-func CardLines(segs []text.Seg, width, inner int) []text.Line {
-	vt := boxGlyph(5)
-	var out []text.Line
-	for _, ln := range markdown.Wrap(segs, inner, []text.Seg{text.S(vt+" ", "card")}, []text.Seg{text.S(vt+"   ", "card")}, false) {
-		gap := width - 1 - text.SegsWidth(ln.Segs)
-		out = append(out, text.Line{Segs: append(ln.Segs, text.S(strings.Repeat(" ", max(0, gap))+vt, "card"))})
-	}
-	return out
-}
-
 // ---- patch lines ----
 
 func (m *Model) buildPatchLines(width int) {

@@ -19,7 +19,7 @@ motion = off
 sound = on
 
 [user.alice]
-token_command = op read "op://Infrastructure/github-alice/token"
+token_command = op read "op://Private/github-pr-dash/token"
 
 [user.infra-bot]
 token_file = ~/.config/pr-dash/infra-bot.token

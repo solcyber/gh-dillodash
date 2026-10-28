@@ -306,3 +306,9 @@ type Ruleset struct {
 	Name       string `json:"name"`
 	SourceType string `json:"source_type"`
 }
+
+// NewCommits builds a commits(last: 1) connection around one commit
+// (fixtures and tests).
+func NewCommits(c Commit) Commits {
+	return Commits{Nodes: []commitNode{{Commit: c}}}
+}

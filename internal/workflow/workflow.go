@@ -167,6 +167,18 @@ type App interface {
 // hands it to Apply on the UI goroutine.
 type State any
 
+// QueuedProvider is implemented by a workflow state that holds items
+// another workflow queued for the maintenance window (the release
+// workflow's queued releases), so the window workflow can list them under
+// their night without importing the release package.
+type QueuedProvider interface {
+	QueuedForWindow() []*model.PR
+}
+
+// NightRow is the Meta key a window sub-header row carries its night
+// (YYYY-MM-DD) under.
+const NightRow = "night"
+
 // Workflow is the hook set. Base provides no-op defaults.
 type Workflow interface {
 	Name() string

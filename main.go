@@ -18,7 +18,9 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/amos"
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/demo"
 	"github.com/solcyber/gh-dillodash/internal/doctor"
+	"github.com/solcyber/gh-dillodash/internal/fonts"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
@@ -54,6 +56,7 @@ flags:
   --theme NAME       auto | mono
   --motion MODE      full | off
   --mono             no colors, attributes only (also: NO_COLOR)
+  --demo             open the dashboard on an offline fixture, no GitHub needed
 `
 
 type repoList []string
@@ -124,6 +127,7 @@ func flagValue(args []string, name, def string) string {
 }
 
 type flags struct {
+	demo    bool
 	config  string
 	repos   repoList
 	refresh int
@@ -145,6 +149,7 @@ func parseFlags(args []string) (flags, error) {
 	fs.StringVar(&f.theme, "theme", "", "theme")
 	fs.StringVar(&f.motion, "motion", "", "motion")
 	fs.BoolVar(&f.mono, "mono", false, "no colors")
+	fs.BoolVar(&f.demo, "demo", false, "run on an offline fixture (no GitHub)")
 	if err := fs.Parse(args); err != nil {
 		return f, exitError{2, err}
 	}
@@ -209,6 +214,11 @@ func dashboard(args []string) error {
 	if err != nil {
 		return err
 	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if f.demo {
+		return runDemo(ctx, f)
+	}
 	cfg, err := loadConfig(f)
 	if err != nil {
 		return err
@@ -217,8 +227,6 @@ func dashboard(args []string) error {
 	if err != nil {
 		return exitError{2, fmt.Errorf("%w\nSign in first: gh auth login", err)}
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	// fail fast (and loudly, outside the TUI) if the token is bad, and
 	// warn if gh's active account is not the one the config expects
 	me, err := gh.Whoami(ctx)
@@ -244,6 +252,30 @@ func dashboard(args []string) error {
 		Version:   version,
 		Mono:      cfg.Display.Theme == "mono" || f.mono,
 	})
+}
+
+// runDemo opens the dashboard on the offline fixture.
+func runDemo(ctx context.Context, f flags) error {
+	cfg := config.Default()
+	cfg.Reviews.Repos = demo.Repos
+	if f.icons != "" {
+		cfg.Display.Icons = f.icons
+	}
+	if f.motion != "" {
+		cfg.Display.Motion = f.motion
+	}
+	if f.theme != "" {
+		cfg.Display.Theme = f.theme
+	}
+	if f.mono {
+		cfg.Display.Theme = "mono"
+	}
+	setupDisplay(cfg)
+	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
+	if err != nil {
+		return err
+	}
+	return ui.Run(ctx, ui.Options{Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: version + " demo", Mono: cfg.Display.Theme == "mono"})
 }
 
 func configCmd(args []string) error {
@@ -327,5 +359,37 @@ func dirOf(path string) string {
 }
 
 func fontCmd(args []string) error {
-	return exitError{2, errors.New("font: not built yet in this version")}
+	if len(args) == 0 {
+		return exitError{2, errors.New("font: install or check?")}
+	}
+	o := fonts.Options{Out: os.Stdout, Force: hasFlag(args, "--force")}
+	var res fonts.Result
+	var err error
+	switch args[0] {
+	case "install":
+		res, err = fonts.Install(o)
+	case "check":
+		res, err = fonts.Check(o)
+	default:
+		return exitError{2, fmt.Errorf("font: unknown subcommand %q", args[0])}
+	}
+	if err != nil {
+		return err
+	}
+	for _, p := range res.Installed {
+		fmt.Println("current:", p)
+	}
+	for _, p := range res.Missing {
+		fmt.Println("missing:", p)
+	}
+	for _, n := range res.Notes {
+		fmt.Println(n)
+	}
+	for _, l := range fonts.SSHHint(o) {
+		fmt.Println(l)
+	}
+	if args[0] == "check" && len(res.Missing) > 0 {
+		return exitError{1, fmt.Errorf("%d font file(s) missing or outdated: gh dillodash font install", len(res.Missing))}
+	}
+	return nil
 }
