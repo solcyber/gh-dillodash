@@ -295,136 +295,138 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		m.overlayKey(k)
 		return nil
 	}
-	if k.Rune == '?' {
-		m.overlay, m.helpTop = "help", 0
-		m.fx.Start("help", 0.2, nil)
-		return nil
-	}
-	if k.Rune == 'e' {
-		if m.lastMsg == "" {
-			m.notice("no message yet")
-		} else {
-			m.overlay, m.helpTop = "message", 0
-		}
-		return nil
-	}
 	if m.action {
 		if m.view == ViewList && k.Rune == 'q' {
 			return m.requestQuit(false) // warns once, quits on the second press
 		}
 		return nil // an action is mid-flight: its modal owns the keys
 	}
-	if k.Rune == ':' {
-		if m.view == ViewList || m.view == ViewFortress {
-			m.detailFrom = m.view
-		}
-		app := &lockedApp{m}
-		m.runAction(func() { m.doGoto(app) })
-		return nil
+	view := m.view
+	if view == ViewDetail && m.detailKind == "issue" {
+		view = "issue"
 	}
 	page := max(1, m.h-4)
 	app := &lockedApp{m}
-	switch m.view {
-	case ViewList:
-		return m.listKey(k, page, app)
-	case ViewFortress:
-		if !m.fortressKey(k) {
-			m.view = ViewList
-		}
-	case ViewDetail:
-		m.detailKey(k, page, app)
-	case ViewFiles:
-		m.filesKey(k, page, app)
-	default:
-		m.patchKey(k, page, app)
-	}
-	return nil
-}
-
-func (m *Model) listKey(k widgets.Key, page int, app *lockedApp) tea.Cmd {
-	if wk, ok := m.wf.Key(ViewList, string(k.Rune)); ok && k.Rune != 0 {
-		m.runAction(func() { wk.Handler(app) })
-		return nil
-	}
-	switch {
-	case k.Rune == 'q':
-		return m.requestQuit(false)
-	case isEsc(k):
-		if m.filter != "" {
-			m.filter = ""
-			m.refilter()
-		}
-	case k.Rune == 'j' || k.Name == "down":
-		was := m.selected
-		m.moveCursor(+1, true)
-		m.leaveTrail(was)
-	case k.Rune == 'k' || k.Name == "up":
-		was := m.selected
-		m.moveCursor(-1, true)
-		m.leaveTrail(was)
-	case k.Rune == 'g' || k.Name == "home":
-		m.selected = 0
-		m.cursorOffHeaders(+1)
-	case k.Rune == 'G' || k.Name == "end":
-		m.selected = max(0, len(m.rows)-1)
-		m.cursorOffHeaders(-1)
-	case k.Name == "pgdn" || k.Rune == ' ':
-		for i := 0; i < page; i++ {
-			m.moveCursor(+1, false)
-		}
-	case k.Name == "pgup":
-		for i := 0; i < page; i++ {
-			m.moveCursor(-1, false)
-		}
-	case isEnter(k) || k.Rune == 'l' || k.Name == "right":
-		if row, ok := m.Selected(); ok {
-			if rk, has := m.wf.RowKinds()[row.Kind]; has && rk.Open != nil {
-				if rk.Open(m, row) {
-					return nil
-				}
-			}
-			m.detailFrom = ViewList
-			switch v := row.Item.(type) {
-			case *model.PR:
-				repo, n := m.repoOf(v), v.Number
-				m.runAction(func() { m.openDetail(app, repo, n, "pr", v) })
-			case *model.Issue:
-				repo, n := m.repoOf(v), v.Number
-				m.runAction(func() { m.openDetail(app, repo, n, "issue", nil) })
-			}
-		}
-	case k.Rune == 'A':
-		m.showAll = !m.showAll
-		m.refilter()
-	case k.Rune == 'D':
-		m.runAction(func() { m.doDeployApprove(app) })
-	case k.Rune == 'd':
-		m.openFortress()
-	case k.Rune == '/':
-		m.runAction(func() { m.startFilter(app) })
-	case k.Rune == 'y':
-		m.copyURL()
-	case k.Rune == 'o':
-		m.openInBrowser()
-	case k.Rune == 'r':
-		m.manualRefresh()
-	}
-	return nil
-}
-
-func (m *Model) detailKey(k widgets.Key, page int, app *lockedApp) {
-	view := ViewDetail
-	if m.detailKind == "issue" {
-		view = "issue"
+	if b := lookup(view, k); b != nil && b.Do != nil {
+		return b.Do(m, k, page, app)
 	}
 	if wk, ok := m.wf.Key(view, string(k.Rune)); ok && k.Rune != 0 {
 		m.runAction(func() { wk.Handler(app) })
-		return
 	}
+	return nil
+}
+
+// ---- the key table's actions (lock held) ----
+
+// doNav moves or scrolls in the current view: a row or a line for j/k,
+// a page for pgdn/pgup/space, the ends for g/G and home/end.
+func doNav(m *Model, k widgets.Key, page int, _ *lockedApp) tea.Cmd {
+	step := 0
 	switch {
-	case isEsc(k) && m.searchQ != "":
-		m.searchQ = "" // Esc first clears a search highlight
-	case k.Rune == 'q' || k.Rune == 'h' || isEsc(k) || k.Name == "left":
+	case k.Rune == 'j' || k.Name == "down":
+		step = 1
+	case k.Rune == 'k' || k.Name == "up":
+		step = -1
+	case k.Name == "pgdn" || k.Rune == ' ':
+		step = page
+	case k.Name == "pgup":
+		step = -page
+	}
+	top := k.Rune == 'g' || k.Name == "home"
+	bottom := k.Rune == 'G' || k.Name == "end"
+	switch m.view {
+	case ViewList:
+		switch {
+		case top:
+			m.selected = 0
+			m.cursorOffHeaders(+1)
+		case bottom:
+			m.selected = max(0, len(m.rows)-1)
+			m.cursorOffHeaders(-1)
+		case step == 1 || step == -1:
+			was := m.selected
+			m.moveCursor(step, true)
+			m.leaveTrail(was)
+		default:
+			dir := 1
+			if step < 0 {
+				dir, step = -1, -step
+			}
+			for i := 0; i < step; i++ {
+				m.moveCursor(dir, false)
+			}
+		}
+	case ViewFiles:
+		last := max(0, len(m.files)-1)
+		switch {
+		case top:
+			m.fileSel = 0
+		case bottom:
+			m.fileSel = last
+		default:
+			m.fileSel = min(last, max(0, m.fileSel+step))
+		}
+	case ViewPatch:
+		switch {
+		case top:
+			m.patchScroll = 0
+		case bottom:
+			m.patchScroll = len(m.patchLines)
+		default:
+			m.patchScroll = max(0, m.patchScroll+step)
+		}
+	default: // detail, issue
+		switch {
+		case top:
+			m.scroll = 0
+		case bottom:
+			m.scroll = len(m.detailLines)
+		default:
+			m.scroll = max(0, m.scroll+step)
+		}
+	}
+	return nil
+}
+
+// doOpen opens the selected row (list) or the selected file's diff.
+func doOpen(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	if m.view == ViewFiles {
+		m.openPatch()
+		return nil
+	}
+	row, ok := m.Selected()
+	if !ok {
+		return nil
+	}
+	if rk, has := m.wf.RowKinds()[row.Kind]; has && rk.Open != nil && rk.Open(m, row) {
+		return nil
+	}
+	m.detailFrom = ViewList
+	switch v := row.Item.(type) {
+	case *model.PR:
+		repo, n := m.repoOf(v), v.Number
+		m.runAction(func() { m.openDetail(app, repo, n, "pr", v) })
+	case *model.Issue:
+		repo, n := m.repoOf(v), v.Number
+		m.runAction(func() { m.openDetail(app, repo, n, "issue", nil) })
+	}
+	return nil
+}
+
+// doBack leaves the detail, files or diff view; in the detail and the
+// diff, Esc first clears a search highlight.
+func doBack(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	if isEsc(k) && m.searchQ != "" && m.view != ViewFiles {
+		m.searchQ = ""
+		return nil
+	}
+	switch m.view {
+	case ViewFiles:
+		m.view = ViewDetail
+	case ViewPatch:
+		m.view = ViewFiles
+		m.searchQ = ""
+	default:
 		if m.fortress != nil && m.detailFrom == ViewFortress {
 			m.view = ViewFortress
 		} else {
@@ -434,125 +436,156 @@ func (m *Model) detailKey(k widgets.Key, page int, app *lockedApp) {
 		m.detail = nil
 		m.detailListed = nil
 		m.searchQ = ""
-	case k.Rune == 'j' || k.Name == "down":
-		m.scroll++
-	case k.Rune == 'k' || k.Name == "up":
-		m.scroll = max(0, m.scroll-1)
-	case k.Name == "pgdn" || k.Rune == ' ':
-		m.scroll += page
-	case k.Name == "pgup":
-		m.scroll = max(0, m.scroll-page)
-	case k.Rune == 'g' || k.Name == "home":
-		m.scroll = 0
-	case k.Rune == 'G' || k.Name == "end":
-		m.scroll = len(m.detailLines)
-	case k.Rune == '/':
-		m.runAction(func() { m.startSearch(app) })
-	case k.Rune == 'n':
-		m.searchStep(+1)
-	case k.Rune == 'N':
-		m.searchStep(-1)
-	case k.Rune == 'm':
-		m.raw = !m.raw
-		if m.raw {
-			m.setStatus("raw markdown")
-		} else {
-			m.setStatus("rendered markdown")
-		}
-	case k.Rune == 'a':
-		m.runAction(func() { m.doApprove(app) })
-	case k.Rune == 'M':
-		m.runAction(func() { m.doMerge(app) })
-	case k.Rune == 'D':
-		m.runAction(func() { m.doDeployApprove(app) })
-	case k.Rune == 'c':
-		m.runAction(func() { m.doComment(app, false, "") })
-	case k.Rune == 'C':
-		m.runAction(func() { m.doComment(app, true, "") })
-	case k.Rune == 't':
-		m.runAction(func() { m.doTag(app) })
-	case k.Rune == 'f':
-		if m.detailKind == "issue" {
-			m.notice("issues have no changed files")
-		} else {
-			m.runAction(func() { m.openFiles(app, false) })
-		}
-	case k.Rune == 'v':
-		if m.detailKind == "issue" {
-			m.notice("issues have no diff")
-		} else {
-			m.runAction(func() { m.openDiffPager(app) })
-		}
-	case k.Rune == 'y':
-		m.copyURL()
-	case k.Rune == 'o':
-		m.openInBrowser()
-	case k.Rune == 'r':
-		m.manualRefresh()
 	}
+	return nil
 }
 
-func (m *Model) filesKey(k widgets.Key, page int, app *lockedApp) {
-	switch {
-	case k.Rune == 'q' || k.Rune == 'h' || isEsc(k) || k.Name == "left":
-		m.view = ViewDetail
-	case k.Rune == 'j' || k.Name == "down":
-		m.fileSel = min(m.fileSel+1, max(0, len(m.files)-1))
-	case k.Rune == 'k' || k.Name == "up":
-		m.fileSel = max(m.fileSel-1, 0)
-	case k.Rune == 'g' || k.Name == "home":
-		m.fileSel = 0
-	case k.Rune == 'G' || k.Name == "end":
-		m.fileSel = max(0, len(m.files)-1)
-	case k.Name == "pgdn" || k.Rune == ' ':
-		m.fileSel = min(max(0, len(m.files)-1), m.fileSel+page)
-	case k.Name == "pgup":
-		m.fileSel = max(0, m.fileSel-page)
-	case isEnter(k) || k.Rune == 'l' || k.Name == "right":
-		m.openPatch()
-	case k.Rune == 'v':
-		m.runAction(func() { m.openDiffPager(app) })
-	case k.Rune == 'y':
-		m.copyURL()
-	case k.Rune == 'o':
-		m.openInBrowser()
-	case k.Rune == 'r':
-		m.runAction(func() { m.openFiles(app, true) })
-	}
+func doFilter(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.startFilter(app) })
+	return nil
 }
 
-func (m *Model) patchKey(k widgets.Key, page int, app *lockedApp) {
-	switch {
-	case isEsc(k) && m.searchQ != "":
-		m.searchQ = ""
-	case k.Rune == 'q' || k.Rune == 'h' || isEsc(k) || k.Name == "left":
-		m.view = ViewFiles
-		m.searchQ = ""
-	case k.Rune == 'j' || k.Name == "down":
-		m.patchScroll++
-	case k.Rune == 'k' || k.Name == "up":
-		m.patchScroll = max(0, m.patchScroll-1)
-	case k.Name == "pgdn" || k.Rune == ' ':
-		m.patchScroll += page
-	case k.Name == "pgup":
-		m.patchScroll = max(0, m.patchScroll-page)
-	case k.Rune == 'g' || k.Name == "home":
-		m.patchScroll = 0
-	case k.Rune == 'G' || k.Name == "end":
-		m.patchScroll = len(m.patchLines)
-	case k.Rune == '/':
-		m.runAction(func() { m.startSearch(app) })
-	case k.Rune == 'n':
-		m.searchStep(+1)
-	case k.Rune == 'N':
-		m.searchStep(-1)
-	case k.Rune == 'v':
-		m.runAction(func() { m.openDiffPager(app) })
-	case k.Rune == 'y':
-		m.copyURL()
-	case k.Rune == 'o':
-		m.openInBrowser()
-	case k.Rune == 'r':
-		m.manualRefresh()
+func doClearFilter(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	if m.filter != "" {
+		m.filter = ""
+		m.refilter()
 	}
+	return nil
+}
+
+func doShowAll(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.showAll = !m.showAll
+	m.refilter()
+	return nil
+}
+
+func doDeploys(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doDeployApprove(app) })
+	return nil
+}
+
+func doFortress(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.openFortress()
+	return nil
+}
+
+func doApprove(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doApprove(app) })
+	return nil
+}
+
+func doMerge(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doMerge(app) })
+	return nil
+}
+
+func doComment(m *Model, k widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	editor := k.Rune == 'C'
+	m.runAction(func() { m.doComment(app, editor, "") })
+	return nil
+}
+
+func doTag(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doTag(app) })
+	return nil
+}
+
+func doFiles(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	if m.detailKind == "issue" {
+		m.notice("issues have no changed files")
+		return nil
+	}
+	m.runAction(func() { m.openFiles(app, false) })
+	return nil
+}
+
+func doFilesReload(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.openFiles(app, true) })
+	return nil
+}
+
+func doDiff(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	if m.detailKind == "issue" {
+		m.notice("issues have no diff")
+		return nil
+	}
+	m.runAction(func() { m.openDiffPager(app) })
+	return nil
+}
+
+func doSearch(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.startSearch(app) })
+	return nil
+}
+
+func doSearchStep(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	if k.Rune == 'N' {
+		m.searchStep(-1)
+	} else {
+		m.searchStep(+1)
+	}
+	return nil
+}
+
+func doRaw(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.raw = !m.raw
+	if m.raw {
+		m.setStatus("raw markdown")
+	} else {
+		m.setStatus("rendered markdown")
+	}
+	return nil
+}
+
+func doFortressKey(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	if !m.fortressKey(k) {
+		m.view = ViewList
+	}
+	return nil
+}
+
+func doCopyURL(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.copyURL()
+	return nil
+}
+
+func doOpenURL(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.openInBrowser()
+	return nil
+}
+
+func doRefresh(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.manualRefresh()
+	return nil
+}
+
+func doQuit(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	return m.requestQuit(false)
+}
+
+func doInterrupt(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	return m.requestQuit(true)
+}
+
+func doGoto(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	if m.view == ViewList || m.view == ViewFortress {
+		m.detailFrom = m.view
+	}
+	m.runAction(func() { m.doGoto(app) })
+	return nil
+}
+
+func doHelp(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	m.overlay, m.helpTop = "help", 0
+	m.fx.Start("help", 0.2, nil)
+	return nil
+}
+
+func doMessage(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
+	if m.lastMsg == "" {
+		m.notice("no message yet")
+	} else {
+		m.overlay, m.helpTop = "message", 0
+	}
+	return nil
 }

@@ -120,120 +120,62 @@ func TestKeyBarTrimKeepsQuitAndHelp(t *testing.T) {
 	}
 }
 
-// TestEveryTableKeyHasAHandlerCase: the handlers in app.go and
-// fortress.go are plain switches; this reads their literals and checks
-// them against the table both ways, so neither can drift.
-func TestEveryTableKeyHasAHandlerCase(t *testing.T) {
-	handled := map[string]map[widgets.Key]bool{} // view -> keys the handler names
-	views := map[string][]string{
-		"listKey": {ViewList}, "detailKey": {ViewDetail, "issue"}, "filesKey": {ViewFiles}, "patchKey": {ViewPatch},
-		"fortressKey": {ViewFortress}, "handleKey": {anyView},
-	}
-	for v := range views {
-		for _, view := range views[v] {
-			handled[view] = map[widgets.Key]bool{}
+// TestDispatchCoversEveryBinding: every row of the table has a handler,
+// and every key of every view reaches one (or a workflow's) without a
+// panic, leaving the view valid.
+func TestDispatchCoversEveryBinding(t *testing.T) {
+	for i := range bindings {
+		if bindings[i].Do == nil {
+			t.Errorf("binding %d (%v) has no Do", i, bindings[i].Keys)
 		}
 	}
-	fset := token.NewFileSet()
-	for _, file := range []string{"app.go", "fortress.go"} {
-		f, err := parser.ParseFile(fset, file, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range f.Decls {
-			fn, ok := d.(*ast.FuncDecl)
-			if !ok {
-				continue
-			}
-			vs, ok := views[fn.Name.Name]
-			if !ok {
-				continue
-			}
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				switch x := n.(type) {
-				case *ast.BasicLit:
-					var k widgets.Key
-					switch x.Kind {
-					case token.CHAR:
-						r := []rune(strings.Trim(x.Value, "'"))
-						if len(r) == 1 {
-							k = widgets.R(r[0])
-						}
-					case token.STRING:
-						name := strings.Trim(x.Value, "\"")
-						if isKeyName(name) {
-							k = widgets.K(name)
-						}
-					}
-					if k != (widgets.Key{}) {
-						for _, v := range vs {
-							handled[v][k] = true
-						}
-					}
-				case *ast.CallExpr:
-					if id, ok := x.Fun.(*ast.Ident); ok {
-						switch id.Name {
-						case "isEnter":
-							for _, v := range vs {
-								handled[v][widgets.K("enter")] = true
-							}
-						case "isEsc":
-							for _, v := range vs {
-								handled[v][widgets.K("esc")] = true
-							}
-						}
-					}
-				}
-				return true
-			})
-		}
-	}
-	// every table key has a case
+	h := newHarness(t)
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "", false }
+	h.m.tp.Confirm = func(string) bool { return false }
+	h.m.tp.Pick = func(string, []string) int { return -1 }
+	h.m.tp.RunExternal = func([]string) error { return nil }
+	h.load()
+	valid := map[string]bool{ViewList: true, ViewDetail: true, ViewFiles: true, ViewPatch: true, ViewFortress: true}
 	for i := range bindings {
 		b := &bindings[i]
-		for _, v := range b.Views {
+		for _, view := range b.Views {
 			for _, k := range b.Keys {
-				if !handled[v][k] && !handled[anyView][k] {
-					t.Errorf("table binds %v in %s, but no handler has a case for it", k, v)
+				// put the model in the view the binding is for
+				h.m.mu.Lock()
+				h.m.overlay, h.m.modal, h.m.action = "", nil, false
+				switch view {
+				case ViewList, anyView:
+					h.m.view = ViewList
+				case ViewDetail:
+					h.m.view, h.m.detailKind, h.m.detail = ViewDetail, "pr", h.gh.Open[infra].PRs[0]
+				case "issue":
+					h.m.view, h.m.detailKind, h.m.detail = ViewDetail, "issue", h.gh.Open[infra].Issues[0]
+				case ViewFiles:
+					h.m.view = ViewFiles
+				case ViewPatch:
+					h.m.view = ViewPatch
+				case ViewFortress:
+					h.m.view = ViewFortress
+				}
+				h.m.mu.Unlock()
+				if k == widgets.K("ctrl+c") || k == widgets.R('q') && view == ViewList {
+					continue // quits
+				}
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							t.Errorf("%v in %s panicked: %v", k, view, r)
+						}
+					}()
+					h.m.handleKey(k)
+				}()
+				h.pump()
+				if !valid[h.m.view] {
+					t.Errorf("%v in %s left the view as %q", k, view, h.m.view)
 				}
 			}
 		}
 	}
-	// every handled key is in the table (the detail handler also serves
-	// the issue view, whose table is a subset)
-	for v, keys := range handled {
-		for k := range keys {
-			if v == "issue" || (v == anyView && k == widgets.R('q')) { // handleKey routes q past the action guard
-				continue
-			}
-			if !tableHas(v, k) && !tableHas(anyView, k) {
-				t.Errorf("%s handles %v, which the table does not list", v, k)
-			}
-		}
-	}
-}
-
-func tableHas(view string, k widgets.Key) bool {
-	for i := range bindings {
-		b := &bindings[i]
-		if !b.has(view) {
-			continue
-		}
-		for _, bk := range b.Keys {
-			if bk == k {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func isKeyName(s string) bool {
-	switch s {
-	case "enter", "esc", "up", "down", "left", "right", "home", "end", "pgup", "pgdn", "tab", "shift+tab", "backtab", "ctrl+c":
-		return true
-	}
-	return false
 }
 
 // TestHelpGroupsCoverTheTable: every help entry appears once, under its
