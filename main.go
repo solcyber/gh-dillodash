@@ -80,6 +80,8 @@ const usageBody = ` — a terminal dashboard for pull requests awaiting you
 usage:
   gh dillodash [flags]            open the dashboard
   gh dillodash config check       validate the config, the gh login and the token's reach
+  gh dillodash config pull [OWNER/REPO[:PATH]]
+                                  install (or refresh) the config from a repo you can read
   gh dillodash config init        write a starter config
   gh dillodash config migrate     convert a pr-dash config.ini to config.toml
   gh dillodash font install|check install the bundled Nerd Font (icons = "nerd")
@@ -356,7 +358,7 @@ func runDemo(ctx context.Context, f flags) error {
 
 func configCmd(args []string) error {
 	if len(args) == 0 {
-		return exitError{2, errors.New("config: check, init or migrate?")}
+		return exitError{2, errors.New("config: check, pull, init or migrate?")}
 	}
 	switch args[0] {
 	case "check":
@@ -369,6 +371,21 @@ func configCmd(args []string) error {
 			return err
 		}
 		return doctor.Run(context.Background(), os.Stdout, cfg, version)
+	case "pull":
+		rest := args[1:]
+		spec := ""
+		if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+			spec, rest = rest[0], rest[1:]
+		}
+		path := flagValue(rest, "--config", "")
+		if path == "" {
+			path = config.DefaultPath(os.Getenv)
+		}
+		gh, err := ghapi.New(ghapi.Options{Host: flagValue(rest, "--host", ""), Version: version})
+		if err != nil {
+			return exitError{2, fmt.Errorf("%w\nSign in first: gh auth login", err)}
+		}
+		return pullConfig(context.Background(), gh, spec, path, hasFlag(rest, "--force"), os.Stdout)
 	case "init":
 		path := config.DefaultPath(os.Getenv)
 		if _, err := os.Stat(path); err == nil {
@@ -468,4 +485,62 @@ func fontCmd(args []string) error {
 		return exitError{1, fmt.Errorf("%d font file(s) missing or outdated: gh dillodash font install", len(res.Missing))}
 	}
 	return nil
+}
+
+// pullConfig installs or refreshes the config from a repo: it fetches
+// the file through the gh token, refuses one the parser rejects, and
+// stamps the installed copy with its source so a bare `config pull`
+// refreshes it and `config check` can tell whether it is current.
+func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force bool, w io.Writer) error {
+	var src config.Source
+	var installed []byte
+	if data, err := os.ReadFile(path); err == nil {
+		installed = data
+	}
+	if spec == "" {
+		s, ok := config.ParseSource(installed)
+		if !ok {
+			return exitError{2, fmt.Errorf("%s was not pulled from a repo; say where: gh dillodash config pull OWNER/REPO", path)}
+		}
+		src = s
+	} else {
+		s, err := config.ParseSpec(spec)
+		if err != nil {
+			return exitError{2, err}
+		}
+		src = s
+	}
+	data, sha, err := gh.FileContents(ctx, src.Repo, src.Path, "")
+	if err != nil {
+		return fmt.Errorf("could not read %s: %w", src.Spec(), err)
+	}
+	data = config.StripHeader(data)
+	cfg, err := config.Parse(data, src.Spec(), config.Overrides{})
+	if err != nil {
+		return fmt.Errorf("refusing to install %s: it does not validate:\n%w", src.Spec(), err)
+	}
+	for _, warn := range cfg.Warnings {
+		fmt.Fprintln(w, "warning:", warn)
+	}
+	if old, ok := config.ParseSource(installed); ok && !force && old.Spec() == src.Spec() && old.SHA == sha {
+		fmt.Fprintf(w, "%s is current: %s @ %s (pulled %s)\n", path, src.Spec(), short(sha), old.At.Local().Format("2006-01-02 15:04"))
+		return nil
+	}
+	src.SHA, src.At = sha, time.Now()
+	if err := os.MkdirAll(dirOf(path), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, config.Stamp(src, data), 0o600); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "installed %s from %s @ %s\n", path, src.Spec(), short(sha))
+	fmt.Fprintln(w, "next: gh dillodash config check")
+	return nil
+}
+
+func short(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }

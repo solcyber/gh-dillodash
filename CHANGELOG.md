@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
+
+- `gh dillodash config pull owner/repo[:path]` installs the config from a
+  repository through the `gh` token, validates it first, and records its
+  source; a bare `config pull` refreshes it and `config check` reports
+  whether the installed copy is current.
+
+## 1.0.0
 
 First public release of dillodash, a rewrite in Go of an internal Python
 dashboard, as a GitHub CLI extension.
