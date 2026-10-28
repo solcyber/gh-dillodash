@@ -178,3 +178,27 @@ func TestTomlString(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrateDropsBadDisplayChoice(t *testing.T) {
+	ini := "[defaults]\nrepo = acme/infra\nicons = Unicode\ntheme = solarized\nmotion = off\n"
+	out, notes, err := MigrateINI([]byte(ini))
+	if err != nil {
+		t.Fatalf("a bad choice must not fail the migration: %v", err)
+	}
+	c, err := Parse([]byte(out), "migrated", Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Display.Icons != "unicode" || c.Display.Theme != "auto" || c.Display.Motion != "off" {
+		t.Errorf("display = %+v", c.Display)
+	}
+	found := false
+	for _, n := range notes {
+		if strings.Contains(n, `theme = "solarized" is not one of auto, mono, dropped`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("notes %v", notes)
+	}
+}

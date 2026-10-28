@@ -3,6 +3,7 @@ package doctor
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func TestReportHuman(t *testing.T) {
 
 func TestReportRefusesBotLogin(t *testing.T) {
 	out, err := report(t, "dependabot[bot]", "keyring", cfgWith(infra))
-	if err == nil || !strings.Contains(err.Error(), "bot login") {
+	if !errors.Is(err, ErrFailed) {
 		t.Fatalf("err %v", err)
 	}
 	if !strings.Contains(out, "login: FAILED: dependabot[bot] is a bot login") || !strings.Contains(out, "gh auth switch") {

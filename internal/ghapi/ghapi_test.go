@@ -401,6 +401,15 @@ func TestWebURLs(t *testing.T) {
 	if got := WebURL("github.com", infra, "", ""); got != "https://github.com/acme/infra" {
 		t.Errorf("repo: %s", got)
 	}
+	if got := TreeURL("github.com", infra, "feat/a b#1"); got != "https://github.com/acme/infra/tree/feat/a%20b%231" {
+		t.Errorf("escaped branch: %s", got)
+	}
+	if got := CompareURL("github.com", infra, "main", "fix/50%"); got != "https://github.com/acme/infra/compare/main...fix/50%25" {
+		t.Errorf("escaped compare: %s", got)
+	}
+	if got := WebURL("github.com", model.Repo{Owner: "a&b", Name: "c d"}, "", ""); got != "https://github.com/a&b/c%20d" {
+		t.Errorf("escaped owner/name: %s", got)
+	}
 	if RESTBase("github.com") != "https://api.github.com/" || RESTBase("ghe.acme.test") != "https://ghe.acme.test/api/v3/" {
 		t.Errorf("rest bases: %s %s", RESTBase("github.com"), RESTBase("ghe.acme.test"))
 	}

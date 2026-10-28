@@ -120,3 +120,53 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("Load error: %v", err)
 	}
 }
+
+func TestFindPathWithoutHOME(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, ".config", "dillodash", "config.toml")
+	touch(t, cfg)
+	// a Windows shell: no HOME, only USERPROFILE
+	p, _, err := FindPath("", fakeEnv(map[string]string{"USERPROFILE": home}))
+	if p != cfg || err != nil {
+		t.Errorf("USERPROFILE: %q %v", p, err)
+	}
+	if got := DefaultPath(fakeEnv(map[string]string{"USERPROFILE": home})); got != cfg {
+		t.Errorf("DefaultPath via USERPROFILE = %q", got)
+	}
+	// nothing at all falls back to the OS's idea of home, never to a
+	// relative path
+	if got := DefaultPath(fakeEnv(nil)); !filepath.IsAbs(got) {
+		t.Errorf("DefaultPath without any env = %q (relative)", got)
+	}
+}
+
+func TestInstallPath(t *testing.T) {
+	if got := InstallPath(fakeEnv(map[string]string{"HOME": "/home/alice", EnvVar: "/etc/dash.toml"})); got != "/etc/dash.toml" {
+		t.Errorf("DILLODASH_CONFIG wins: %q", got)
+	}
+	if got := InstallPath(fakeEnv(map[string]string{"HOME": "/home/alice"})); got != filepath.FromSlash("/home/alice/.config/dillodash/config.toml") {
+		t.Errorf("default: %q", got)
+	}
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "config.toml")
+	if err := WriteFileAtomic(path, []byte("one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFileAtomic(path, []byte("two"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "two" {
+		t.Errorf("content %q", got)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 && os.Getenv("OS") != "Windows_NT" {
+		t.Errorf("mode %o", st.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	if len(entries) != 1 {
+		t.Errorf("leftovers: %v", entries)
+	}
+}

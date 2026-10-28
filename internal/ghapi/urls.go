@@ -2,6 +2,7 @@ package ghapi
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/auth"
@@ -50,23 +51,38 @@ func GraphQLURL(host string) string {
 // WebURL is the browser URL of a repo item on host. kind is one of
 // "pr", "issue", "compare" (ref "base...head"), "tree" (ref is a
 // branch), "commit" (ref is a sha), or "" for the repository itself.
+// Owner, name and every ref segment are path-escaped: a branch may
+// carry a space, a # or a %, and the URL reaches a shell on Windows.
 func WebURL(host string, repo model.Repo, kind, ref string) string {
-	base := WebBase(host) + "/" + repo.Owner + "/" + repo.Name
+	base := WebBase(host) + "/" + url.PathEscape(repo.Owner) + "/" + url.PathEscape(repo.Name)
 	switch kind {
 	case "pr", "pull":
-		return base + "/pull/" + ref
+		return base + "/pull/" + escapeRef(ref)
 	case "issue", "issues":
-		return base + "/issues/" + ref
+		return base + "/issues/" + escapeRef(ref)
 	case "compare":
-		return base + "/compare/" + ref
+		if i := strings.Index(ref, "..."); i >= 0 {
+			return base + "/compare/" + escapeRef(ref[:i]) + "..." + escapeRef(ref[i+3:])
+		}
+		return base + "/compare/" + escapeRef(ref)
 	case "tree", "branch":
-		return base + "/tree/" + ref
+		return base + "/tree/" + escapeRef(ref)
 	case "commit":
-		return base + "/commit/" + ref
+		return base + "/commit/" + escapeRef(ref)
 	case "actions":
-		return base + "/actions/runs/" + ref
+		return base + "/actions/runs/" + escapeRef(ref)
 	}
 	return base
+}
+
+// escapeRef path-escapes a git ref segment by segment, keeping the
+// slashes that structure it (feat/a b -> feat/a%20b).
+func escapeRef(ref string) string {
+	parts := strings.Split(ref, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
 
 // PRURL is the browser URL of a pull request.

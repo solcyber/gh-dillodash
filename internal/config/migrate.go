@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -75,10 +76,17 @@ func MigrateINI(ini []byte) (toml string, notes []string, err error) {
 			note("[defaults] refresh_secs = %q is not a number, dropped", v)
 		}
 	}
+	choices := map[string][]string{"icons": IconChoices, "theme": ThemeChoices, "motion": MotionChoices}
 	for _, k := range []string{"icons", "theme", "motion"} {
-		if v, ok := get("defaults", k); ok && v != "" {
-			w("%s = %s\n", k, tomlString(v))
+		v, ok := get("defaults", k)
+		if !ok || v == "" {
+			continue
 		}
+		if !slices.Contains(choices[k], strings.ToLower(v)) {
+			note("[defaults] %s = %q is not one of %s, dropped", k, v, strings.Join(choices[k], ", "))
+			continue
+		}
+		w("%s = %s\n", k, tomlString(strings.ToLower(v)))
 	}
 	for k := range sections["defaults"] {
 		switch k {

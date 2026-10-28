@@ -3,6 +3,7 @@ package ghapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -888,5 +889,37 @@ func TestRESTOperations(t *testing.T) {
 	s.handle("POST", "/repos/acme/infra/issues/1/comments", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
 	if err := cl.Comment(ctx, infra, 1, "x"); err != nil {
 		t.Errorf("204: %v", err)
+	}
+}
+
+func TestNewHonoursGHHost(t *testing.T) {
+	t.Setenv("GH_HOST", "ghe.acme.test")
+	c, err := New(Options{Token: "x"})
+	if err != nil || c.Host() != "ghe.acme.test" {
+		t.Errorf("GH_HOST: %v %q", err, c.Host())
+	}
+	c, err = New(Options{Host: "other.test", Token: "x"})
+	if err != nil || c.Host() != "other.test" {
+		t.Errorf("an explicit host wins: %v %q", err, c.Host())
+	}
+	t.Setenv("GH_HOST", "")
+	t.Setenv("GH_CONFIG_DIR", t.TempDir())
+	c, err = New(Options{Token: "x"})
+	if err != nil || c.Host() != "github.com" {
+		t.Errorf("default: %v %q", err, c.Host())
+	}
+}
+
+func TestNoTokenError(t *testing.T) {
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_ENTERPRISE_TOKEN", "")
+	t.Setenv("GITHUB_ENTERPRISE_TOKEN", "")
+	t.Setenv("GH_CONFIG_DIR", t.TempDir())
+	t.Setenv("GH_PATH", "/nonexistent/gh")
+	_, err := New(Options{Host: "ghe.nowhere.test"})
+	var nt *NoTokenError
+	if !errors.As(err, &nt) || nt.Host != "ghe.nowhere.test" || !strings.Contains(err.Error(), "gh auth login") {
+		t.Errorf("no token: %v", err)
 	}
 }

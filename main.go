@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
+	"golang.org/x/term"
 
 	"github.com/solcyber/gh-dillodash/internal/amos"
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/demo"
 	"github.com/solcyber/gh-dillodash/internal/doctor"
@@ -80,17 +82,26 @@ const usageBody = ` — a terminal dashboard for pull requests awaiting you
 usage:
   gh dillodash [flags]            open the dashboard
   gh dillodash config check       validate the config, the gh login and the token's reach
-  gh dillodash config pull [OWNER/REPO[:PATH]]
-                                  install (or refresh) the config from a repo you can read
-  gh dillodash config init        write a starter config
-  gh dillodash config migrate     convert a pr-dash config.ini to config.toml
-  gh dillodash font install|check install the bundled Nerd Font (icons = "nerd")
-  gh dillodash glyph-test         print every glyph and the palette (checks the terminal font)
+                                  (takes the dashboard flags: --config, --repo, ...)
+  gh dillodash config pull [OWNER/REPO[:PATH]] [--config PATH] [--host HOST] [--force]
+                                  install (or refresh) the config from a repo you can read;
+                                  --force replaces a hand-written config or switches repos
+                                  (the old file is kept as config.toml.bak)
+  gh dillodash config init [--config PATH]
+                                  write a starter config
+  gh dillodash config migrate [--from PATH] [--config PATH] [--force]
+                                  convert a pr-dash config.ini to config.toml
+  gh dillodash font install|check [--force]
+                                  install the bundled Nerd Font (icons = "nerd")
+  gh dillodash glyph-test [--icons SET]
+                                  print every glyph and the palette (checks the terminal font)
   gh dillodash amos               say hello to Amos
   gh dillodash version
+  gh dillodash help               this text (every command takes --help too)
 
 flags:
-  --config PATH      config file (default: ~/.config/dillodash/config.toml)
+  --config PATH      config file (default: $DILLODASH_CONFIG, else
+                     $XDG_CONFIG_HOME/dillodash/config.toml, else ~/.config/dillodash/config.toml)
   --repo OWNER/NAME  review this repo (repeatable; replaces [reviews] repos)
   --refresh SECS     auto-refresh interval (floor 5)
   --icons SET        nerd | unicode | ascii
@@ -98,12 +109,46 @@ flags:
   --motion MODE      full | off
   --mono             no colors, attributes only (also: NO_COLOR)
   --demo             open the dashboard on an offline fixture, no GitHub needed
+
+environment:
+  DILLODASH_CONFIG   the config file, when --config is not given
+  GH_HOST            the GitHub host when [github] host is unset (gh's default otherwise)
+  GH_TOKEN, GITHUB_TOKEN
+                     a token that overrides the gh login (config check says when one does)
+  GH_PAGER, PAGER    the pager for v (default less)
+  GH_EDITOR, VISUAL, EDITOR
+                     the editor for C and t (default vi)
+  NO_COLOR           no colors, like --mono
 `
 
 type repoList []string
 
 func (r *repoList) String() string     { return strings.Join(*r, ",") }
 func (r *repoList) Set(s string) error { *r = append(*r, s); return nil }
+
+// subFlags parses a subcommand's flags: define declares them on the
+// set, --help prints the usage and returns errHelp, anything else wrong
+// is an exit-2 error that names the flag, and a stray word is an
+// unknown-command error. The remaining positional words come back.
+func subFlags(name string, args []string, define func(*flag.FlagSet)) ([]string, error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	if define != nil {
+		define(fs)
+	}
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Print(usage())
+			return nil, errHelp
+		}
+		return nil, exitError{2, fmt.Errorf("%s: %s (see gh dillodash help)", name, err)}
+	}
+	return fs.Args(), nil
+}
+
+// isHelp reports whether a word asks for help.
+func isHelp(s string) bool { return s == "help" || s == "--help" || s == "-h" }
 
 func main() {
 	bi, ok := debug.ReadBuildInfo()
@@ -168,7 +213,13 @@ func dispatch(args []string) error {
 			}
 			return nil
 		case "glyph-test":
-			glyphs.Use(glyphs.Set(flagValue(args[1:], "--icons", "nerd")))
+			icons := "nerd"
+			if _, err := subFlags("glyph-test", args[1:], func(fs *flag.FlagSet) {
+				fs.StringVar(&icons, "icons", icons, "glyph set")
+			}); err != nil {
+				return err
+			}
+			glyphs.Use(glyphs.Set(icons))
 			theme.Setup(colorprofile.Detect(os.Stdout, os.Environ()), false)
 			glyphs.Report(os.Stdout, theme.Palette)
 			return nil
@@ -179,18 +230,6 @@ func dispatch(args []string) error {
 		}
 	}
 	return dashboard(args)
-}
-
-func flagValue(args []string, name, def string) string {
-	for i, a := range args {
-		if a == name && i+1 < len(args) {
-			return args[i+1]
-		}
-		if strings.HasPrefix(a, name+"=") {
-			return strings.TrimPrefix(a, name+"=")
-		}
-	}
-	return def
 }
 
 type flags struct {
@@ -308,9 +347,12 @@ func dashboard(args []string) error {
 	if err != nil {
 		return err
 	}
-	gh, err := ghapi.New(ghapi.Options{Host: cfg.GitHub.Host, Version: version})
+	if err := needTerminal(); err != nil {
+		return err
+	}
+	gh, err := newClient(ghapi.Options{Host: cfg.GitHub.Host, Version: version})
 	if err != nil {
-		return exitError{2, fmt.Errorf("%w\nSign in first: gh auth login", err)}
+		return exitError{2, err}
 	}
 	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -321,7 +363,7 @@ func dashboard(args []string) error {
 		if sig.Err() != nil {
 			return errInterrupted
 		}
-		return fmt.Errorf("GitHub auth failed: %w (gh auth status shows the account)", err)
+		return exitError{2, fmt.Errorf("GitHub auth failed on %s: %w (gh auth status shows the account; gh auth login signs in)", gh.Host(), err)}
 	}
 	if err := refuseBot(cfg, me, gh.TokenSource()); err != nil {
 		return err
@@ -349,6 +391,33 @@ func dashboard(args []string) error {
 		Host:      gh.Host(),
 		Version:   version,
 	})
+}
+
+// client is what main needs of a GitHub client.
+type client interface {
+	ghapi.Client
+	Host() string
+	TokenSource() string
+}
+
+// newClient builds the real client; tests replace it.
+var newClient = func(opts ghapi.Options) (client, error) {
+	c, err := ghapi.New(opts)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// isTerminal reports whether fd is a terminal; tests replace it.
+var isTerminal = func(fd uintptr) bool { return term.IsTerminal(int(fd)) }
+
+// needTerminal refuses to draw the TUI into a pipe or a file.
+func needTerminal() error {
+	if !isTerminal(os.Stdin.Fd()) || !isTerminal(os.Stdout.Fd()) {
+		return exitError{2, errors.New("the dashboard needs a terminal on stdin and stdout; gh dillodash config check works without one")}
+	}
+	return nil
 }
 
 // refuseBot refuses to run the dashboard as a login listed in [bots]
@@ -386,6 +455,9 @@ func runDemo(ctx context.Context, f flags) error {
 			cfg.Display.RefreshSecs = config.MinRefreshSecs
 		}
 	}
+	if err := needTerminal(); err != nil {
+		return err
+	}
 	setupDisplay(cfg)
 	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
 	if err != nil {
@@ -395,8 +467,12 @@ func runDemo(ctx context.Context, f flags) error {
 }
 
 func configCmd(args []string) error {
-	if len(args) == 0 {
-		return exitError{2, errors.New("config: check, pull, init or migrate?")}
+	if len(args) == 0 || isHelp(args[0]) {
+		if len(args) > 0 {
+			fmt.Print(usage())
+			return errHelp
+		}
+		return exitError{2, errors.New("config: check, pull, init or migrate? (see gh dillodash help)")}
 	}
 	switch args[0] {
 	case "check":
@@ -417,30 +493,51 @@ func configCmd(args []string) error {
 		if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
 			spec, rest = rest[0], rest[1:]
 		}
-		path := flagValue(rest, "--config", "")
+		var path, host string
+		var force bool
+		if _, err := subFlags("config pull", rest, func(fs *flag.FlagSet) {
+			fs.StringVar(&path, "config", "", "config path")
+			fs.StringVar(&host, "host", "", "GitHub host")
+			fs.BoolVar(&force, "force", false, "replace a hand-written config or switch repos")
+		}); err != nil {
+			return err
+		}
 		if path == "" {
-			path = config.DefaultPath(os.Getenv)
+			path = config.InstallPath(os.Getenv)
 		}
-		gh, err := ghapi.New(ghapi.Options{Host: flagValue(rest, "--host", ""), Version: version})
+		gh, err := newClient(ghapi.Options{Host: host, Version: version})
 		if err != nil {
-			return exitError{2, fmt.Errorf("%w\nSign in first: gh auth login", err)}
+			return exitError{2, err}
 		}
-		return pullConfig(context.Background(), gh, spec, path, hasFlag(rest, "--force"), os.Stdout)
+		return pullConfig(context.Background(), gh, spec, path, force, os.Stdout)
 	case "init":
-		path := config.DefaultPath(os.Getenv)
+		var path string
+		if _, err := subFlags("config init", args[1:], func(fs *flag.FlagSet) {
+			fs.StringVar(&path, "config", "", "config path")
+		}); err != nil {
+			return err
+		}
+		if path == "" {
+			path = config.InstallPath(os.Getenv)
+		}
 		if _, err := os.Stat(path); err == nil {
 			return exitError{2, fmt.Errorf("%s already exists", path)}
 		}
-		if err := os.MkdirAll(dirOf(path), 0o700); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path, []byte(config.Example()), 0o600); err != nil {
+		if err := config.WriteFileAtomic(path, []byte(config.Example()), 0o600); err != nil {
 			return err
 		}
 		fmt.Printf("wrote %s — set [reviews] repos, then: gh dillodash config check\n", path)
 		return nil
 	case "migrate":
-		src := flagValue(args[1:], "--from", "")
+		var src, dst string
+		var force bool
+		if _, err := subFlags("config migrate", args[1:], func(fs *flag.FlagSet) {
+			fs.StringVar(&src, "from", "", "the pr-dash config.ini")
+			fs.StringVar(&dst, "config", "", "config path")
+			fs.BoolVar(&force, "force", false, "overwrite an existing config")
+		}); err != nil {
+			return err
+		}
 		if src == "" {
 			_, legacy, _ := config.FindPath("", os.Getenv)
 			src = legacy
@@ -456,14 +553,16 @@ func configCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		dst := config.DefaultPath(os.Getenv)
-		if _, err := os.Stat(dst); err == nil && !hasFlag(args, "--force") {
+		if dst == "" {
+			dst = config.InstallPath(os.Getenv)
+		}
+		if _, err := os.Stat(dst); err == nil && !force {
 			return exitError{2, fmt.Errorf("%s already exists; pass --force to overwrite", dst)}
 		}
-		if err := os.MkdirAll(dirOf(dst), 0o700); err != nil {
+		if err := backup(dst); err != nil {
 			return err
 		}
-		if err := os.WriteFile(dst, []byte(out), 0o600); err != nil {
+		if err := config.WriteFileAtomic(dst, []byte(out), 0o600); err != nil {
 			return err
 		}
 		fmt.Printf("wrote %s from %s\n", dst, src)
@@ -472,30 +571,40 @@ func configCmd(args []string) error {
 		}
 		return nil
 	}
-	return exitError{2, fmt.Errorf("config: unknown subcommand %q", args[0])}
+	return exitError{2, fmt.Errorf("config: unknown subcommand %q (see gh dillodash help)", args[0])}
 }
 
-func hasFlag(args []string, name string) bool {
-	for _, a := range args {
-		if a == name {
-			return true
+// backup keeps a copy of path as path.bak before an overwrite, when the
+// file exists.
+func backup(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
 		}
+		return err
 	}
-	return false
-}
-
-func dirOf(path string) string {
-	if i := strings.LastIndexAny(path, `/\`); i > 0 {
-		return path[:i]
-	}
-	return "."
+	return config.WriteFileAtomic(path+".bak", data, 0o600)
 }
 
 func fontCmd(args []string) error {
-	if len(args) == 0 {
-		return exitError{2, errors.New("font: install or check?")}
+	if len(args) == 0 || isHelp(args[0]) {
+		if len(args) > 0 {
+			fmt.Print(usage())
+			return errHelp
+		}
+		return exitError{2, errors.New("font: install or check? (see gh dillodash help)")}
 	}
-	o := fonts.Options{Out: os.Stdout, Force: hasFlag(args, "--force")}
+	if args[0] != "install" && args[0] != "check" {
+		return exitError{2, fmt.Errorf("font: unknown subcommand %q (see gh dillodash help)", args[0])}
+	}
+	var force bool
+	if _, err := subFlags("font "+args[0], args[1:], func(fs *flag.FlagSet) {
+		fs.BoolVar(&force, "force", false, "reinstall even when current")
+	}); err != nil {
+		return err
+	}
+	o := fonts.Options{Out: os.Stdout, Force: force}
 	var res fonts.Result
 	var err error
 	switch args[0] {
@@ -503,8 +612,6 @@ func fontCmd(args []string) error {
 		res, err = fonts.Install(o)
 	case "check":
 		res, err = fonts.Check(o)
-	default:
-		return exitError{2, fmt.Errorf("font: unknown subcommand %q", args[0])}
 	}
 	if err != nil {
 		return err
@@ -537,18 +644,28 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 	if data, err := os.ReadFile(path); err == nil {
 		installed = data
 	}
+	old, stamped := config.ParseSource(installed)
 	if spec == "" {
-		s, ok := config.ParseSource(installed)
-		if !ok {
+		if !stamped {
 			return exitError{2, fmt.Errorf("%s was not pulled from a repo; say where: gh dillodash config pull OWNER/REPO", path)}
 		}
-		src = s
+		src = old
 	} else {
 		s, err := config.ParseSpec(spec)
 		if err != nil {
 			return exitError{2, err}
 		}
 		src = s
+	}
+	// never silently replace a config someone wrote by hand, or switch
+	// the repo it follows: both need --force, and keep a .bak
+	if len(installed) > 0 && !force {
+		switch {
+		case !stamped:
+			return exitError{2, fmt.Errorf("%s exists and was not pulled from a repo; pass --force to replace it (a copy goes to %s.bak)", path, path)}
+		case old.Spec() != src.Spec():
+			return exitError{2, fmt.Errorf("%s was pulled from %s, not %s; pass --force to switch (a copy goes to %s.bak)", path, old.Spec(), src.Spec(), path)}
+		}
 	}
 	data, sha, err := gh.FileContents(ctx, src.Repo, src.Path, "")
 	if err != nil {
@@ -562,15 +679,17 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 	for _, warn := range cfg.Warnings {
 		fmt.Fprintln(w, "warning:", warn)
 	}
-	if old, ok := config.ParseSource(installed); ok && !force && old.Spec() == src.Spec() && old.SHA == sha {
+	if stamped && !force && old.Spec() == src.Spec() && old.SHA == sha {
 		fmt.Fprintf(w, "%s is current: %s @ %s (pulled %s)\n", path, src.Spec(), short(sha), old.At.Local().Format("2006-01-02 15:04"))
 		return nil
 	}
-	src.SHA, src.At = sha, time.Now()
-	if err := os.MkdirAll(dirOf(path), 0o700); err != nil {
-		return err
+	src.SHA, src.At = sha, clock.Now()
+	if len(installed) > 0 && (!stamped || old.Spec() != src.Spec()) {
+		if err := backup(path); err != nil {
+			return err
+		}
 	}
-	if err := os.WriteFile(path, config.Stamp(src, data), 0o600); err != nil {
+	if err := config.WriteFileAtomic(path, config.Stamp(src, data), 0o600); err != nil {
 		return err
 	}
 	fmt.Fprintf(w, "installed %s from %s @ %s\n", path, src.Spec(), short(sha))

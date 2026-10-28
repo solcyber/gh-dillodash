@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 )
 
 func TestResolveVersion(t *testing.T) {
@@ -216,5 +218,87 @@ func TestInterruptedExitsQuietly(t *testing.T) {
 	}
 	if !errors.Is(exitError{130, errors.New("interrupted")}, errInterrupted) && exitCode(exitError{130, errors.New("x")}) != 130 {
 		t.Error("exit 130 shape")
+	}
+}
+
+// TestEveryHelpIsSafe: --help on any command prints the usage and does
+// nothing else; init, migrate, pull and font install used to act first.
+func TestEveryHelpIsSafe(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("DILLODASH_CONFIG", "")
+	was := newClient
+	newClient = func(ghapi.Options) (client, error) { t.Fatal("--help must not build a client"); return nil, nil }
+	t.Cleanup(func() { newClient = was })
+	for _, args := range [][]string{
+		{"config", "--help"}, {"config", "init", "--help"}, {"config", "migrate", "--help"}, {"config", "pull", "--help"},
+		{"config", "pull", "acme/x", "--help"}, {"config", "check", "--help"}, {"font", "--help"}, {"font", "install", "--help"},
+		{"font", "check", "-h"}, {"glyph-test", "--help"}, {"help"},
+	} {
+		out := capture(t, func() {
+			if err := run(args); err != nil {
+				t.Errorf("%v: %v", args, err)
+			}
+		})
+		if !strings.Contains(out, "usage:") {
+			t.Errorf("%v printed %q", args, firstLine(out))
+		}
+	}
+	entries, _ := os.ReadDir(home)
+	if len(entries) != 0 {
+		t.Errorf("--help wrote under HOME: %v", entries)
+	}
+}
+
+func TestUnknownFlagIsExit2(t *testing.T) {
+	for _, args := range [][]string{
+		{"config", "init", "--bogus"}, {"config", "migrate", "--bogus"}, {"config", "pull", "acme/x", "--bogus"},
+		{"font", "install", "--bogus"}, {"glyph-test", "--bogus"},
+	} {
+		err := run(args)
+		if exitCode(err) != 2 || !strings.Contains(err.Error(), "bogus") || !strings.Contains(err.Error(), "gh dillodash help") {
+			t.Errorf("%v: code=%d err=%v", args, exitCode(err), err)
+		}
+	}
+}
+
+func TestDashboardNeedsATTY(t *testing.T) {
+	was := isTerminal
+	isTerminal = func(uintptr) bool { return false }
+	t.Cleanup(func() { isTerminal = was })
+	err := run([]string{"--demo"})
+	if exitCode(err) != 2 || !strings.Contains(err.Error(), "needs a terminal") {
+		t.Errorf("piped: code=%d err=%v", exitCode(err), err)
+	}
+}
+
+func TestAuthErrorsExit2(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	path := filepath.Join(home, ".config", "dillodash", "config.toml")
+	t.Setenv("DILLODASH_CONFIG", path)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[reviews]\nrepos = [\"acme/infra\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wasTTY, wasClient := isTerminal, newClient
+	isTerminal = func(uintptr) bool { return true }
+	t.Cleanup(func() { isTerminal, newClient = wasTTY, wasClient })
+
+	newClient = func(ghapi.Options) (client, error) { return nil, &ghapi.NoTokenError{Host: "github.com"} }
+	err := run(nil)
+	if exitCode(err) != 2 || strings.Count(err.Error(), "gh auth login") != 1 {
+		t.Errorf("no token: code=%d err=%v", exitCode(err), err)
+	}
+	gh := fake.New("alice")
+	gh.Fail["whoami"] = &ghapi.Error{Status: 401, Message: "Bad credentials"}
+	newClient = func(ghapi.Options) (client, error) { return gh, nil }
+	err = run(nil)
+	if exitCode(err) != 2 || !strings.Contains(err.Error(), "GitHub auth failed on github.com: GitHub 401: Bad credentials") {
+		t.Errorf("bad token: code=%d err=%v", exitCode(err), err)
 	}
 }

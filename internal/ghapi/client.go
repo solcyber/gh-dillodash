@@ -184,7 +184,16 @@ type GitHub struct {
 
 var _ Client = (*GitHub)(nil)
 
-// New builds a client. The token comes from Options.Token or
+// NoTokenError is New's error when nothing holds a token for the host:
+// the one place the "sign in" advice lives.
+type NoTokenError struct{ Host string }
+
+func (e *NoTokenError) Error() string {
+	return fmt.Sprintf("not signed in to %s: run gh auth login (or set GH_TOKEN)", e.Host)
+}
+
+// New builds a client. The host is Options.Host, else $GH_HOST or gh's
+// default host, else github.com. The token comes from Options.Token or
 // auth.TokenForHost (env, gh config, or the keyring via gh); TokenSource
 // says which.
 func New(opts Options) (*GitHub, error) {
@@ -198,7 +207,7 @@ func New(opts Options) (*GitHub, error) {
 	if token == "" {
 		token, source = auth.TokenForHost(host)
 		if token == "" {
-			return nil, fmt.Errorf("no GitHub token for %s: run `gh auth login` or set GH_TOKEN", host)
+			return nil, &NoTokenError{Host: host}
 		}
 	}
 	timeout := opts.Timeout

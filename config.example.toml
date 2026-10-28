@@ -13,7 +13,7 @@
 # GitHub
 # ============================================================================
 [github]
-# host = "github.com"         # GitHub Enterprise Server hostname, if not github.com
+# host = ""                   # GitHub Enterprise Server hostname; unset: $GH_HOST, then gh's default host, then github.com
 # login = ""                  # expected login; warns when gh's active account differs
 
 # ============================================================================

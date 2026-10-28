@@ -70,8 +70,9 @@ type BotsConfig struct {
 }
 
 // IsBot reports whether a login is a bot: it ends in "[bot]", or it
-// equals or starts with a configured bot login (case-insensitive), so
-// "dependabot" also covers "dependabot[bot]" and "dependabot-preview".
+// equals a configured bot login, with or without that suffix
+// (case-insensitive). The match is exact, not a prefix: a configured
+// "al" must not make "alice" a bot.
 func (b BotsConfig) IsBot(login string) bool {
 	l := strings.ToLower(strings.TrimSpace(login))
 	if l == "" {
@@ -81,7 +82,7 @@ func (b BotsConfig) IsBot(login string) bool {
 		return true
 	}
 	for _, bot := range b.Logins {
-		if strings.HasPrefix(l, bot) {
+		if l == bot {
 			return true
 		}
 	}
@@ -208,7 +209,7 @@ func (r *ReleasePRConfig) DeployComment(repo model.Repo, number int, sha string)
 // and DefaultReleasePR.
 func Default() *Config {
 	return &Config{
-		GitHub:  GitHubConfig{Host: "github.com"},
+		GitHub:  GitHubConfig{}, // Host "": $GH_HOST, then gh's default host, then github.com
 		Reviews: ReviewsConfig{CIRecheckSecs: 900},
 		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite"},
 		Bots:    BotsConfig{Logins: []string{"github-actions", "dependabot"}},

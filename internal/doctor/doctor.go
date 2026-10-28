@@ -5,6 +5,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,17 +41,17 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 		fmt.Fprintf(w, "  warning: %s\n", warn)
 	}
 	fmt.Fprintf(w, "reviews: %s\n", joinRepos(cfg.Reviews.Repos))
-	host := cfg.GitHub.Host
-	if host == "" {
-		host = "github.com"
-	}
-	gh, err := ghapi.New(ghapi.Options{Host: host, Version: version, Timeout: 15 * time.Second})
+	gh, err := ghapi.New(ghapi.Options{Host: cfg.GitHub.Host, Version: version, Timeout: 15 * time.Second})
 	if err != nil {
-		fmt.Fprintf(w, "auth: FAILED: %s\n  sign in with: gh auth login\n", err)
-		return err
+		fmt.Fprintf(w, "auth: FAILED: %s\n", err)
+		return ErrFailed
 	}
 	return Report(ctx, w, cfg, gh, src, pulled)
 }
+
+// ErrFailed is what Run returns for anything the report printed as
+// FAILED, so the caller prints one summary line, not the detail twice.
+var ErrFailed = errors.New("config check failed (see above)")
 
 // BotHint is the second half of the bot-login message: how to run as
 // yourself, which depends on where the token came from.
@@ -75,11 +76,11 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 	me, err := gh.Whoami(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "login: FAILED: %s\n", err)
-		return err
+		return ErrFailed
 	}
 	var botErr error
 	if cfg.Bots.IsBot(me) {
-		botErr = fmt.Errorf("%s is a bot login", me)
+		botErr = ErrFailed
 		fmt.Fprintf(w, "login: FAILED: %s is a bot login ([bots] logins, or the [bot] suffix); reviews, comments and merges would be signed by it — %s\n", me, BotHint(gh.TokenSource()))
 	} else {
 		fmt.Fprintf(w, "login: %s", me)
@@ -117,7 +118,7 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 			fmt.Fprintf(w, "  note: %s\n", n)
 		}
 		if _, err := gh.WorkflowRuns(ctx, repo, "0000000000000000000000000000000000000000"); err != nil {
-			fmt.Fprintf(w, "  actions: not readable (%s) — the CI column falls back to '?' when the check rollup is hidden too\n", short(err))
+			fmt.Fprintf(w, "  actions: not readable (%s) — the CI column falls back to '?' when the check rollup is hidden too\n", verbose(err))
 		} else {
 			fmt.Fprintln(w, "  actions: readable")
 		}
@@ -149,11 +150,8 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		on("release_pr", false, "")
 	}
 	fmt.Fprintln(w, "write permissions (reviews, comments, merges, deployments) are not probed: a 403 names the missing one when it happens")
-	if botErr != nil {
-		return botErr
-	}
-	if failed {
-		return fmt.Errorf("some repos could not be read")
+	if botErr != nil || failed {
+		return ErrFailed
 	}
 	return nil
 }
@@ -166,12 +164,13 @@ func joinRepos(repos []model.Repo) string {
 	return strings.Join(parts, ", ")
 }
 
-func short(err error) string {
-	s := err.Error()
-	if i := strings.Index(s, ": "); i > 0 && len(s) > 80 {
-		return s[i+2:]
+// verbose is the long form of a GitHub error (method and URL) for the
+// report, where detail helps.
+func verbose(err error) string {
+	if e, ok := ghapi.AsError(err); ok {
+		return e.Verbose()
 	}
-	return s
+	return err.Error()
 }
 
 func short7(sha string) string {

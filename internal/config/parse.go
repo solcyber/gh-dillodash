@@ -395,8 +395,10 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 
 func (p *parser) parseGitHub(top *table, cfg *Config) {
 	t, _ := top.sub("github")
-	host := strings.TrimSpace(t.nonEmpty("host", cfg.GitHub.Host))
-	if strings.Contains(host, "/") {
+	// unset: "" and the client resolves $GH_HOST, gh's default host, then
+	// github.com; set, it must be a bare hostname
+	host := strings.TrimSpace(t.str("host", ""))
+	if strings.Contains(host, "/") || strings.Contains(host, ":") {
 		t.errf("host", "%q must be a bare hostname like \"github.com\"", host)
 	} else {
 		cfg.GitHub.Host = host
@@ -716,7 +718,7 @@ func (p *parser) expandCache(cache, org string) string {
 	}
 	cache = strings.ReplaceAll(cache, "{org}", org)
 	if cache == "~" || strings.HasPrefix(cache, "~/") {
-		if home := p.env("HOME"); home != "" {
+		if home := homeDir(p.env); home != "" {
 			cache = filepath.Join(home, strings.TrimPrefix(cache, "~"))
 		}
 	}
