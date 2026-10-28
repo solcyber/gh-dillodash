@@ -315,6 +315,7 @@ func TestErrors(t *testing.T) {
 		{"int negative", minimal + "ci_recheck_secs = -1\n", `[reviews] ci_recheck_secs: must not be negative, got -1`},
 		{"string wrong type", minimal + "[github]\nhost = 1\n", `[github] host: expected a string, got an integer`},
 		{"host url", minimal + "[github]\nhost = \"https://github.com\"\n", `[github] host: "https://github.com" must be a bare hostname like "github.com"`},
+		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n", `[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30`},
 		{"bool wrong type", minimal + "[workflows.release_pr]\nenabled = \"yes\"\n", `[workflows.release_pr] enabled: expected a boolean (true or false), got a string`},
 		{"icons", minimal + "[display]\nicons = \"emoji\"\n", `[display] icons: "emoji" is not one of nerd, unicode, ascii`},
 		{"theme", minimal + "[display]\ntheme = \"dark\"\n", `[display] theme: "dark" is not one of auto, mono`},
@@ -433,8 +434,6 @@ func TestWarnings(t *testing.T) {
 			[]string{"[repos]: reserved for a future release, ignored"}},
 		{"enabled missing", minimal + "[workflows.release_pr]\nmerge_method = \"squash\"\n",
 			[]string{"[workflows.release_pr] enabled: missing, the workflow stays off (add enabled = true to turn it on)"}},
-		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n",
-			[]string{"[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30"}},
 		{"ceremony order", minimal + "[workflows.terraform_approve]\nenabled = true\nceremony_window = { timezone = \"America/New_York\", from = \"23:28\", to = \"23:00\" }\n",
 			[]string{"[workflows.terraform_approve] ceremony_window: from 23:28 is not before to 23:00; the window is same-day and will never be open"}},
 	}

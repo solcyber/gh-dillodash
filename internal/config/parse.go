@@ -570,7 +570,7 @@ func (p *parser) parseMaintenanceWindow(wt *table, cfg *Config) {
 	w.ReleaseFrom = t.hm("release_from", w.ReleaseFrom)
 	w.End = t.hm("end", w.End)
 	if !(w.Cutoff.Before(w.ReleaseFrom) && w.ReleaseFrom.Before(w.Start) && w.Start.Before(w.End)) {
-		t.warnf("cutoff, release_from, start, end", "expected cutoff < release_from < start < end, got %s, %s, %s, %s", w.Cutoff, w.ReleaseFrom, w.Start, w.End)
+		t.errf("cutoff, release_from, start, end", "expected cutoff < release_from < start < end, got %s, %s, %s, %s", w.Cutoff, w.ReleaseFrom, w.Start, w.End)
 	}
 	w.QueuedLabel = t.nonEmpty("queued_label", w.QueuedLabel)
 	w.ScheduledLabel = t.nonEmpty("scheduled_label", w.ScheduledLabel)

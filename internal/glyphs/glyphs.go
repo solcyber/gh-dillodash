@@ -7,9 +7,9 @@
 // set: BMP private-use code points (U+F4xx/F5xx, the powerline caps
 // U+E0B4/E0B6) only, never the U+F0000+ nf-md range, which some wcwidth
 // tables count as unprintable. The font test checks every glyph of the
-// nerd and unicode sets. ascii keeps the original + x . ~ - glyphs and is
-// forced when the terminal cannot show non-ASCII (the CI column would
-// otherwise read as "no CI").
+// nerd and unicode sets. ascii keeps the original + x . ~ - glyphs for a
+// terminal that cannot show non-ASCII (icons = "ascii" or --icons ascii;
+// nothing detects it, the CI column would otherwise read as "no CI").
 package glyphs
 
 import (

@@ -125,8 +125,8 @@ destroys N ≥ 1 resources, and the reason has at least
 | Comment | Shown as |
 |---|---|
 | `**/approve refused:** …`, `**/approve not routed:** …`, `**/approve not dispatched:** …` | `/approve REFUSED — see the reply` on that plan; the refusal never gets the command highlight |
-| `## Apply SUCCESS`, `## Window apply VERIFIED` | applied |
-| `## Apply FAILURE`, `## Apply SKIPPED`, `## Apply CANCELLED`, `## Plan-set INCOMPLETE`, `## Ceremony FAILED`, `## Ceremony NOT RUN` | what happened, and that re-posting the same `/approve` resumes. A report that names `Approved: `<id>`` is pinned to that id |
+| `## Apply SUCCESS`, `## Apply SUCCESS (ceremony)`, `## Window apply VERIFIED` | applied (a ceremony's apply reports with the `(ceremony)` suffix) |
+| `## Apply FAILURE`, `## Apply SKIPPED`, `## Apply CANCELLED`, `## Plan-set INCOMPLETE`, `## Ceremony FAILED`, `## Ceremony NOT RUN` | what happened, and that re-posting the same `/approve` resumes. A report that names <code>Approved: \`&lt;id&gt;\`</code> is pinned to that id |
 | `## Apply REFUSED — saved plan is stale` | push to re-plan |
 | `## Window apply FAILED verification … AUTO-REVERTED` / `… NOT reverted` | reverted, or a human is paged |
 | `**Apply refused — …**`, `**Ceremony refused: …**`, `**Window item refused before apply (P0):**`, `**Dropped from the maintenance-window queue (night of …):**` | pinned to the newest `/approve` before them |

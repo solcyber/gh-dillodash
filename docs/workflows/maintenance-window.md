@@ -1,7 +1,7 @@
 # The `maintenance_window` workflow
 
 For organizations that apply disruptive changes in a nightly window run by
-a **conductor** bot: an approved disruptive change is labelled and queued,
+a **conductor** bot: an approved disruptive change is labeled and queued,
 a manifest issue per night lists the slots, and people check in with
 commands on that issue. dillodash shows the queue by night and posts the
 commands.
@@ -77,7 +77,7 @@ queued:
 <!-- window-queue {"night": "2026-10-22", "plan_id": "<64 hex>", "stacks": ["prod/07-warehouse"], "queued_at": "2026-10-21T18:02:00Z", "revertible": true} -->
 ```
 
-**The manifest issue**, one per night in `manifest_repo`: labelled
+**The manifest issue**, one per night in `manifest_repo`: labeled
 `manifest_label` (`window-manifest`), titled by `manifest_title` with the
 night's date (`Window {night}` by default; set `manifest_title` to the bot's exact title), and carrying a machine block in
 its body:
@@ -100,7 +100,7 @@ issue number wins.
 **Commands** dillodash posts on the manifest (the names are configurable):
 `/attend`, `/release`, `/window-cancel #N` or `/window-cancel rel:<repo>#<N>`.
 
-**Replies** dillodash recognises, by their first line:
+**Replies** dillodash recognizes, by their first line:
 
 | Reply | Meaning |
 |---|---|

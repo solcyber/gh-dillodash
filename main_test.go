@@ -127,7 +127,7 @@ func TestSubcommandExitCodes(t *testing.T) {
 	}{
 		{[]string{"config"}, 2, "check, pull, init or migrate"},
 		{[]string{"config", "bogus"}, 2, `unknown subcommand "bogus"`},
-		{[]string{"font"}, 2, "install or check"},
+		{[]string{"font"}, 2, "install, check or license"},
 		{[]string{"font", "bogus"}, 2, `unknown subcommand "bogus"`},
 		{[]string{"config", "check"}, 2, "no config found"},
 		{[]string{"config", "migrate"}, 2, "no pr-dash config.ini found"},

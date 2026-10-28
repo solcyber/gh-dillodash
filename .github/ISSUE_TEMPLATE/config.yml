@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/solcyber/gh-dillodash/security/advisories/new
+    about: A way to make dillodash do more than the keys say, or leak the token: report it privately here.

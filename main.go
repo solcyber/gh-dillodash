@@ -94,6 +94,7 @@ usage:
                                   convert a pr-dash config.ini to config.toml
   gh dillodash font install|check [--force]
                                   install the bundled Nerd Font (icons = "nerd")
+  gh dillodash font license       print the font's licences (also written beside the installed files)
   gh dillodash glyph-test [--icons SET]
                                   print every glyph and the palette (checks the terminal font)
   gh dillodash amos               say hello to Amos
@@ -594,7 +595,17 @@ func fontCmd(args []string) error {
 			fmt.Print(usage())
 			return errHelp
 		}
-		return exitError{2, errors.New("font: install or check? (see gh dillodash help)")}
+		return exitError{2, errors.New("font: install, check or license? (see gh dillodash help)")}
+	}
+	if args[0] == "license" || args[0] == "licence" {
+		if _, err := subFlags("font license", args[1:], nil); err != nil {
+			return err
+		}
+		fmt.Printf("%s %s is redistributed under these licences:\n\n", fonts.Family, fonts.Version)
+		for _, l := range fonts.Licenses() {
+			fmt.Printf("==== %s ====\n\n%s\n", l.Name, l.Data)
+		}
+		return nil
 	}
 	if args[0] != "install" && args[0] != "check" {
 		return exitError{2, fmt.Errorf("font: unknown subcommand %q (see gh dillodash help)", args[0])}

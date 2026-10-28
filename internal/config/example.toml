@@ -1,13 +1,14 @@
 # dillodash config  —  ~/.config/dillodash/config.toml
 #
-# Minimal config: these three lines are all that is required.
+# Minimal config: these two lines are all that is required.
 #   [reviews]
 #   repos = ["acme/infra"]
 #
-# Everything else below is optional and shown commented out with its default.
-# Auth is the gh CLI's job (`gh auth login`); there is no token here.
-# Search order: --config, $DILLODASH_CONFIG, $XDG_CONFIG_HOME/dillodash/config.toml,
-# ~/.config/dillodash/config.toml.
+# Everything else below is optional and shown commented out with its default
+# (ceremony_window, manifest_repo and org have no default: theirs are examples).
+# Auth is the gh CLI's job (`gh auth login`; GH_TOKEN overrides it); there is no token here.
+# Search order: --config, $DILLODASH_CONFIG, $XDG_CONFIG_HOME/dillodash/config.toml
+# (%APPDATA%\dillodash\config.toml on Windows), ~/.config/dillodash/config.toml.
 
 # ============================================================================
 # GitHub
@@ -21,7 +22,7 @@
 # ============================================================================
 [reviews]
 repos = ["acme/infra"]        # required: one or more "owner/name" (--repo replaces the list)
-# ci_recheck_secs = 900       # how often a PR's checks are re-read between refreshes
+# ci_recheck_secs = 900       # Actions-route CI: a settled, passing head is re-read after this long
 
 # ============================================================================
 # Display
@@ -34,7 +35,8 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # mascot = "sprite"           # sprite | ascii | none
 
 # ============================================================================
-# Bots — logins drawn as bots (case-insensitive; "[bot]" suffixes always count)
+# Bots — logins drawn as bots (exact, case-insensitive; "[bot]" suffixes always
+# count). dillodash refuses to run signed in as one of them.
 # ============================================================================
 [bots]
 # logins = ["github-actions", "dependabot"]
@@ -73,7 +75,7 @@ enabled = false
 # scheduled_label = "window:scheduled"      # label once on a manifest
 # rolled_label = "window:rolled"            # label after rolling to a later night
 # manifest_label = "window-manifest"        # label on manifest issues
-# manifest_title = "Window {night}"            # manifest issue title; {night} is YYYY-MM-DD; add the start time if your bot does
+# manifest_title = "Window {night}"         # manifest issue title; {night} is YYYY-MM-DD; add the start time if your bot does
 # conductor_bot = "github-actions"          # login that runs the window
 # team = ""                                 # "org/team" to mention in hints
 # attend_command = "/attend"                # comment that marks you attending
