@@ -1,6 +1,6 @@
 module github.com/solcyber/gh-dillodash
 
-go 1.26.7
+go 1.27.3
 
 require (
 	charm.land/bubbletea/v2 v2.1.1

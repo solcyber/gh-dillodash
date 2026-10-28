@@ -236,8 +236,8 @@ func targets(o Options) ([]target, error) {
 	}
 	out, err := o.Run([]string{"cmd.exe", "/d", "/c", "echo %LOCALAPPDATA%"})
 	if err != nil {
-		return nil, fmt.Errorf("this is WSL, but cmd.exe isn't usable (Windows interop off?), so the font can't reach Windows, where your terminal draws it: %w. "+
-			"Copy %s and %s to Windows, right-click, Install.", err, RegularName, BoldName)
+		return nil, fmt.Errorf("this is WSL, but cmd.exe isn't usable (Windows interop off?), so the font can't reach Windows, where your terminal draws it; "+
+			"copy %s and %s to Windows, right-click, Install: %w", RegularName, BoldName, err)
 	}
 	winLocal := strings.TrimSpace(out)
 	if winLocal == "" || strings.Contains(winLocal, "%") {

@@ -14,7 +14,7 @@ list is empty.
 ## Install
 
 Needs the GitHub CLI (`gh`); the release binaries cover macOS, Linux and
-Windows, and building from source needs Go 1.26 or newer.
+Windows, and building from source needs Go 1.27 or newer.
 
 ```sh
 gh extension install solcyber/gh-dillodash
