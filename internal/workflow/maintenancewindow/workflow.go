@@ -190,8 +190,10 @@ func (w *Workflow) state(app workflow.App) *State {
 	return st
 }
 
-// queuedReleases are the release workflow's PRs that carry the queued
-// label and are still queued.
+// queuedReleases are the release workflow's PRs queued for the window:
+// one carrying the queued label must still be queued (its plan alive);
+// one the release workflow queues by its approving review (the
+// conductor labels nothing before the freeze) is taken at its word.
 func (w *Workflow) queuedReleases(app workflow.App) []*model.PR {
 	qp, ok := app.State(ReleaseState).(workflow.QueuedProvider)
 	if !ok || qp == nil {
@@ -199,7 +201,7 @@ func (w *Workflow) queuedReleases(app workflow.App) []*model.PR {
 	}
 	var out []*model.PR
 	for _, p := range qp.QueuedForWindow() {
-		if IsQueued(p, w.cfg) {
+		if !HasQueuedLabel(p, w.cfg) || IsQueued(p, w.cfg) {
 			out = append(out, p)
 		}
 	}

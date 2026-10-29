@@ -43,9 +43,15 @@ the day after it is enrolled, or at once after the cache file is deleted.
   prefix) is listed last in its repo, dimmed, with the chip `not a
   release`. It is not counted, and `a`, `M` and `D` refuse it. Set
   `list_other_prs = false` to hide them.
-- **A queued release** (with `maintenance_window` enabled and the
-  conductor's queued label on it) shows under its night in the window
-  section; its manifest item id is `rel:<repo>#<N>`.
+- **A queued release** shows under its night in the window section, not
+  among the releases; its manifest item id is `rel:<repo>#<N>`. With
+  `approval_queues_for_window = true` the approving review itself queues
+  it (an open, non-draft `release/*` PR with an APPROVED review no older
+  than three nights; a hotfix never queues), which is what the conductor's
+  freeze picks up: it labels nothing before then. A release carrying the
+  conductor's queued label is queued either way. Once the release is on
+  its way (released NOW, or its slot came) it is back among the releases
+  with its rail.
 - **A release in flight** (released NOW, or on tonight's manifest) shows
   its **rail** in the kind chip: a meter that fills as the release moves
   through the manifest repo's run, with the phase and its clock
