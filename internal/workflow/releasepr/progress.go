@@ -125,10 +125,11 @@ type Progress struct {
 	RunConclusion string
 	Steps         []Step
 
-	Outcome  string // verified | refused | apply_failed | deploy_failed | unverifiable | revert_failed | not_run
-	MergeSHA string
-	Approver string // from the outcome comment, when it says
-	Night    string // the window night, when on one
+	Outcome   string // verified | refused | apply_failed | deploy_failed | unverifiable | revert_failed | not_run
+	FailPhase string // the run phase a failed run died in, when known
+	MergeSHA  string
+	Approver  string // from the outcome comment, when it says
+	Night     string // the window night, when on one
 
 	DeployDone, DeployTotal int // the app repo's runs on the merge, from the deploy state
 
@@ -164,7 +165,8 @@ type track struct {
 	item     *workflow.ManifestItem
 	pollErr  string
 
-	cur Progress
+	cur        Progress
+	shownPhase string // the phase the row last drew: a change starts its effects
 }
 
 // pollPatch is what one poll cycle learned about one release.
@@ -580,6 +582,10 @@ func (w *Workflow) ApplyPoll(app workflow.App, patch any) {
 			pr = &model.PR{Repo: t.repo, Number: t.number}
 		}
 		t.cur = w.derive(pr, t, now)
+		if t.cur.Phase != t.shownPhase {
+			notePhaseChange(app.Fx(), pr, t.shownPhase, t.cur.Phase)
+			t.shownPhase = t.cur.Phase
+		}
 		changed = append(changed, pr)
 	}
 	w.mu.Unlock()
@@ -914,7 +920,7 @@ func (w *Workflow) fromRun(p *Progress, run *model.WorkflowRun, job *model.Workf
 		default:
 			p.Phase = PhaseFailed
 			if s := failedStep(p.Steps); s != nil {
-				p.Detail = "at " + s.Phase
+				p.Detail, p.FailPhase = "at "+s.Phase, s.Phase
 			}
 		}
 		return
@@ -1038,6 +1044,10 @@ func (w *Workflow) noteItems(app workflow.App, st *State) {
 			}
 		}
 		t.cur = w.derive(pr, t, now)
+		if t.cur.Phase != t.shownPhase {
+			notePhaseChange(app.Fx(), pr, t.shownPhase, t.cur.Phase)
+			t.shownPhase = t.cur.Phase
+		}
 	}
 }
 

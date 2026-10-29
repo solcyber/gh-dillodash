@@ -279,6 +279,17 @@ func repoWidth(items []workflow.Row) int {
 	return min(24, n)
 }
 
+// maxSegs is the widest rendering among the rows, capped.
+func maxSegs(items []workflow.Row, f func(workflow.Row) []text.Seg, cap int) int {
+	n := 0
+	for _, r := range items {
+		if wdt := text.SegsWidth(f(r)); wdt > n {
+			n = wdt
+		}
+	}
+	return min(cap, n)
+}
+
 func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, numW, repoW int) workflow.Layout {
 	if rw := repoWidth(items); rw > repoW {
 		repoW = rw
@@ -290,7 +301,7 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 			pr := r.Item.(*model.PR)
 			return w.Label(pr, me, app.LocalApproved(pr))
 		}, 99) + 2,
-		"kind": maxw(items, func(r workflow.Row) string { return w.kindChipText(r.Item.(*model.PR), app.Now()) }, 99) + 2,
+		"kind": maxSegs(items, func(r workflow.Row) []text.Seg { return w.kindChip(app, r.Item.(*model.PR), -1) }, 99),
 		"ci": maxw(items, func(r workflow.Row) string {
 			c, _ := r.Item.(*model.PR).Get(ExtCI).(model.CICluster)
 			return text.SegsText(ciSegs(c.Glyphs))
@@ -436,8 +447,7 @@ func (w *Workflow) releaseSegs(app workflow.App, row workflow.Row, L workflow.La
 	segs = append(segs, text.PadSegs(scenes.GlintChip(label, LabelStyle(label), pos, fx.Ambient, mono), L["chip"])...)
 	segs = append(segs, text.S(" ", "text"))
 	if kw, ok := L["kind"]; ok {
-		ktext := w.kindChipText(pr, app.Now())
-		segs = append(segs, text.PadSegs(scenes.Chip(ktext, w.kindChipStyle(pr, ktext)), kw)...)
+		segs = append(segs, text.PadSegs(w.kindChip(app, pr, pos), kw)...)
 		segs = append(segs, text.S(" ", "text"))
 	}
 	c, _ := pr.Get(ExtCI).(model.CICluster)
@@ -549,6 +559,7 @@ func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
 		{"releases", fmt.Sprintf("a  on an app release PR: approve (queues it for the window) or approve + %s", w.cfg.ReleaseNowCommand)},
 		{"", "M  merge an APPROVED release at its slot (= the prod deploy)   D  approve its deployments (row or detail)"},
+		{"", "a release in flight shows its rail on the row and its steps, clocks and run in the detail; it says when it lands"},
 	}
 }
 
@@ -564,7 +575,14 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	row = append(row, sp)
 	row = append(row, scenes.Chip("approve: prod", "chip.await")...)
 	row = append(row, text.S(" a deploy waits on you (D)", "muted"))
-	return [][]text.Seg{row}
+	rail := []text.Seg{text.S(text.Pad("", 10), "section")}
+	rail = append(rail, scenes.Chip(strings.Repeat(glyphs.G("block"), 3)+strings.Repeat(glyphs.G("trough"), 4)+" deploying 3/9 · 2m", "chip.queued")...)
+	rail = append(rail, text.S(" a release in flight: its rail fills from validating to verifying", "muted"))
+	rail = append(rail, sp)
+	rail = append(rail, scenes.Chip("released", "chip.approved")...)
+	rail = append(rail, sp)
+	rail = append(rail, scenes.Chip("release FAILED", "chip.rolled")...)
+	return [][]text.Seg{row, rail}
 }
 
 // FortressLaneLabel names a release repo's lane.
@@ -643,6 +661,9 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 		rule = fmt.Sprintf("a: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
 	}
 	out = append(out, scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "muted"), text.S(rule, "muted")}, width, inner)...)
+	if p, ok := w.progressOf(src); ok {
+		out = append(out, w.progressCard(app, src, p, width, inner)...)
+	}
 	if merged {
 		sha := MergeSHA(src)
 		if sha == "" {
