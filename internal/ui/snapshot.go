@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/fortress"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 )
 
@@ -20,6 +21,7 @@ type SnapshotOptions struct {
 	Advance    float64   // seconds added to the clock before the frame is drawn
 	KeepSplash bool      // leave the splash playing (it is stopped otherwise)
 	Fx         []FxStart // effects started before the frame, already Elapsed seconds in
+	City       string    // the city d opens on (fortress.CityKeys); "" is manhattan, so a shot never flips a coin
 }
 
 // FxStart is one effect to start for a snapshot.
@@ -46,6 +48,11 @@ func SnapshotsWith(ctx context.Context, o Options, so SnapshotOptions, w, h int,
 		fx.Now = func() float64 { return so.Clock }
 	}
 	m := New(ctx, o)
+	city := so.City
+	if city == "" {
+		city = fortress.CityKeys[0]
+	}
+	m.fortress = &fortressState{coin: func() string { return city }}
 	msgs := make(chan tea.Msg, 256)
 	m.sendFn = func(msg tea.Msg) { msgs <- msg }
 	m.tp = &testPrompter{
