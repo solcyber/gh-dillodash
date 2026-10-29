@@ -113,7 +113,11 @@ type Model struct {
 	statusAt   float64
 
 	// refresh
-	refreshing      bool
+	refreshing bool
+	// polling is a workflow poll in flight; nextPollAt is when the next
+	// one is due on the frame clock (0: nothing in flight to watch).
+	polling         bool
+	nextPollAt      float64
 	refreshAgain    bool
 	ciFlush         bool
 	nextRefreshAt   float64

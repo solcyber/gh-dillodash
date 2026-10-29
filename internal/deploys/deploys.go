@@ -146,10 +146,10 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 				if age > stuckFor {
 					stuckFor = age
 				}
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, fmtSecs(age)), "chip.rolled", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, FmtSecs(age)), "chip.rolled", r.ID})
 			} else {
 				phases["running"] = true
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, fmtSecs(age)), "chip.queued", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, FmtSecs(age)), "chip.queued", r.ID})
 			}
 		case r.Conclusion == "success" || r.Conclusion == "skipped" || r.Conclusion == "neutral":
 			phases["done"] = true
@@ -180,7 +180,7 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	case phases["failed"]:
 		st.Phase, st.Text = "failed", "deploy failed"
 	case phases["stuck"]:
-		st.Phase, st.Text = "stuck", "stuck? "+fmtSecs(stuckFor)
+		st.Phase, st.Text = "stuck", "stuck? "+FmtSecs(stuckFor)
 	case phases["running"]:
 		st.Phase, st.Text = "running", "deploying"
 	case phases["done"]:
@@ -194,8 +194,9 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	return st
 }
 
-// fmtSecs is 12s, 7m, 3h05m: a run's age.
-func fmtSecs(d time.Duration) string {
+// FmtSecs is 12s, 7m, 3h05m: a run's age (the release progress clocks
+// use it too).
+func FmtSecs(d time.Duration) string {
 	secs := int(d.Seconds())
 	if secs < 0 {
 		secs = 0

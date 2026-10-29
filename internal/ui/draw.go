@@ -629,6 +629,8 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 				if cl, ok := m.ciOf(p); ok && strings.Contains(cl.Glyphs, "~") {
 					m.animating = true
 				}
+			} else if m.wf.LiveRow(m, row) {
+				m.animating = true // a workflow row in flight (a release's rail)
 			}
 		}
 		if right < w-1 {
@@ -642,6 +644,10 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 
 // drawDetail paints the open item's lines.
 func (m *Model) drawDetail(c *canvas.Canvas, h, w int) {
+	if m.liveDetail() {
+		m.animating = true // the open item's card has live parts
+		m.detailVer++      // and is rebuilt every frame
+	}
 	if m.detailStamp != (detailStamp{m.detailVer, w, m.raw}) {
 		m.buildDetailLines(w) // new data, an approval, raw, resize
 	}

@@ -72,6 +72,10 @@ type RowKind struct {
 	// Title is the row's plain title (the core renders rows through Segs
 	// and does not read it; a workflow may use it for its own rows).
 	Title func(row Row) string
+	// Live reports a row whose rendering changes between refreshes (a
+	// release in flight): the dashboard keeps its frame clock running
+	// for it instead of sleeping until the next refresh.
+	Live func(app App, row Row) bool
 }
 
 // Key is a key binding a workflow adds.
@@ -196,6 +200,39 @@ type CIProvider interface {
 // key bar shows D while it is enabled.
 type DeployProvider interface {
 	ProvidesDeploys() bool
+}
+
+// Poller is a workflow with items in flight that are cheaper to watch
+// than a whole refresh is (a release moving through another repo's
+// Actions run). Between refreshes, while Live says so, the dashboard
+// runs Poll on its own goroutine every PollEvery and hands the patch to
+// ApplyPoll on the UI goroutine. Poll reads its own state under its own
+// lock and returns new values; it never touches the State the UI holds.
+// err is only ever a rate limit, which pauses polling and refreshing
+// alike. A Poll with nothing to watch returns (nil, nil).
+type Poller interface {
+	PollEvery() time.Duration
+	Live(app App) bool
+	Poll(ctx context.Context, gh ghapi.Client) (patch any, err error)
+	ApplyPoll(app App, patch any)
+}
+
+// ManifestItem is what a window workflow's state tells another workflow
+// about one manifest item (a release queued for the night), without
+// importing it: the item's id, its status text as the conductor writes
+// it, the night, the manifest's phase, the slot (RFC 3339) and whether
+// the item is final. Issue is the manifest issue's number.
+type ManifestItem struct {
+	ID, Status, Night, Phase, StartUTC string
+	Final                              *bool
+	Issue                              int
+}
+
+// ManifestItemProvider is implemented by a window workflow's state: the
+// manifest item of a release PR (repo short name and number), newest
+// night first.
+type ManifestItemProvider interface {
+	ManifestItem(repo string, number int) (ManifestItem, bool)
 }
 
 // NightRow is the Meta key a window sub-header row carries its night

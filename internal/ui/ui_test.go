@@ -18,6 +18,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
@@ -725,5 +726,182 @@ func TestOpenAndCopyStayInTheHarness(t *testing.T) {
 	}
 	if m := New(context.Background(), Options{Config: config.Default(), GH: h.gh, Workflows: h.m.wf, Me: "alice", Host: "github.com"}); m.tp != nil {
 		t.Error("a Model outside the harness must reach the real programs")
+	}
+}
+
+// stubPoller is a workflow with something in flight to watch.
+type stubPoller struct {
+	workflow.Base
+	live    bool
+	err     error
+	polls   int
+	applied int
+}
+
+func (*stubPoller) Name() string                  { return "poller" }
+func (p *stubPoller) PollEvery() time.Duration    { return 30 * time.Second }
+func (p *stubPoller) Live(workflow.App) bool      { return p.live }
+func (p *stubPoller) ApplyPoll(workflow.App, any) { p.applied++ }
+func (p *stubPoller) Poll(context.Context, ghapi.Client) (any, error) {
+	p.polls++
+	return "patch", p.err
+}
+
+// pollHarness loads the dashboard with a stub poller and a pinned frame
+// clock.
+func pollHarness(t *testing.T, live bool) (*harness, *stubPoller, *float64) {
+	t.Helper()
+	h := newHarness(t)
+	p := &stubPoller{live: live}
+	set, err := workflow.NewSet(nil, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.m.wf = set
+	was := fx.Now
+	t.Cleanup(func() { fx.Now = was })
+	now := 1000.0
+	fx.Now = func() float64 { return now }
+	h.load()
+	return h, p, &now
+}
+
+// TestPollRunsOnlyWhileLive: nothing in flight arms no poll; something
+// in flight arms one at the cadence, the tick runs it, the patch lands,
+// and the next is armed; back to idle disarms it.
+func TestPollRunsOnlyWhileLive(t *testing.T) {
+	h, p, now := pollHarness(t, false)
+	if h.m.nextPollAt != 0 {
+		t.Fatalf("idle poller armed a poll at %v", h.m.nextPollAt)
+	}
+	p.live = true
+	h.key('r') // the refresh lands and re-arms from the poller's answer
+	if h.m.nextPollAt != *now+30 {
+		t.Fatalf("armed at %v, want %v", h.m.nextPollAt, *now+30)
+	}
+	h.m.mu.Lock()
+	h.m.ambient, h.m.animating, h.m.status = false, false, ""
+	h.m.nextRefreshAt = *now + 3600
+	h.m.loaded = false // the header countdown would wake every second
+	ms := h.m.tickMS()
+	h.m.loaded = true
+	h.m.mu.Unlock()
+	if ms < 29900 || ms > 30100 {
+		t.Errorf("the idle tick wakes for the poll: %d", ms)
+	}
+	*now += 31
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if p.polls != 1 || p.applied != 1 || h.m.polling {
+		t.Fatalf("polls=%d applied=%d polling=%v", p.polls, p.applied, h.m.polling)
+	}
+	if h.m.nextPollAt != *now+30 {
+		t.Errorf("re-armed at %v, want %v", h.m.nextPollAt, *now+30)
+	}
+	p.live = false
+	*now += 31
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if p.polls != 2 || h.m.nextPollAt != 0 {
+		t.Errorf("after the last live poll: polls=%d next=%v", p.polls, h.m.nextPollAt)
+	}
+}
+
+// TestPollRateLimitPauses: a poll's rate limit raises the refresh's wall
+// and says so; no poll runs while it stands.
+func TestPollRateLimitPauses(t *testing.T) {
+	h, p, now := pollHarness(t, true)
+	until := time.Now().Add(90 * time.Second)
+	p.err = &ghapi.Error{Status: 403, Message: "secondary rate limit", RetryAt: until}
+	*now += 31
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if p.applied != 1 {
+		t.Errorf("the patch before the wall still lands: %d", p.applied)
+	}
+	if h.m.backoff.RateLimitWait(time.Now()) <= 0 || !strings.Contains(h.m.warn, "rate limited — live progress paused until") {
+		t.Fatalf("wall %v warn %q", h.m.backoff.RateLimitWait(time.Now()), h.m.warn)
+	}
+	if h.m.nextPollAt < *now+80 {
+		t.Errorf("the next poll waits for the wall: %v (now %v)", h.m.nextPollAt, *now)
+	}
+	*now += 31
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if p.polls != 1 {
+		t.Errorf("polled under the wall: %d", p.polls)
+	}
+}
+
+// TestPollSkippedWhileRefreshing: a refresh in flight owns the data; the
+// poll waits for it and is re-armed when it lands.
+func TestPollSkippedWhileRefreshing(t *testing.T) {
+	h, p, now := pollHarness(t, true)
+	*now += 31
+	h.m.mu.Lock()
+	h.m.refreshing = true
+	h.m.poll()
+	h.m.refreshing = false
+	h.m.mu.Unlock()
+	if p.polls != 0 || h.m.polling {
+		t.Errorf("polled under a refresh: %d", p.polls)
+	}
+	h.key('r')
+	if h.m.nextPollAt != *now+30 {
+		t.Errorf("re-armed by the refresh: %v", h.m.nextPollAt)
+	}
+}
+
+// TestPollFailureRetriesLater: a poll that fails for any other reason
+// keeps the last progress and retries at twice the cadence.
+func TestPollFailureRetriesLater(t *testing.T) {
+	h, p, now := pollHarness(t, true)
+	p.err = &ghapi.Error{Status: 502, Message: "Bad Gateway"}
+	*now += 31
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if h.m.nextPollAt != *now+60 || h.m.backoff.RateLimitWait(time.Now()) > 0 || h.m.errText != "" {
+		t.Errorf("next=%v (now %v) wall=%v err=%q", h.m.nextPollAt, *now, h.m.backoff.RateLimitWait(time.Now()), h.m.errText)
+	}
+}
+
+// liveRowStub claims a row kind whose rows are live.
+type liveRowStub struct {
+	workflow.Base
+	live bool
+}
+
+func (*liveRowStub) Name() string { return "liverow" }
+func (s *liveRowStub) RowKinds() map[string]workflow.RowKind {
+	return map[string]workflow.RowKind{"hot": {
+		Segs: func(workflow.App, workflow.Row, workflow.Layout, int, int) []text.Seg {
+			return []text.Seg{text.S("hot", "text")}
+		},
+		Live: func(workflow.App, workflow.Row) bool { return s.live },
+	}}
+}
+func (s *liveRowStub) Sections(workflow.App, []string, string) []workflow.Row {
+	return []workflow.Row{{Kind: "hot", Item: &model.PR{Repo: infra, Number: 900, Title: "hot"}}}
+}
+
+// TestRowKindLiveAnimates: a workflow row whose kind says it is live
+// keeps the frame clock running; a quiet one lets the dashboard idle.
+func TestRowKindLiveAnimates(t *testing.T) {
+	h := newHarness(t)
+	s := &liveRowStub{live: true}
+	set, err := workflow.NewSet(nil, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.m.wf = set
+	h.load()
+	h.screen()
+	if !h.m.animating {
+		t.Error("a live row animates")
+	}
+	s.live = false
+	h.screen()
+	if h.m.animating {
+		t.Error("a quiet row does not")
 	}
 }

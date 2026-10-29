@@ -70,7 +70,7 @@ func settle(m *Model, msgs <-chan tea.Msg, deadline time.Duration) error {
 	for {
 		drain(m, msgs)
 		m.mu.Lock()
-		busy := m.refreshing || m.action
+		busy := m.refreshing || m.action || m.polling
 		modal := m.modal != nil
 		m.mu.Unlock()
 		if modal || !busy {
