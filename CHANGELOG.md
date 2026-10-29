@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `--demo` carries two Actions runs waiting on an environment, so the
+  `waiting approvals` section, its summary and `D` on a run are on screen.
+  The gallery gains the section, `D` on a run, and fortress mode over
+  Chicago next to Manhattan.
+
+### Fixed
+
+- The gallery's scripts are checked against what they draw: each shot
+  names the text its frame must show, and the README's picture must open
+  the release. A new fixture row used to shift the cursor-driven shots
+  silently onto the wrong row. The fortress shot no longer flips a coin
+  for its city on every render.
+
 ## [1.5.0]
 
 ### Added

@@ -31,7 +31,7 @@ internal/doctor             `config check`
 internal/demo               the offline fixture behind --demo and the screenshot
 internal/hygiene            the private-terms test over the whole tree
 cmd/gen-amos                regenerates the Amos sprite from assets/amos.png (rendered from assets/amos-rough.pdf)
-cmd/screenshot              renders docs/screenshot.png from the demo fixture
+cmd/screenshot              renders docs/screenshot.png and docs/shots/ from the demo fixture
 ```
 
 Two files are generated and checked by tests: `config.example.toml` at the
@@ -60,14 +60,19 @@ a test (`TestNoPrivateTerms`) checks for a denylist the maintainers hold.
 ## Running it against a fake
 
 `go run . --demo` opens the dashboard on the fixture without touching
-GitHub (it carries a release in flight, so the rail and the mission-control
-card are on screen). `go run ./cmd/screenshot` renders the same fixture
+GitHub. All four workflows are on: a release is in flight (the rail and
+the mission-control card), a PR is queued for tonight's window, and two
+Actions runs wait on an environment, one of them on you. `go run ./cmd/screenshot` renders the same fixture
 offline with the embedded font and the theme's colors: `docs/screenshot.png`
 (the README's picture) and the gallery in `docs/shots/`, one PNG per shot
 in `cmd/screenshot/shots.go`; `-only name,…` renders a few. Regenerate
-after a visible change and commit the PNGs: a test checks that every
-picture a doc embeds is a shot, that every shot is embedded, and that every
-script still runs on the fixture.
+after a visible change and commit the PNGs. The tests check that every
+picture a doc embeds is a shot with its caption (`ui.ShotCaptions`) as
+alt text, that every shot is embedded, and that every script still runs
+on the fixture and lands where its `Expect` says. A new row in the
+fixture moves the cursor-driven scripts, and the test names the shot that
+went astray. Fortress shots pin their city (`SnapshotOptions.City`); the
+`d` key alone flips a coin.
 
 ## Style
 

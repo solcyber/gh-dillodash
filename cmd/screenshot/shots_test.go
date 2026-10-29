@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -83,6 +84,21 @@ func TestGalleryMatchesTheDocs(t *testing.T) {
 	}
 }
 
+// TestHeroOpensTheRelease: the README's second frame is the release's
+// detail, not whatever row the fixture now puts there.
+func TestHeroOpensTheRelease(t *testing.T) {
+	glyphs.Use(glyphs.Nerd)
+	theme.Setup(colorprofile.Ascii, false)
+	fx.Motion = "off"
+	frames, err := render(shot{Name: "hero"}, heroScripts)
+	if err != nil || len(frames) != 2 {
+		t.Fatalf("%v (%d frames)", err, len(frames))
+	}
+	if top := frames[1].Text(0); !strings.Contains(top, heroExpect) {
+		t.Errorf("the hero's detail header is %q, want %s", top, heroExpect)
+	}
+}
+
 // TestEveryShotSettles: every script runs to a frame on the fixture (a
 // key-table change that breaks one fails here, not at render time).
 func TestEveryShotSettles(t *testing.T) {
@@ -101,6 +117,13 @@ func TestEveryShotSettles(t *testing.T) {
 		}, s.Opts, cols, rows, [][]string{s.Steps})
 		if err != nil || len(frames) != 1 {
 			t.Errorf("%s: %v (%d frames)", s.Name, err, len(frames))
+			continue
+		}
+		screen := strings.Join(frames[0].Lines(), "\n")
+		for _, want := range s.Expect {
+			if !strings.Contains(screen, want) {
+				t.Errorf("%s: the frame lacks %q: the script landed elsewhere\n%s", s.Name, want, screen)
+			}
 		}
 	}
 }

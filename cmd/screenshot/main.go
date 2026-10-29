@@ -58,10 +58,7 @@ func main() {
 	regular, bold := faces(*size)
 	if pick("hero") {
 		setGlyphs("nerd")
-		frames, err := render(shot{Name: "hero"}, [][]string{
-			{"j"},                    // the list, cursor on the second row
-			{"j", "j", "j", "enter"}, // a pull request's detail
-		})
+		frames, err := render(shot{Name: "hero"}, heroScripts)
 		if err != nil {
 			die(err)
 		}

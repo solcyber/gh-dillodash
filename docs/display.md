@@ -17,7 +17,7 @@ author) so the title keeps at least 24 cells.
 | blue `approved by me` | the row dims and stays in the default list until the PR merges, so approving never makes a PR silently vanish |
 | gold-on-gray `changes requested` | |
 | gray `DRAFT` | |
-| workflow chips | `applied, needs review`, `re-planned since queued`, `needs approval`, `not a release` and the window states come from the workflows; their docs explain them |
+| workflow chips | `applied, needs review`, `re-planned since queued`, `needs approval`, `not a release`, the window states, a release's rail and a waiting run's `approve: prod` / `waits: prod` come from the workflows; their docs explain them |
 
 PRs approved only by others are hidden by default; `A` shows them.
 Approvals made with `a` mark the row instantly, for the head they

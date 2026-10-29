@@ -94,4 +94,4 @@ Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
 
 **`d`: fortress mode**
 
-![Fortress mode: every repo as a lane of branches and pull requests, the oldest work furthest out](shots/fortress.png)
+![Fortress mode over Manhattan: every repo as a lane of branches and pull requests, the oldest work furthest north](shots/fortress.png)
