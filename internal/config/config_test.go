@@ -140,7 +140,7 @@ release_now_dispatch = false
 release_now_dispatch_event = "go-now"
 apply_workflow = "ship.yml"
 apply_run_match = "ship {repo}#{number}"
-progress_poll_secs = 7
+progress_poll_secs = 17
 progress_timeout_secs = 99
 approval_queues_for_window = true
 merge_method = "squash"
@@ -212,7 +212,7 @@ deploy_approval_comment = "merged {repo}#{number} {sha}"
 		DiscoverTTLSecs: 10, Cache: filepath.FromSlash("/home/alice/rel-acme.json"), ProductionBranch: "prod", StagingBranch: "staging",
 		ReleasePrefix: "rel/", HotfixPrefix: "fix/", GoTagPrefix: "ship/", HoldTagPrefix: "wait/", ListOtherPRs: false,
 		ReleaseNowCommand: "/now", ReleaseNowMinReason: 3, ReleaseNowDispatch: false, ReleaseNowDispatchEvent: "go-now",
-		ApplyWorkflow: "ship.yml", ApplyRunMatch: "ship {repo}#{number}", ProgressPollSecs: 7, ProgressTimeoutSecs: 99,
+		ApplyWorkflow: "ship.yml", ApplyRunMatch: "ship {repo}#{number}", ProgressPollSecs: 17, ProgressTimeoutSecs: 99,
 		ApprovalQueuesForWindow: true, MergeMethod: "squash",
 		MergedKeepSecs: 1, DeployStuckSecs: 2, DeployRefreshSecs: 3, DeployApprovalComment: "merged {repo}#{number} {sha}",
 	}
@@ -328,6 +328,7 @@ func TestErrors(t *testing.T) {
 		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n", `[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30`},
 		{"bool wrong type", minimal + "[workflows.release_pr]\nenabled = \"yes\"\n", `[workflows.release_pr] enabled: expected a boolean (true or false), got a string`},
 		{"icons", minimal + "[display]\nicons = \"emoji\"\n", `[display] icons: "emoji" is not one of nerd, unicode, ascii`},
+		{"apply_workflow path", minimal + "[workflows.release_pr]\nenabled = true\napply_workflow = \".github/workflows/apply.yml\"\n", `[workflows.release_pr] apply_workflow: ".github/workflows/apply.yml" must be the workflow's file name (apply.yml), not a path`},
 		{"theme", minimal + "[display]\ntheme = \"dark\"\n", `[display] theme: "dark" is not one of auto, mono`},
 		{"motion", minimal + "[display]\nmotion = \"some\"\n", `[display] motion: "some" is not one of full, off`},
 		{"mascot", minimal + "[display]\nmascot = \"cat\"\n", `[display] mascot: "cat" is not one of sprite, ascii, none`},
@@ -444,6 +445,15 @@ func TestWarnings(t *testing.T) {
 			[]string{"[repos]: reserved for a future release, ignored"}},
 		{"enabled missing", minimal + "[workflows.release_pr]\nmerge_method = \"squash\"\n",
 			[]string{"[workflows.release_pr] enabled: missing, the workflow stays off (add enabled = true to turn it on)"}},
+		{"progress poll floor", minimal + "[workflows.maintenance_window]\nenabled = true\n[workflows.release_pr]\nenabled = true\nprogress_poll_secs = 3\n",
+			[]string{"[workflows.release_pr] progress_poll_secs: 3 is below the floor of 10, using 10"}},
+		{"apply_run_match without number", minimal + "[workflows.maintenance_window]\nenabled = true\n[workflows.release_pr]\nenabled = true\napply_run_match = \"rel:{repo}\"\n",
+			[]string{`[workflows.release_pr] apply_run_match: "rel:{repo}" has no {number}: every release of a repo would match the same run`}},
+		{"progress without the window", minimal + "[workflows.release_pr]\nenabled = true\napply_workflow = \"ship.yml\"\nrelease_now_dispatch = true\n",
+			[]string{
+				"[workflows.release_pr] release_now_dispatch: has no effect without [workflows.maintenance_window] enabled = true (its manifest_repo runs the release)",
+				"[workflows.release_pr] apply_workflow: has no effect without [workflows.maintenance_window] enabled = true (its manifest_repo runs the release)",
+			}},
 		{"ceremony order", minimal + "[workflows.terraform_approve]\nenabled = true\nceremony_window = { timezone = \"America/New_York\", from = \"23:28\", to = \"23:00\" }\n",
 			[]string{"[workflows.terraform_approve] ceremony_window: from 23:28 is not before to 23:00; the window is same-day and will never be open"}},
 	}

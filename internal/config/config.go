@@ -64,6 +64,10 @@ type DisplayConfig struct {
 // with a warning.
 const MinRefreshSecs = 5
 
+// MinProgressPollSecs is the floor of release_pr.progress_poll_secs
+// when it is on: each poll lists Actions runs and reads a run's jobs.
+const MinProgressPollSecs = 10
+
 // BotsConfig is [bots].
 type BotsConfig struct {
 	Logins []string // lower-cased, deduped

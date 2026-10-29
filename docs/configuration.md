@@ -60,12 +60,18 @@ example; the docs under [workflows/](workflows/) explain the protocols:
 - [`release_pr`](workflows/release-pr.md)
 
 Cross-checks the loader enforces as errors: `release_pr.apply_run_match`
-accepts only the `{repo}` and `{number}` placeholders; `release_pr.approval_queues_for_window`
+accepts only the `{repo}` and `{number}` placeholders; `release_pr.apply_workflow`
+is a file name (`apply.yml`), not a path; `release_pr.approval_queues_for_window`
 needs `maintenance_window` enabled; `release_pr.org` is required when the
 review repos span several owners; times are `HH:MM`, zones are IANA
 names, and the window's `cutoff < release_from < start < end` on one day.
-`maintenance_window.manifest_repo` defaults to the first review repo, with
-a warning when there are several.
+
+And as warnings: `maintenance_window.manifest_repo` defaults to the first
+review repo when there are several; `release_pr.progress_poll_secs` has a
+floor of 10 (0 turns it off); an `apply_run_match` without `{number}`
+would match every release of a repo; `release_now_dispatch`,
+`apply_workflow` and `progress_poll_secs` do nothing without
+`maintenance_window`, whose `manifest_repo` runs the release.
 
 ## Installing the config from a repo
 
