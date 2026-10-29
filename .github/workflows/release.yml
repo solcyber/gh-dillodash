@@ -41,7 +41,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           awk -v v="${TAG#v}" '
-            /^## / { on = ($2 == v) ; next }
+            /^## / { h = $2; gsub(/[][]/, "", h); on = (h == v); next }
             on { print }
           ' CHANGELOG.md > notes.md
           if [ -s notes.md ]; then
