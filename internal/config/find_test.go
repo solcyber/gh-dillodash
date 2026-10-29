@@ -21,7 +21,7 @@ func TestFindPath(t *testing.T) {
 	home := t.TempDir()
 	xdg := filepath.Join(t.TempDir(), "xdg")
 	explicit := filepath.Join(t.TempDir(), "explicit.toml")
-	envVar := filepath.Join(t.TempDir(), "env.toml")
+	envPath := filepath.Join(t.TempDir(), "env.toml")
 	xdgCfg := filepath.Join(xdg, "dillodash", "config.toml")
 	homeCfg := filepath.Join(home, ".config", "dillodash", "config.toml")
 	legacy := filepath.Join(home, ".config", "pr-dash", "config.ini")
@@ -67,18 +67,18 @@ func TestFindPath(t *testing.T) {
 	}
 
 	// $DILLODASH_CONFIG beats both; missing is an error
-	_, _, err = FindPath("", env(map[string]string{"XDG_CONFIG_HOME": xdg, EnvVar: envVar}))
-	if err == nil || !strings.Contains(err.Error(), envVar+": not found ($DILLODASH_CONFIG)") {
+	_, _, err = FindPath("", env(map[string]string{"XDG_CONFIG_HOME": xdg, envVar: envPath}))
+	if err == nil || !strings.Contains(err.Error(), envPath+": not found ($DILLODASH_CONFIG)") {
 		t.Fatalf("env missing: %v", err)
 	}
-	touch(t, envVar)
-	p, ini, err = FindPath("", env(map[string]string{"XDG_CONFIG_HOME": xdg, EnvVar: envVar}))
-	if p != envVar || ini != "" || err != nil {
+	touch(t, envPath)
+	p, ini, err = FindPath("", env(map[string]string{"XDG_CONFIG_HOME": xdg, envVar: envPath}))
+	if p != envPath || ini != "" || err != nil {
 		t.Fatalf("env: %q %q %v", p, ini, err)
 	}
 
 	// --config beats everything; missing is an error, a directory is not a file
-	_, _, err = FindPath(explicit, env(map[string]string{EnvVar: envVar}))
+	_, _, err = FindPath(explicit, env(map[string]string{envVar: envPath}))
 	if err == nil || err.Error() != explicit+": not found" {
 		t.Fatalf("explicit missing: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestFindPath(t *testing.T) {
 		t.Fatal("a directory is not a config")
 	}
 	touch(t, explicit)
-	p, ini, err = FindPath(explicit, env(map[string]string{EnvVar: envVar}))
+	p, ini, err = FindPath(explicit, env(map[string]string{envVar: envPath}))
 	if p != explicit || ini != "" || err != nil {
 		t.Fatalf("explicit: %q %q %v", p, ini, err)
 	}
@@ -118,5 +118,55 @@ func TestLoad(t *testing.T) {
 	}
 	if _, err := Load(p, Overrides{}); err == nil || !strings.HasPrefix(err.Error(), p+": [reviews] repos:") {
 		t.Fatalf("Load error: %v", err)
+	}
+}
+
+func TestFindPathWithoutHOME(t *testing.T) {
+	home := t.TempDir()
+	cfg := filepath.Join(home, ".config", "dillodash", "config.toml")
+	touch(t, cfg)
+	// a Windows shell: no HOME, only USERPROFILE
+	p, _, err := FindPath("", fakeEnv(map[string]string{"USERPROFILE": home}))
+	if p != cfg || err != nil {
+		t.Errorf("USERPROFILE: %q %v", p, err)
+	}
+	if got := DefaultPath(fakeEnv(map[string]string{"USERPROFILE": home})); got != cfg {
+		t.Errorf("DefaultPath via USERPROFILE = %q", got)
+	}
+	// nothing at all falls back to the OS's idea of home, never to a
+	// relative path
+	if got := DefaultPath(fakeEnv(nil)); !filepath.IsAbs(got) {
+		t.Errorf("DefaultPath without any env = %q (relative)", got)
+	}
+}
+
+func TestInstallPath(t *testing.T) {
+	if got := InstallPath(fakeEnv(map[string]string{"HOME": "/home/alice", envVar: "/etc/dash.toml"})); got != "/etc/dash.toml" {
+		t.Errorf("DILLODASH_CONFIG wins: %q", got)
+	}
+	if got := InstallPath(fakeEnv(map[string]string{"HOME": "/home/alice"})); got != filepath.FromSlash("/home/alice/.config/dillodash/config.toml") {
+		t.Errorf("default: %q", got)
+	}
+}
+
+func TestWriteFileAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "config.toml")
+	if err := WriteFileAtomic(path, []byte("one"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteFileAtomic(path, []byte("two"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "two" {
+		t.Errorf("content %q", got)
+	}
+	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 && os.Getenv("OS") != "Windows_NT" {
+		t.Errorf("mode %o", st.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	if len(entries) != 1 {
+		t.Errorf("leftovers: %v", entries)
 	}
 }

@@ -57,7 +57,7 @@ func TestDefaults(t *testing.T) {
 
 func TestDefaultHasNoRepos(t *testing.T) {
 	d := Default()
-	if len(d.Reviews.Repos) != 0 || d.Display.RefreshSecs != 300 || d.GitHub.Host != "github.com" {
+	if len(d.Reviews.Repos) != 0 || d.Display.RefreshSecs != 300 || d.GitHub.Host != "" {
 		t.Fatalf("Default() = %+v", d)
 	}
 	if !reflect.DeepEqual(d.Bots.Logins, []string{"github-actions", "dependabot"}) {
@@ -314,8 +314,8 @@ func TestErrors(t *testing.T) {
 		{"int float", minimal + "ci_recheck_secs = 1.5\n", `[reviews] ci_recheck_secs: expected an integer, got a float`},
 		{"int negative", minimal + "ci_recheck_secs = -1\n", `[reviews] ci_recheck_secs: must not be negative, got -1`},
 		{"string wrong type", minimal + "[github]\nhost = 1\n", `[github] host: expected a string, got an integer`},
-		{"host empty", minimal + "[github]\nhost = \"\"\n", `[github] host: must not be empty`},
 		{"host url", minimal + "[github]\nhost = \"https://github.com\"\n", `[github] host: "https://github.com" must be a bare hostname like "github.com"`},
+		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n", `[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30`},
 		{"bool wrong type", minimal + "[workflows.release_pr]\nenabled = \"yes\"\n", `[workflows.release_pr] enabled: expected a boolean (true or false), got a string`},
 		{"icons", minimal + "[display]\nicons = \"emoji\"\n", `[display] icons: "emoji" is not one of nerd, unicode, ascii`},
 		{"theme", minimal + "[display]\ntheme = \"dark\"\n", `[display] theme: "dark" is not one of auto, mono`},
@@ -434,8 +434,6 @@ func TestWarnings(t *testing.T) {
 			[]string{"[repos]: reserved for a future release, ignored"}},
 		{"enabled missing", minimal + "[workflows.release_pr]\nmerge_method = \"squash\"\n",
 			[]string{"[workflows.release_pr] enabled: missing, the workflow stays off (add enabled = true to turn it on)"}},
-		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n",
-			[]string{"[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30"}},
 		{"ceremony order", minimal + "[workflows.terraform_approve]\nenabled = true\nceremony_window = { timezone = \"America/New_York\", from = \"23:28\", to = \"23:00\" }\n",
 			[]string{"[workflows.terraform_approve] ceremony_window: from 23:28 is not before to 23:00; the window is same-day and will never be open"}},
 	}
@@ -544,8 +542,9 @@ func TestIsBot(t *testing.T) {
 	b := BotsConfig{Logins: []string{"github-actions", "dependabot", "infra-bot"}}
 	for login, want := range map[string]bool{
 		"github-actions": true, "GitHub-Actions": true, "github-actions[bot]": true,
-		"dependabot-preview": true, "renovate[bot]": true, "infra-bot": true,
-		"alice": false, "": false, "bot": false,
+		"renovate[bot]": true, "infra-bot": true, "INFRA-BOT": true,
+		"dependabot-preview": false, // exact, not a prefix
+		"alice":              false, "": false, "bot": false,
 	} {
 		if got := b.IsBot(login); got != want {
 			t.Errorf("IsBot(%q) = %v", login, got)
@@ -566,5 +565,15 @@ func TestSuggest(t *testing.T) {
 	}
 	if levenshtein("kitten", "sitting") != 3 || levenshtein("", "abc") != 3 || levenshtein("a", "a") != 0 {
 		t.Error("levenshtein")
+	}
+}
+
+func TestIsBotIsExact(t *testing.T) {
+	b := BotsConfig{Logins: []string{"al"}}
+	if b.IsBot("alice") {
+		t.Error("a configured \"al\" must not make alice a bot")
+	}
+	if !b.IsBot("al") || !b.IsBot("al[bot]") {
+		t.Error("the login itself, with or without the suffix, is a bot")
 	}
 }

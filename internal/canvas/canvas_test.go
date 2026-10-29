@@ -70,14 +70,6 @@ func TestRenderCoalesces(t *testing.T) {
 	}
 }
 
-func TestLineBand(t *testing.T) {
-	c := New(6, 1)
-	c.Line(0, 1, text.Line{Segs: []text.Seg{text.S("x", "md.code")}, Band: true}, 5, false)
-	if c.StyleAt(0, 3) != "band" || c.StyleAt(0, 5) != "text" || c.StyleAt(0, 1) != "md.code" {
-		t.Errorf("styles %q %q %q", c.StyleAt(0, 1), c.StyleAt(0, 3), c.StyleAt(0, 5))
-	}
-}
-
 func TestPutRaw(t *testing.T) {
 	c := New(4, 1)
 	c.PutStr(0, 0, "abcd", "a")

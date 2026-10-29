@@ -459,23 +459,23 @@ func TestRenderAppliesExtraAttributes(t *testing.T) {
 	})
 }
 
-func TestRenderLinePadsToWidth(t *testing.T) {
+func TestRenderPaddedSegsCarryBackground(t *testing.T) {
 	withTier(t, Color256, func() {
-		l := text.Line{Segs: []text.Seg{text.S("abc", "title")}}
-		out := RenderLine(l, false, 10)
+		segs := []text.Seg{text.S("abc", "title")}
+		out := Render(text.PadSegs(segs, 10), false, false)
 		if ansi.StringWidth(out) != 10 || ansi.Strip(out) != "abc       " {
-			t.Errorf("RenderLine = %q", ansi.Strip(out))
+			t.Errorf("Render = %q", ansi.Strip(out))
 		}
 		// the padding carries the band / selected-row background
-		band := RenderLine(text.Line{Segs: l.Segs, Band: true}, false, 10)
+		band := Render(text.PadSegs(segs, 10), false, true)
 		if !strings.Contains(band, fmt.Sprintf("48;5;%d", BandBG)) {
 			t.Errorf("band padding = %q", band)
 		}
-		sel := RenderLine(l, true, 10)
+		sel := Render(text.PadSegs(segs, 10), true, false)
 		if !strings.Contains(sel, fmt.Sprintf("48;5;%d", SelBG)) || strings.Contains(sel, fmt.Sprintf("48;5;%d", K)) {
 			t.Errorf("selected padding = %q", sel)
 		}
-		if w := ansi.StringWidth(RenderLine(text.Line{Segs: []text.Seg{text.S("日本語です", "text")}}, false, 5)); w != 5 {
+		if w := ansi.StringWidth(Render(text.PadSegs([]text.Seg{text.S("日本語です", "text")}, 5), false, false)); w != 5 {
 			t.Errorf("clipped width = %d", w)
 		}
 	})

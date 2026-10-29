@@ -30,8 +30,8 @@ func (s *stub) Classify(pr *model.PR, _ *model.PR, _ string, _ bool) *Classifica
 	}
 	return &Classification{Label: s.label, Style: "chip.await", NeedsYou: true}
 }
-func (s *stub) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string) {
-	return s.state, []string{s.name + " warn"}
+func (s *stub) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string, error) {
+	return s.state, []string{s.name + " warn"}, nil
 }
 func (s *stub) Sections(App, []string, string) []Row {
 	return []Row{{Kind: "header", Item: s.name}}
@@ -63,9 +63,9 @@ func TestSetOrderAndMerge(t *testing.T) {
 	if s.Get("a") != b || s.Get("zzz") != nil {
 		t.Error("Get")
 	}
-	states, warns := s.RefreshAll(context.Background(), nil, nil, nil, nil)
-	if len(states) != 2 || len(warns) != 2 || warns[0] != "a warn" {
-		t.Errorf("refresh: %v %v", states, warns)
+	states, warns, err := s.RefreshAll(context.Background(), nil, nil, nil, nil)
+	if len(states) != 2 || len(warns) != 2 || warns[0] != "a warn" || err != nil {
+		t.Errorf("refresh: %v %v %v", states, warns, err)
 	}
 	if rows := s.LegendRows(); len(rows) != 2 {
 		t.Errorf("legend rows = %d", len(rows))
@@ -95,5 +95,40 @@ func TestEmptySet(t *testing.T) {
 	e, _ := NewSet(nil)
 	if !e.Empty() || len(e.Keys("list")) != 0 || len(e.RowKinds()) != 0 {
 		t.Error("empty set should be inert")
+	}
+}
+
+type ciState struct{ prs []*model.PR }
+
+func (s *ciState) CIPRs() []*model.PR { return s.prs }
+
+type deployStub struct{ stub }
+
+func (deployStub) ProvidesDeploys() bool { return true }
+
+func TestCIPRsAndProvidesDeploys(t *testing.T) {
+	a := &stub{name: "a"}
+	b := &stub{name: "b", state: &ciState{prs: []*model.PR{{Number: 1}, {Number: 2}}}}
+	s, err := NewSet(nil, a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[string]State{"a": nil, "b": b.state, "zzz": (*ciState)(nil)}
+	if got := s.CIPRs(states); len(got) != 2 {
+		t.Errorf("CIPRs = %d", len(got))
+	}
+	var none *Set
+	if none.CIPRs(states) != nil || none.ProvidesDeploys() {
+		t.Error("a nil set contributes nothing")
+	}
+	if s.ProvidesDeploys() {
+		t.Error("plain stubs provide no deploys")
+	}
+	d, err := NewSet(nil, &deployStub{stub{name: "d"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.ProvidesDeploys() {
+		t.Error("a DeployProvider turns the D key on")
 	}
 }

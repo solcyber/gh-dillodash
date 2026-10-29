@@ -186,3 +186,53 @@ func TestDecisionLabel(t *testing.T) {
 		t.Errorf("chip styles: %v", ChipForLabel)
 	}
 }
+
+func TestIdentCarriesOwner(t *testing.T) {
+	a := &PR{Repo: Repo{Owner: "acme", Name: "api"}, Number: 5}
+	b := &PR{Repo: Repo{Owner: "beta", Name: "api"}, Number: 5}
+	if a.Ident() == b.Ident() {
+		t.Fatal("same name under two owners must be two idents")
+	}
+	seen := map[Ident]bool{a.Ident(): true}
+	if seen[b.Ident()] {
+		t.Fatal("map keyed by Ident conflated two owners")
+	}
+	if got := a.Ident().String(); got != "acme/api#5" {
+		t.Errorf("String() = %q", got)
+	}
+	i := &Issue{Repo: a.Repo, Number: 5}
+	if i.Ident() != a.Ident() {
+		t.Error("a PR and an issue with the same number share the row identity")
+	}
+}
+
+func TestClusterCITruncatedUsesRollupState(t *testing.T) {
+	// 50 passing contexts came back, but the rollup counts 52 and says
+	// FAILURE: the two unseen ones must not be painted as passes
+	var nodes []CheckContext
+	for i := 0; i < 50; i++ {
+		nodes = append(nodes, checkRun("ok", "COMPLETED", "SUCCESS"))
+	}
+	pr := prWithChecks(nodes...)
+	pr.HeadCommit().Rollup.Contexts.TotalCount = 52
+	pr.HeadCommit().Rollup.State = "FAILURE"
+	c, ok := ClusterCI(pr)
+	if !ok || len(c.Failed) != 1 || !strings.Contains(c.Failed[0], "2 more") || !strings.Contains(c.Glyphs, string(CIFail)) {
+		t.Errorf("truncated failure: %+v ok=%v", c, ok)
+	}
+	pr.HeadCommit().Rollup.State = "PENDING"
+	c, _ = ClusterCI(pr)
+	if len(c.Failed) != 0 || !strings.Contains(c.Glyphs, string(CIQueued)) {
+		t.Errorf("truncated pending: %+v", c)
+	}
+	pr.HeadCommit().Rollup.State = "SUCCESS"
+	c, _ = ClusterCI(pr)
+	if len(c.Failed) != 0 || strings.ContainsAny(c.Glyphs, string([]byte{CIFail, CIQueued})) {
+		t.Errorf("truncated success: %+v", c)
+	}
+	pr.HeadCommit().Rollup.Contexts.TotalCount = 50
+	c, _ = ClusterCI(pr)
+	if strings.Contains(c.Glyphs, string(CIQueued)) {
+		t.Errorf("nothing missing, nothing added: %+v", c)
+	}
+}

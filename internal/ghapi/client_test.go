@@ -3,6 +3,7 @@ package ghapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -204,8 +205,11 @@ func TestHTTPErrorsAndRateLimitHeaders(t *testing.T) {
 	if !ok || e.Status != 500 || e.Message != "boom" || e.IsRateLimit() {
 		t.Fatalf("500: %#v", err)
 	}
-	if !strings.HasPrefix(e.Error(), "POST http://") || !strings.HasSuffix(e.Error(), "/repos/acme/infra/pulls/3543/reviews -> 500: boom") {
+	if e.Error() != "GitHub 500: boom" {
 		t.Errorf("Error(): %q", e.Error())
+	}
+	if !strings.HasPrefix(e.Verbose(), "POST http://") || !strings.HasSuffix(e.Verbose(), "/repos/acme/infra/pulls/3543/reviews -> 500: boom") {
+		t.Errorf("Verbose(): %q", e.Verbose())
 	}
 
 	before := time.Now()
@@ -245,7 +249,7 @@ func TestNetworkErrors(t *testing.T) {
 	c := s.client(t)
 	s.Close()
 	_, err := c.Whoami(context.Background())
-	if !IsNetwork(err) {
+	if !isNetwork(err) {
 		t.Fatalf("closed server: %v", err)
 	}
 	if e, _ := AsError(err); e.Status != 0 || !strings.HasPrefix(e.Error(), "network error: ") {
@@ -266,7 +270,7 @@ func TestNetworkErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = fast.Whoami(context.Background())
-	if !IsNetwork(err) || !strings.Contains(err.Error(), "timed out") {
+	if !isNetwork(err) || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("timeout: %v", err)
 	}
 
@@ -289,7 +293,7 @@ func TestNetworkErrors(t *testing.T) {
 		}
 	})
 	_, err = drop.client(t).Whoami(context.Background())
-	if !IsNetwork(err) {
+	if !isNetwork(err) {
 		t.Fatalf("dropped mid-body: %v", err)
 	}
 
@@ -297,7 +301,7 @@ func TestNetworkErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = s.client(t).Whoami(ctx)
-	if !IsNetwork(err) {
+	if !isNetwork(err) {
 		t.Fatalf("cancelled: %v", err)
 	}
 }
@@ -307,7 +311,7 @@ func TestTruncatedBody(t *testing.T) {
 	s.jsonOK("GET", "/user", `{"trunc`)
 	_, err := s.client(t).Whoami(context.Background())
 	e, ok := AsError(err)
-	if !ok || !strings.HasPrefix(e.Message, "bad response from GET ") || IsNetwork(err) {
+	if !ok || !strings.HasPrefix(e.Message, "bad response from GET ") || isNetwork(err) {
 		t.Fatalf("truncated JSON: %v", err)
 	}
 	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
@@ -503,11 +507,77 @@ func TestListOpenChunkFailure(t *testing.T) {
 	})
 	repos := []model.Repo{infra, portal, {Owner: "acme", Name: "a"}, {Owner: "acme", Name: "b"}, {Owner: "acme", Name: "lonely"}}
 	out, err := s.client(t).ListOpen(context.Background(), repos)
-	if err == nil || !strings.Contains(err.Error(), "502") {
-		t.Fatalf("the failed chunk is the call's error: %v", err)
+	if err != nil {
+		t.Fatalf("one failed chunk is not the call's error: %v", err)
 	}
-	if out[infra].Err != nil || out[repos[4]].Err == nil {
-		t.Errorf("the other chunk still landed: %+v / %+v", out[infra], out[repos[4]])
+	if out[infra].Err != nil || out[repos[4]].Err == nil || !strings.Contains(out[repos[4]].Err.Error(), "502") {
+		t.Errorf("the failed chunk's repos carry the error, the others landed: %+v / %+v", out[infra], out[repos[4]])
+	}
+}
+
+func TestListOpenAllChunksFailIsAnError(t *testing.T) {
+	s := newServer(t)
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(502)
+		io.WriteString(w, `{"message":"Bad Gateway"}`)
+	})
+	repos := []model.Repo{infra, portal, {Owner: "acme", Name: "a"}, {Owner: "acme", Name: "b"}, {Owner: "acme", Name: "lonely"}}
+	out, err := s.client(t).ListOpen(context.Background(), repos)
+	if err == nil || !strings.Contains(err.Error(), "502") {
+		t.Fatalf("every chunk failing is an outage, so the call fails: %v", err)
+	}
+	if out[infra].Err == nil || out[repos[4]].Err == nil {
+		t.Error("every repo carries the error too")
+	}
+}
+
+func TestListOpenRateLimitFailsTheCall(t *testing.T) {
+	s := newServer(t)
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		w.Header().Set("Content-Type", "application/json")
+		if len(req.Variables) == 2 {
+			w.Header().Set("Retry-After", "30")
+			w.WriteHeader(403)
+			io.WriteString(w, `{"message":"You have exceeded a secondary rate limit"}`)
+			return
+		}
+		io.WriteString(w, `{"data":{"r0":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}},
+			"r1":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}},
+			"r2":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}},
+			"r3":{"issues":{"totalCount":0,"nodes":[]},"pullRequests":{"totalCount":0,"nodes":[]}}}}`)
+	})
+	repos := []model.Repo{infra, portal, {Owner: "acme", Name: "a"}, {Owner: "acme", Name: "b"}, {Owner: "acme", Name: "lonely"}}
+	_, err := s.client(t).ListOpen(context.Background(), repos)
+	if !IsRateLimit(err) {
+		t.Fatalf("a rate limit on any chunk fails the call so the refresh backs off: %v", err)
+	}
+}
+
+func TestSecondaryRateLimits(t *testing.T) {
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	at, ok := retryAt(429, "", nil, now)
+	if !ok || !at.Equal(now.Add(secondaryFloor)) {
+		t.Errorf("a bare 429 waits the floor: %v %v", at, ok)
+	}
+	at, ok = retryAt(403, "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.", nil, now)
+	if !ok || !at.Equal(now.Add(secondaryFloor)) {
+		t.Errorf("a secondary-limit 403 without headers waits the floor: %v %v", at, ok)
+	}
+	if _, ok := retryAt(403, "Resource not accessible by personal access token", nil, now); ok {
+		t.Error("a permission 403 is not a rate limit")
+	}
+	if _, ok := retryAt(500, "", http.Header{"Retry-After": {"5"}}, now); ok {
+		t.Error("only 403 and 429 are rate limits, whatever the headers say")
+	}
+	at, ok = retryAt(429, "", http.Header{"Retry-After": {"7"}}, now)
+	if !ok || !at.Equal(now.Add(7*time.Second)) {
+		t.Errorf("Retry-After wins over the floor: %v %v", at, ok)
+	}
+	date := now.Add(90 * time.Second)
+	at, ok = retryAt(403, "abuse detection", http.Header{"Retry-After": {date.Format(http.TimeFormat)}}, now)
+	if !ok || !at.Equal(date) {
+		t.Errorf("an HTTP-date Retry-After is parsed: %v %v", at, ok)
 	}
 }
 
@@ -819,5 +889,37 @@ func TestRESTOperations(t *testing.T) {
 	s.handle("POST", "/repos/acme/infra/issues/1/comments", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
 	if err := cl.Comment(ctx, infra, 1, "x"); err != nil {
 		t.Errorf("204: %v", err)
+	}
+}
+
+func TestNewHonoursGHHost(t *testing.T) {
+	t.Setenv("GH_HOST", "ghe.acme.test")
+	c, err := New(Options{Token: "x"})
+	if err != nil || c.Host() != "ghe.acme.test" {
+		t.Errorf("GH_HOST: %v %q", err, c.Host())
+	}
+	c, err = New(Options{Host: "other.test", Token: "x"})
+	if err != nil || c.Host() != "other.test" {
+		t.Errorf("an explicit host wins: %v %q", err, c.Host())
+	}
+	t.Setenv("GH_HOST", "")
+	t.Setenv("GH_CONFIG_DIR", t.TempDir())
+	c, err = New(Options{Token: "x"})
+	if err != nil || c.Host() != "github.com" {
+		t.Errorf("default: %v %q", err, c.Host())
+	}
+}
+
+func TestNoTokenError(t *testing.T) {
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_ENTERPRISE_TOKEN", "")
+	t.Setenv("GITHUB_ENTERPRISE_TOKEN", "")
+	t.Setenv("GH_CONFIG_DIR", t.TempDir())
+	t.Setenv("GH_PATH", "/nonexistent/gh")
+	_, err := New(Options{Host: "ghe.nowhere.test"})
+	var nt *NoTokenError
+	if !errors.As(err, &nt) || nt.Host != "ghe.nowhere.test" || !strings.Contains(err.Error(), "gh auth login") {
+		t.Errorf("no token: %v", err)
 	}
 }

@@ -20,8 +20,8 @@ type Source struct {
 	At   time.Time // when it was pulled
 }
 
-// DefaultPullPath is the file pulled when a spec names only the repo.
-const DefaultPullPath = "config.toml"
+// defaultPullPath is the file pulled when a spec names only the repo.
+const defaultPullPath = "config.toml"
 
 // Spec is "owner/repo:path".
 func (s Source) Spec() string { return s.Repo.String() + ":" + s.Path }
@@ -29,7 +29,7 @@ func (s Source) Spec() string { return s.Repo.String() + ":" + s.Path }
 // ParseSpec reads "owner/repo" or "owner/repo:path/in/repo.toml".
 func ParseSpec(spec string) (Source, error) {
 	spec = strings.TrimSpace(spec)
-	repoPart, path := spec, DefaultPullPath
+	repoPart, path := spec, defaultPullPath
 	if i := strings.IndexByte(spec, ':'); i >= 0 {
 		repoPart, path = spec[:i], strings.Trim(spec[i+1:], "/")
 	}

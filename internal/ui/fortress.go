@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"math/rand/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
@@ -94,8 +93,7 @@ func (m *Model) fortressBuild() ([]*fortress.Item, []fortress.Lane) {
 // fortressPrepare brings the view up to date with the last refresh.
 func (m *Model) fortressPrepare() *fortress.View {
 	v := m.fortress.view
-	gen := fmt.Sprintf("%s|%d|%d", m.lastRefreshWall, len(m.allPRs), len(m.issues))
-	v.Prepare(m.h, m.w, gen, m.fortress.data != nil)
+	v.Prepare(m.h, m.w, m.refreshStamp, m.fortress.data != nil)
 	return v
 }
 
@@ -171,6 +169,9 @@ func (m *Model) fortressTickMS() int {
 		base = fx.AmbientMS
 	}
 	if fx.Motion != "full" {
+		if base == 400 {
+			return m.idleWakeMS() // the still map: wake for the countdowns only
+		}
 		return base
 	}
 	if fx.Now()-m.lastKey >= fx.AmbientIdleSecs {

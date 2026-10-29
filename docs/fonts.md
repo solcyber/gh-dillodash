@@ -82,10 +82,10 @@ icons = "unicode"
 ```
 
 or for one run, `--icons unicode`. The `unicode` set uses plain Unicode
-symbols that any monospace font has; `ascii` uses only ASCII and is picked
-automatically when the terminal cannot show non-ASCII. Every status has its
-own shape in every set, so nothing depends on the icons being Nerd Font
-glyphs.
+symbols that any monospace font has; `ascii` uses only ASCII, for a
+terminal that cannot show anything else (nothing detects that: set it).
+Every status has its own shape in every set, so nothing depends on the
+icons being Nerd Font glyphs.
 
 ## Licensing
 
@@ -93,6 +93,10 @@ glyphs.
   Bitstream Vera License covering its Vera base (`internal/fonts/LICENSE.md`).
 - The **Nerd Fonts** patched fonts are under the SIL Open Font License 1.1
   and the patcher under MIT (`internal/fonts/NERD-FONTS-LICENSE.md`).
+
+`gh dillodash font license` prints both texts, and `font install` writes
+them beside the font files as `LICENSE-Hack.md` and `LICENSE-NerdFonts.md`,
+so an installed copy carries its notices.
 - The icon sets patched into the font carry their own licenses, listed in
   `internal/fonts/NERD-FONTS-README.md`: Octicons (MIT), Codicons and Font
   Awesome (CC BY 4.0), Devicons, Font Awesome Extension, Powerline Extra,

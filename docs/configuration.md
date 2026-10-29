@@ -1,10 +1,14 @@
 # Configuration
 
 dillodash reads one TOML file. It looks, in order, at `--config PATH`,
-`$DILLODASH_CONFIG`, `$XDG_CONFIG_HOME/dillodash/config.toml`, and
+`$DILLODASH_CONFIG`, `$XDG_CONFIG_HOME/dillodash/config.toml`
+(`%APPDATA%\dillodash\config.toml` on Windows), and
 `~/.config/dillodash/config.toml`. `gh dillodash config init` writes the
-annotated example there; `gh dillodash config check` validates a config and
-probes GitHub with it.
+annotated example to the first of those that is set (`--config`,
+`$DILLODASH_CONFIG`, else the default); `gh dillodash config check`
+validates a config and probes GitHub with it. Every write (`init`,
+`migrate`, `pull`) is atomic, and an overwrite keeps the previous file as
+`config.toml.bak`.
 
 [`config.example.toml`](../config.example.toml) shows every key with its
 default and a comment. This page explains the sections.
@@ -13,18 +17,20 @@ default and a comment. This page explains the sections.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `host` | `github.com` | A GitHub Enterprise Server hostname. Sign in to it with `gh auth login --hostname HOST`; dillodash uses that token. |
+| `host` | unset | A GitHub Enterprise Server hostname. Unset, the host is `$GH_HOST`, then `gh`'s default host, then `github.com`. Sign in to it with `gh auth login --hostname HOST`; dillodash uses that token. |
 | `login` | unset | The login you expect to act as. When `gh` is signed in as someone else dillodash warns, pauses three seconds, and continues as that account (`gh auth switch` changes it). |
 
 There is no token in the config. dillodash asks the `gh` CLI for the token
-of `host`, the way every `gh` extension does.
+of `host`, the way every `gh` extension does; `GH_TOKEN` and
+`GITHUB_TOKEN` in the environment override the `gh` login, as they do for
+`gh` itself (see [auth.md](auth.md)).
 
 ## `[reviews]` (required)
 
 | Key | Default | Meaning |
 |---|---|---|
 | `repos` | — | The repositories whose open pull requests and issues are listed, as `"owner/name"`. One or many; several owners are fine. `--repo OWNER/NAME` (repeatable) replaces the list for one run. With more than one repo every reference reads `repo#N`. |
-| `ci_recheck_secs` | `900` | When CI is read through the Actions API (a fine-grained token cannot read the check rollup), a settled head commit is re-checked after this long; a failing one on every refresh. |
+| `ci_recheck_secs` | `900` | When CI is read through the Actions API (a fine-grained token cannot read the check rollup), a settled, passing head commit is re-checked after this long; a failing or running one on every refresh; everything on `r`. |
 
 ## `[display]`
 
@@ -40,7 +46,7 @@ of `host`, the way every `gh` extension does.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `logins` | `["github-actions", "dependabot"]` | Authors drawn as bots (dimmed, blue) in the list and the timeline. A login ending in `[bot]` always counts. Add your own automation account. |
+| `logins` | `["github-actions", "dependabot"]` | Authors drawn as bots (dimmed, blue) in the list and the timeline. The match is exact (case-insensitive), with or without a `[bot]` suffix, and a login ending in `[bot]` always counts. Add your own automation account. The signed-in login may not be one of these: dillodash refuses to post as a bot, and `config check` fails. |
 
 ## `[workflows.*]`
 
@@ -53,12 +59,12 @@ example; the docs under [workflows/](workflows/) explain the protocols:
 - [`maintenance_window`](workflows/maintenance-window.md)
 - [`release_pr`](workflows/release-pr.md)
 
-Cross-checks the loader enforces: `release_pr.approval_queues_for_window`
+Cross-checks the loader enforces as errors: `release_pr.approval_queues_for_window`
 needs `maintenance_window` enabled; `release_pr.org` is required when the
-review repos span several owners; `maintenance_window.manifest_repo`
-defaults to the first review repo (with a warning when there are several);
-times are `HH:MM`, zones are IANA names, and the window's
-`cutoff < release_from < start < end` on one day.
+review repos span several owners; times are `HH:MM`, zones are IANA
+names, and the window's `cutoff < release_from < start < end` on one day.
+`maintenance_window.manifest_repo` defaults to the first review repo, with
+a warning when there are several.
 
 ## Installing the config from a repo
 
@@ -77,10 +83,16 @@ refused if it does not pass, so a broken commit never replaces a working
 config. The installed copy starts with two comment lines recording the
 source, the blob sha and the time; a bare `config pull` reads them, and
 `config check` says `source: current` or `OUTDATED` after asking GitHub
-for the file's current sha. `--config PATH` installs elsewhere,
-`--host HOST` reads from a GitHub Enterprise Server, `--force` reinstalls
-an unchanged file. Personal settings (`--icons`, `--motion`, `--refresh`)
-stay on the command line, so the pulled file is the whole config.
+for the file's current sha.
+
+`config pull` never silently replaces a config you wrote by hand, or
+switches the repo an installed one follows: both need `--force`, and the
+previous file is kept as `config.toml.bak`. `--force` also reinstalls an
+unchanged file. `--config PATH` installs elsewhere (otherwise
+`$DILLODASH_CONFIG`, then the default path, so the dashboard reads what
+was just written); `--host HOST` reads from a GitHub Enterprise Server.
+Personal settings (`--icons`, `--motion`, `--refresh`) stay on the command
+line, so the pulled file is the whole config.
 
 ## Precedence and errors
 
@@ -102,7 +114,8 @@ do not speak.
 
 | Path | What |
 |---|---|
-| `~/.cache/dillodash/release-repos-<org>.json` | The `release_pr` workflow's discovered repo list, cached for `discover_ttl_secs`. Written 0600. Delete it to re-discover now. |
+| `$XDG_CACHE_HOME/dillodash/release-repos-<org>.json` (default `~/.cache/dillodash/`) | The `release_pr` workflow's discovered repo list, cached for `discover_ttl_secs`. Written 0600. Delete it to re-discover now. |
+| `config.toml.bak` beside the config | The previous config, kept whenever `config pull --force` or `config migrate --force` replaces one. |
 | `$TMPDIR/dillodash-*.md`, `*.diff` | A comment being edited in `$EDITOR`, a diff shown in `$PAGER`. Created 0600 and removed afterwards. |
 
 Nothing else. The token never touches the disk through dillodash.

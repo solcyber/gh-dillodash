@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -60,8 +60,11 @@ func (m *Model) draw(c *canvas.Canvas) {
 	scenes.Wipe(c, m.fx, h, w)
 	m.drawStatus(c, h, w)
 	m.drawKeys(c, h, w)
-	if m.overlay == "help" {
+	switch m.overlay {
+	case "help":
 		m.drawHelp(c, h, w)
+	case "message":
+		m.drawMessage(c, h, w)
 	}
 	if m.modal != nil {
 		m.modal.Draw(c, m.fx)
@@ -132,7 +135,7 @@ type part struct {
 // the GraphQL budget meter, the draining countdown to the next refresh.
 func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	refreshing := m.refreshing
-	backoff := int(time.Until(m.rateLimitedUntil).Seconds())
+	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
 	var parts []part
 	if m.detail == nil {
 		parts = append(parts, part{0, []text.Seg{text.S("  "+m.ver, "build")}})
@@ -192,7 +195,7 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 		left = append([]text.Seg{text.S(" "+glyphs.Ico("logo"), logo)}, m.appNameSegs(refreshing)...)
 		left = append(left, text.S(" ", "hdr.app"))
 		left = append(left, pl("hdr.sep.app")...)
-		left = append(left, text.S(" "+m.reposText()+" ", "hdr.repo"))
+		left = append(left, text.S(" "+text.Ellip(m.reposText(), max(10, w/3))+" ", "hdr.repo"))
 		left = append(left, pl("hdr.sep.repo")...)
 		minLeft = text.SegsWidth(left)
 	}
@@ -290,7 +293,8 @@ func (m *Model) drawSubheader(c *canvas.Canvas, w int) {
 			segs = append(segs, text.S(crumb, "crumb"), text.S("files", here(ViewFiles)))
 		}
 		if m.view == ViewPatch && len(m.files) > 0 {
-			segs = append(segs, text.S(crumb, "crumb"), text.S(m.files[m.fileSel].Filename, "crumb.here"))
+			room := max(8, w-text.SegsWidth(m.positionSegs())-2-text.SegsWidth(segs)-text.Width(crumb))
+			segs = append(segs, text.S(crumb, "crumb"), text.S(text.EllipLeft(m.files[m.fileSel].Filename, room), "crumb.here"))
 		}
 		if m.view == ViewDetail && m.raw {
 			segs = append(segs, text.S("   raw", "budget.low"))
@@ -333,7 +337,14 @@ func (m *Model) summarySegs() []text.Seg {
 		}
 		return "sum.muted"
 	}
-	segs := []text.Seg{text.S(fmt.Sprintf(" %s%d need you", glyphs.Ico("shield"), need), attn(need, "sum.attn")), sep}
+	segs := []text.Seg{text.S(fmt.Sprintf(" %s%d need you", glyphs.Ico("shield"), need), attn(need, "sum.attn"))}
+	if m.filter != "" {
+		// right after the count, so a narrow row still shows the filter
+		// is on (it would be the first thing clipped at the end)
+		segs = append(segs, text.S("  ", "text"))
+		segs = append(segs, scenes.Chip(glyphs.Ico("filter")+m.filter, "chip.filter")...)
+	}
+	segs = append(segs, sep)
 	if wf := m.wf.SummarySegs(m); len(wf) > 0 {
 		segs = append(segs, wf...)
 		segs = append(segs, sep)
@@ -343,10 +354,6 @@ func (m *Model) summarySegs() []text.Seg {
 		text.S(fmt.Sprintf("%s%d issues", glyphs.Ico("issue"), issues), "sum.muted"))
 	if m.showAll {
 		segs = append(segs, sep, text.S("showing approved (A)", "sum.info"))
-	}
-	if m.filter != "" {
-		segs = append(segs, text.S("  ", "text"))
-		segs = append(segs, scenes.Chip(glyphs.Ico("filter")+m.filter, "chip.filter")...)
 	}
 	return segs
 }
@@ -388,12 +395,12 @@ func (m *Model) positionSegs() []text.Seg {
 // replaces it; results are blue, refusals and errors gold (with a shake),
 // and an error stays until something supersedes it.
 func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
-	backoff := int(time.Until(m.rateLimitedUntil).Seconds())
+	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
 	age := fx.Now() - m.statusAt
 	var segs []text.Seg
 	switch {
 	case backoff > 0:
-		segs = []text.Seg{text.S(fmt.Sprintf(" %sGitHub rate limit hit — refresh paused %ds (auto-resumes; raise refresh_secs if this recurs)", glyphs.Ico("warn"), backoff), "toast.warn")}
+		segs = []text.Seg{text.S(fmt.Sprintf(" %srate limited by GitHub — refresh paused %ds; raise refresh_secs if it recurs", glyphs.Ico("warn"), backoff), "toast.warn")}
 	case m.errText != "":
 		segs = []text.Seg{text.S(" ", "text"), text.S(" "+glyphs.G("err")+" ", "chip.err"), text.S(" "+m.errText, "toast.warn")}
 	case m.status != "" && m.statusKind == "spin":
@@ -421,52 +428,39 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 	if shake, ok := m.fx.T("toast.shake"); ok {
 		x = max(0, fx.ShakeDX(shake))
 	}
-	c.PutSegs(h-2, x, segs, w, false, false)
+	// a message wider than the line ends in an ellipsis: e shows it whole
+	c.PutSegs(h-2, x, text.EllipSegs(segs, max(0, w-1-x)), w, false, false)
 }
 
-// keys bar labels per view; workflows add theirs.
-var coreKeys = map[string][][2]string{
-	ViewList:     {{"j/k", "move"}, {"↵", "open"}, {"/", "filter"}, {":", "go to #"}, {"A", "approved"}, {"d", "fortress"}, {"y", "copy url"}, {"r", "refresh"}, {"q", "quit"}},
-	ViewDetail:   {{"a", "approve"}, {"M", "merge"}, {"D", "deploys"}, {"c/C", "comment"}, {"t", "tag"}, {"f", "files"}, {"v", "diff"}, {"/", "search"}, {"m", "raw"}, {"y", "url"}, {"r", "refresh"}, {"q", "back"}},
-	"issue":      {{"c/C", "comment"}, {"t", "tag"}, {"/", "search"}, {"m", "raw"}, {"y", "url"}, {"r", "refresh"}, {"q", "back"}},
-	ViewFiles:    {{"j/k", "move"}, {"↵", "view diff"}, {"v", "full diff"}, {"r", "reload"}, {"q", "back"}},
-	ViewPatch:    {{"j/k", "scroll"}, {"/", "search"}, {"v", "full diff"}, {"q", "back"}},
-	ViewFortress: {{"hjkl", "look"}, {"tab", "next"}, {"↵", "open"}, {"+/-", "zoom"}, {"c", "city"}, {"y", "url"}, {"r", "refresh"}, {"d", "back"}},
+// drawMessage is the e overlay: the last status or error message in
+// full, wrapped, scrollable like the help.
+func (m *Model) drawMessage(c *canvas.Canvas, h, w int) {
+	bw := min(w-2, 100)
+	lines := widgets.Wrap(m.lastMsg, max(10, bw-4))
+	bh := min(h-2, len(lines)+4)
+	top, left, iw := widgets.DrawBox(c, max(1, (h-bh)/2), max(0, (w-bw)/2), bh, bw, glyphs.Ico("info")+"last message", "logo", "menu.title", -1)
+	m.overlayDraw(c, lines, top, left, iw, bh)
 }
 
-// keysFor merges the core keys with the workflows' for a view.
-func (m *Model) keysFor(view string) [][2]string {
-	keys := append([][2]string(nil), coreKeys[view]...)
-	wfKeys := m.wf.Keys(view)
-	if view == "issue" {
-		wfKeys = nil
+// overlayDraw paints rows from the scroll offset into a box and the
+// hint under them: how to scroll when they overflow, else any key.
+func (m *Model) overlayDraw(c *canvas.Canvas, lines []string, top, left, iw, bh int) {
+	room := max(0, bh-4)
+	m.helpTop = max(0, min(m.helpTop, len(lines)-room))
+	for i := 0; i < room && m.helpTop+i < len(lines); i++ {
+		c.PutSegs(top+1+i, left, []text.Seg{text.S(lines[m.helpTop+i], "text")}, left+iw, false, false)
 	}
-	// workflow keys slot in before the trailing navigation keys (y/r/q)
-	cut := len(keys)
-	for i, k := range keys {
-		if k[0] == "y" || k[0] == "f" || k[0] == "d" {
-			cut = i
-			break
+	if bh >= 5 {
+		hint := "any key closes"
+		if len(lines) > room {
+			hint = fmt.Sprintf("j/k scroll (%d-%d of %d)   any other key closes", m.helpTop+1, min(len(lines), m.helpTop+room), len(lines))
 		}
+		c.PutSegs(top+bh-3, left, []text.Seg{text.S(hint, "menu.hint")}, left+iw, false, false)
 	}
-	var extra [][2]string
-	for _, k := range wfKeys {
-		extra = append(extra, [2]string{k.Ch, k.Label})
-	}
-	out := append([][2]string{}, keys[:cut]...)
-	out = append(out, extra...)
-	out = append(out, keys[cut:]...)
-	if glyphs.Active() == glyphs.ASCII {
-		for i := range out {
-			if out[i][0] == "↵" {
-				out[i][0] = "enter"
-			}
-		}
-	}
-	return out
 }
 
-// drawKeys: an htop-style key bar; trims to the width but keeps ? help.
+// drawKeys: an htop-style key bar from the key table, trimmed to the
+// width by priority (navigation goes first, q and ? never go).
 func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 	view := m.view
 	if view == ViewDetail && m.detailKind == "issue" {
@@ -474,27 +468,15 @@ func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 	}
 	help := []text.Seg{text.S(" ? ", "chip.key"), text.S(" help ", "keylabel")}
 	room := w - 1 - text.SegsWidth(help)
+	cells := func(it barItem) int { return text.Width(" "+it.key+" ") + text.Width(" "+it.label+" ") }
 	var segs []text.Seg
-	for _, k := range m.keysFor(view) {
-		piece := []text.Seg{text.S(" "+k[0]+" ", "chip.key"), text.S(" "+k[1]+" ", "keylabel")}
-		if text.SegsWidth(segs)+text.SegsWidth(piece) > room {
-			break
-		}
-		segs = append(segs, piece...)
+	for _, it := range trimBar(m.barFor(view), room, cells) {
+		segs = append(segs, text.S(" "+it.key+" ", "chip.key"), text.S(" "+it.label+" ", "keylabel"))
+	}
+	if text.SegsWidth(segs) > room {
+		segs = nil // not even q fits: the help chip alone
 	}
 	c.PutSegs(h-1, 0, append(segs, help...), 0, false, false)
-}
-
-var coreHelp = [][2]string{
-	{"list", "j/k g/G pgup/pgdn  move   enter  open   /  filter (live)"},
-	{"", "A  PRs approved by others   r  refresh   q  quit"},
-	{"detail", "a  approve   c  comment   C  comment in $EDITOR   t  tag"},
-	{"", "f  files   v  diff in $PAGER   /  search, n/N   m  raw markdown"},
-	{"", "M  merge an approved PR   D  approve its waiting deployments"},
-	{"fortress", "d  a Dwarf Fortress map of PRs, issues, branches, commits: hjkl look, tab next, + zoom, c city"},
-	{"files", "enter  the file's diff   v  whole PR diff   r  reload"},
-	{"anywhere", ":  go to #N   y  copy url   o  open url   ?  this help"},
-	{"prompts", "enter submits   esc cancels   ^U ^W edit   menus: j/k, 1-9"},
 }
 
 // drawHelp paints the help overlay.
@@ -508,11 +490,25 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		ci = append(ci, text.S(" "+names[code], "muted"), sp)
 	}
 	var rows [][]text.Seg
-	helpRows := append([][2]string{}, coreHelp[:5]...)
-	helpRows = append(helpRows, m.wf.HelpRows()...)
-	helpRows = append(helpRows, coreHelp[5:]...)
-	for _, kv := range helpRows {
-		rows = append(rows, []text.Seg{label(kv[0]), text.S(kv[1], "text")})
+	// the key table's groups, the workflows' rows after detail, each
+	// wrapped to the box so a narrow terminal gets more rows, not less
+	textW := max(20, min(w-2, 92)-14)
+	addLines := func(name string, lines []string) {
+		for i, line := range lines {
+			l := name
+			if i > 0 {
+				l = ""
+			}
+			rows = append(rows, []text.Seg{label(l), text.S(line, "text")})
+		}
+	}
+	for _, g := range helpGroups() {
+		addLines(g.label, packEntries(g.entries, textW))
+		if g.label == "detail" {
+			for _, kv := range m.wf.HelpRows() {
+				addLines(kv[0], widgets.Wrap(kv[1], textW))
+			}
+		}
 	}
 	status := []text.Seg{label("status")}
 	status = append(status, scenes.Chip("awaiting review", "chip.await")...)
@@ -535,7 +531,7 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 	for _, r := range rows {
 		widest = max(widest, text.SegsWidth(r))
 	}
-	bw := min(w-2, max(92, widest+4))
+	bw := min(w-2, max(min(92, w-2), widest+4))
 	full := min(h-2, len(rows)+4)
 	t, ok := m.fx.T("help")
 	bh := min(h-2, widgets.PopHeight(full, t, ok))
@@ -544,14 +540,17 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		ants = fx.Wave(2.5, 0)
 	}
 	top, left, iw := widgets.DrawBox(c, max(1, (h-bh)/2), max(0, (w-bw)/2), bh, bw, glyphs.Ico("logo")+"dillodash keys", "logo", "menu.title", ants)
-	for i, segs := range rows {
-		if i >= bh-4 {
-			break
-		}
-		c.PutSegs(top+1+i, left, segs, left+iw, false, false)
+	room := max(0, bh-4)
+	m.helpTop = max(0, min(m.helpTop, len(rows)-room))
+	for i := 0; i < room && m.helpTop+i < len(rows); i++ {
+		c.PutSegs(top+1+i, left, rows[m.helpTop+i], left+iw, false, false)
 	}
-	if bh == full {
-		c.PutSegs(top+bh-3, left, []text.Seg{text.S("any key closes", "menu.hint")}, left+iw, false, false)
+	if bh >= 5 && bh == full {
+		hint := "any key closes"
+		if len(rows) > room {
+			hint = fmt.Sprintf("j/k scroll (%d-%d of %d)   any other key closes", m.helpTop+1, min(len(rows), m.helpTop+room), len(rows))
+		}
+		c.PutSegs(top+bh-3, left, []text.Seg{text.S(hint, "menu.hint")}, left+iw, false, false)
 	}
 }
 
@@ -740,7 +739,18 @@ func (m *Model) drawFiles(c *canvas.Canvas, h, w int) {
 			text.S(text.Pad(fmt.Sprintf("+%d", a), aw)+" ", addS),
 			text.S(text.Pad(fmt.Sprintf("%s%d", minus, d), dw)+" ", delS)}
 		segs = append(segs, bar...)
-		segs = append(segs, text.S("  ", "text"), text.S(dir, "path.dir"), text.S(base, "path.base"))
+		segs = append(segs, text.S("  ", "text"))
+		// the base name is the useful part: a path too wide for the row
+		// loses its directories from the left, never its end
+		room := max(0, w-1-text.SegsWidth(segs))
+		if text.Width(dir)+text.Width(base) > room {
+			if text.Width(base) >= room {
+				dir, base = "", text.EllipLeft(base, room)
+			} else {
+				dir = text.EllipLeft(dir, room-text.Width(base))
+			}
+		}
+		segs = append(segs, text.S(dir, "path.dir"), text.S(base, "path.base"))
 		c.PutSegs(y, 0, segs, w-1, sel, false)
 	}
 	if n > visible {

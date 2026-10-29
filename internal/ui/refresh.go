@@ -42,7 +42,7 @@ func (m *Model) refreshDue() bool { return fx.Now() >= m.nextRefreshAt }
 func (m *Model) refresh(again bool) {
 	// honor a GitHub-imposed backoff: retrying while rate-limited keeps
 	// the token pinned at the wall (and extends secondary-limit penalties)
-	if time.Now().Before(m.rateLimitedUntil) {
+	if m.backoff.RateLimitWait(clock.Now()) > 0 {
 		return
 	}
 	if m.refreshing {
@@ -81,7 +81,7 @@ func (m *Model) refresh(again bool) {
 			m.send(refreshDoneMsg{out})
 		}()
 		if flushCI {
-			ci.Flush()
+			ci.Reset() // re-check settled CI, and re-try repos whose token was fixed
 		}
 		results, err := gh.ListOpen(ctx, repos)
 		if err != nil {
@@ -113,7 +113,19 @@ func (m *Model) refresh(again bool) {
 		sort.SliceStable(out.issues, func(i, j int) bool {
 			return out.issues[i].UpdatedAt.After(out.issues[j].UpdatedAt)
 		})
-		clusters, ciWarn, err := ci.Annotate(ctx, time.Now(), out.allPRs, gh.WorkflowRuns)
+		states, wfWarns, wfErr := wf.RefreshAll(ctx, gh, repos, out.allPRs, out.issues)
+		out.wfStates = states
+		warns = append(warns, wfWarns...)
+		if e, ok := ghapi.AsError(wfErr); ok && e.IsRateLimit() {
+			// the list landed; only the workflows hit the wall, so the
+			// list shows and the next refresh waits for the window
+			out.retryAt = e.RetryAt
+			warns = append([]string{"rate limited — workflow data paused until " + e.RetryAt.Local().Format("15:04:05")}, warns...)
+		}
+		// one CI pass for the review PRs and the PRs the workflows contribute
+		// (releases): one cache, one set of live SHAs, one Actions call per SHA
+		ciPRs := append(append([]*model.PR{}, out.allPRs...), wf.CIPRs(states)...)
+		clusters, ciWarn, err := ci.Annotate(ctx, clock.Now(), ciPRs, gh.WorkflowRuns)
 		if err != nil {
 			out.err = err.Error()
 			if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
@@ -122,17 +134,15 @@ func (m *Model) refresh(again bool) {
 			return
 		}
 		out.ci = map[model.Ident]model.CICluster{}
-		for i, pr := range out.allPRs {
-			if i < len(clusters) {
-				out.ci[pr.Ident()] = clusters[i]
+		for i, pr := range ciPRs {
+			out.ci[pr.Ident()] = clusters[i]
+			if i >= len(out.allPRs) {
+				pr.Set(workflow.CIKey, clusters[i]) // a workflow's PR: its renderers read Ext
 			}
 		}
 		if ciWarn != "" {
 			warns = append([]string{"degraded: " + ciWarn}, warns...)
 		}
-		states, wfWarns := wf.RefreshAll(ctx, gh, repos, out.allPRs, out.issues)
-		out.wfStates = states
-		warns = append(warns, wfWarns...)
 		if wantFortress {
 			fort, err := gh.Fortress(ctx, repos)
 			if err != nil {
@@ -190,25 +200,20 @@ func (m *Model) applyRefresh(out *refreshResult) {
 	m.refreshing = false
 	if out.err != "" {
 		m.fail(out.err)
-		if !out.retryAt.IsZero() {
-			m.rateLimitedUntil = out.retryAt
-		} else {
-			m.failStreak++
-			delay := 15.0
-			for i := 1; i < m.failStreak && i <= 8; i++ {
-				delay *= 2
-			}
-			if delay > float64(m.cfg.Display.RefreshSecs) {
-				delay = float64(m.cfg.Display.RefreshSecs)
-			}
-			if t := fx.Now() + delay; t < m.nextRefreshAt {
+		now := clock.Now()
+		until := m.backoff.Fail(now, out.retryAt)
+		if out.retryAt.IsZero() {
+			if t := fx.Now() + until.Sub(now).Seconds(); t < m.nextRefreshAt {
 				m.nextRefreshAt = t
 			}
 		}
 	} else {
-		// a clean refresh means the wall has lifted
-		m.rateLimitedUntil = time.Time{}
-		m.failStreak = 0
+		// a clean refresh means the wall has lifted, unless a workflow
+		// just hit it (retryAt set with the list still delivered)
+		m.backoff.OK()
+		if !out.retryAt.IsZero() {
+			m.backoff.RateLimit(out.retryAt)
+		}
 		m.loaded = true
 		m.allPRs = out.allPRs
 		m.issues = out.issues
@@ -242,10 +247,12 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		}
 		m.warn = out.warn
 		m.lastRefreshWall = clock.Now().Local().Format("15:04:05")
+		m.refreshStamp = fmt.Sprintf("%s|%d|%d", m.lastRefreshWall, len(m.allPRs), len(m.issues))
 		m.noteDeltas()
-		if m.status == "refreshing..." && m.errText == "" {
+		if m.manualPending && m.errText == "" {
 			m.ok("refreshed at " + m.lastRefreshWall)
 		}
+		m.manualPending = false
 	}
 	if m.refreshAgain {
 		m.refreshAgain = false
@@ -327,16 +334,17 @@ func (m *Model) noteDeltas() {
 	}
 }
 
-func identKey(n model.Ident) string { return fmt.Sprintf("%s#%d", n.Repo, n.Number) }
+func identKey(n model.Ident) string { return n.String() }
 
 // manualRefresh is the 'r' key: refresh now, but if GitHub has us in a
 // rate-limit backoff, say so instead of silently doing nothing.
 func (m *Model) manualRefresh() {
-	if wait := int(time.Until(m.rateLimitedUntil).Seconds()); wait > 0 {
-		m.notice(fmt.Sprintf("rate-limited — refresh held %ds; auto-resumes when GitHub's window resets", wait))
+	if wait := int(m.backoff.RateLimitWait(clock.Now()).Seconds()); wait > 0 {
+		m.notice(fmt.Sprintf("rate limited — refresh held %ds; resumes when GitHub's window resets", wait))
 		return
 	}
 	m.setStatus("refreshing...")
 	m.ciFlush = true // re-check settled CI too (e.g. a re-run)
+	m.manualPending = true
 	m.refresh(true)
 }

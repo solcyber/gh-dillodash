@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -169,6 +170,19 @@ func (p *Prompt) Handle(k Key) bool {
 		}
 		p.buf = append(p.buf[:p.pos], append([]rune{k.Rune}, p.buf[p.pos:]...)...)
 		p.pos++
+	case "text": // a paste or a multi-rune press: one edit, one OnChange
+		ins := sanitizePaste(k.Text)
+		if len(ins) == 0 {
+			return false
+		}
+		if bad := strings.IndexFunc(string(ins), func(r rune) bool { return strings.ContainsRune(p.Forbid, r) }); bad >= 0 {
+			r, _ := utf8.DecodeRuneInString(string(ins)[bad:])
+			p.note = fmt.Sprintf("no %c in the pasted text — the validator refuses it", r)
+			p.fx.Start("shake", 0.25, nil)
+			return false
+		}
+		p.buf = append(p.buf[:p.pos], append(ins, p.buf[p.pos:]...)...)
+		p.pos += len(ins)
 	default:
 		return false
 	}
@@ -181,6 +195,29 @@ func (p *Prompt) Handle(k Key) bool {
 		}
 	}
 	return false
+}
+
+// sanitizePaste flattens pasted text onto one line: line breaks and
+// tabs become spaces, other control characters go, runs of spaces
+// collapse, and the result is trimmed.
+func sanitizePaste(s string) []rune {
+	var out []rune
+	space := false
+	for _, r := range s {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t' || r == ' ':
+			space = true
+		case !unicode.IsPrint(r):
+			// dropped
+		default:
+			if space && len(out) > 0 {
+				out = append(out, ' ')
+			}
+			space = false
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // Draw paints the question block, the input row and, with MinLen, the
@@ -254,7 +291,7 @@ func (p *Prompt) drawReasonFooter(c *canvas.Canvas) {
 	default:
 		segs = []text.Seg{text.S(" "+glyphs.Ico("edit")+hint, "hint.short")}
 	}
-	keys := "esc cancels "
+	keys := "Esc cancels "
 	if p.Forbid != "" {
 		keys = fmt.Sprintf("no %s %s ", p.Forbid, glyphs.G("sep")) + keys
 	}

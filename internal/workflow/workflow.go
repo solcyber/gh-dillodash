@@ -179,6 +179,25 @@ type QueuedProvider interface {
 	QueuedForWindow() []*model.PR
 }
 
+// CIKey is the Ext key under which the core writes the CI cluster of a
+// PR a workflow contributed through CIProvider.
+const CIKey = "ci"
+
+// CIProvider is implemented by a workflow state that lists PRs outside
+// the review repos (the release workflow's releases) whose CI the core
+// computes like every review PR's: the GraphQL rollup when the token can
+// see it, else the Actions fallback, one cache and one call for all.
+type CIProvider interface {
+	CIPRs() []*model.PR
+}
+
+// DeployProvider is implemented by a workflow whose rows can be merged
+// PRs with deployments to approve (the release workflow), so the list's
+// key bar shows D while it is enabled.
+type DeployProvider interface {
+	ProvidesDeploys() bool
+}
+
 // NightRow is the Meta key a window sub-header row carries its night
 // (YYYY-MM-DD) under.
 const NightRow = "night"
@@ -188,8 +207,11 @@ type Workflow interface {
 	Name() string
 	Order() int
 
-	// Worker goroutine.
-	Refresh(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (State, []string)
+	// Worker goroutine. err is only ever a rate limit (ghapi.IsRateLimit)
+	// that must back the whole refresh off; anything else a workflow
+	// meets is a warning, and the state it returns alongside is what it
+	// could still assemble.
+	Refresh(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (State, []string, error)
 	Annotate(prs []*model.PR, issues []*model.Issue, s State)
 
 	// UI goroutine, after a refresh lands.
@@ -239,8 +261,8 @@ type Base struct{}
 
 func (Base) Name() string { return "" }
 func (Base) Order() int   { return 50 }
-func (Base) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string) {
-	return nil, nil
+func (Base) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string, error) {
+	return nil, nil, nil
 }
 func (Base) Annotate([]*model.PR, []*model.Issue, State) {}
 func (Base) Apply(App, State)                            {}

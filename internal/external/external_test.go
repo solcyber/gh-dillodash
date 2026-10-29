@@ -52,9 +52,12 @@ func fakeRunners(t *testing.T, ok map[string]bool, tty bool) (*[]call, *[]string
 func isolate(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
-	for _, v := range []string{"VISUAL", "EDITOR", "PAGER", "TMUX", "DISPLAY", "WAYLAND_DISPLAY"} {
+	for _, v := range []string{"GH_EDITOR", "VISUAL", "EDITOR", "GH_PAGER", "PAGER", "TMUX", "DISPLAY", "WAYLAND_DISPLAY"} {
 		t.Setenv(v, "")
 	}
+	oldOS := goos
+	goos = "linux"
+	t.Cleanup(func() { goos = oldOS })
 }
 
 func TestSplitWords(t *testing.T) {
@@ -78,13 +81,13 @@ func TestSplitWords(t *testing.T) {
 		{`trail\`, nil, true},
 	}
 	for _, c := range cases {
-		got, err := SplitWords(c.in)
+		got, err := splitWords(c.in)
 		if (err != nil) != c.err {
-			t.Errorf("SplitWords(%q): err %v", c.in, err)
+			t.Errorf("splitWords(%q): err %v", c.in, err)
 			continue
 		}
 		if strings.Join(got, "|") != strings.Join(c.want, "|") || len(got) != len(c.want) {
-			t.Errorf("SplitWords(%q) = %q, want %q", c.in, got, c.want)
+			t.Errorf("splitWords(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -106,10 +109,21 @@ func TestEditorCommand(t *testing.T) {
 	if argv, _ := EditorCommand(); strings.Join(argv, " ") != "nano -w" {
 		t.Errorf("empty VISUAL falls through: %q", argv)
 	}
+	t.Setenv("GH_EDITOR", "code --wait")
+	if argv, _ := EditorCommand(); strings.Join(argv, " ") != "code --wait" {
+		t.Errorf("GH_EDITOR wins over VISUAL and EDITOR (the gh convention): %q", argv)
+	}
+	t.Setenv("GH_EDITOR", "")
 	t.Setenv("EDITOR", "'broken")
 	if _, err := EditorCommand(); err == nil {
 		t.Error("an unterminated quote is an error")
 	}
+	t.Setenv("EDITOR", "")
+	goos = "windows"
+	if argv, _ := EditorCommand(); strings.Join(argv, " ") != "notepad" {
+		t.Errorf("windows default: %q", argv)
+	}
+	goos = "linux"
 	t.Setenv("EDITOR", "   ")
 	if _, err := EditorCommand(); err == nil {
 		t.Error("a blank command is an error")
@@ -128,6 +142,16 @@ func TestPagerCommand(t *testing.T) {
 	t.Setenv("PAGER", "'bad")
 	if got := PagerCommand(); strings.Join(got, " ") != "less" {
 		t.Errorf("an unparsable PAGER falls back: %q", got)
+	}
+	t.Setenv("GH_PAGER", "bat -p")
+	if got := PagerCommand(); strings.Join(got, "|") != "bat|-p" {
+		t.Errorf("GH_PAGER wins (the gh convention): %q", got)
+	}
+	t.Setenv("GH_PAGER", "")
+	t.Setenv("PAGER", "")
+	goos = "windows"
+	if got := PagerCommand(); strings.Join(got, " ") != "more" {
+		t.Errorf("windows has no less: %q", got)
 	}
 }
 
@@ -255,27 +279,35 @@ func TestCopyToClipboard(t *testing.T) {
 		t.Errorf("calls = %+v", *calls)
 	}
 
-	// no tmux at all: OSC 52 on the tty
+	// tmux failing and no local tool: OSC 52 on the tty, last
 	calls, written = fakeRunners(t, nil, true)
-	if where := CopyToClipboard(url); where != "clipboard (OSC 52)" {
+	goos = "linux"
+	if where := CopyToClipboard(url); where != "the terminal via OSC 52 (if it allows it)" {
 		t.Errorf("tmux failing: %q", where)
 	}
 	if len(*written) != 1 || (*written)[0] != osc {
 		t.Errorf("tty got %q", *written)
 	}
 
-	// outside tmux: straight to the tty, no commands
+	// outside tmux with no tool: the tty, no commands
 	t.Setenv("TMUX", "")
 	calls, written = fakeRunners(t, nil, true)
-	if where := CopyToClipboard(url); where != "clipboard (OSC 52)" || len(*calls) != 0 || len(*written) != 1 {
+	goos = "linux"
+	if where := CopyToClipboard(url); !strings.Contains(where, "OSC 52") || len(*calls) != 0 || len(*written) != 1 {
 		t.Errorf("no tmux: %q calls %+v written %d", where, *calls, len(*written))
 	}
 
-	// no tty: the local tools, per OS
+	// the local tool beats OSC 52 (a terminal may ignore the escape and
+	// nothing would say so): pbcopy first on a Mac, even with a tty
+	calls, written = fakeRunners(t, map[string]bool{"pbcopy": true}, true)
+	goos = "darwin"
+	if where := CopyToClipboard(url); where != "pbcopy" || (*calls)[0].stdin != url || len(*written) != 0 {
+		t.Errorf("darwin: %q %+v written %d", where, *calls, len(*written))
+	}
 	calls, _ = fakeRunners(t, map[string]bool{"pbcopy": true}, false)
 	goos = "darwin"
 	if where := CopyToClipboard(url); where != "pbcopy" || (*calls)[0].stdin != url {
-		t.Errorf("darwin: %q %+v", where, *calls)
+		t.Errorf("darwin, no tty: %q %+v", where, *calls)
 	}
 	calls, _ = fakeRunners(t, map[string]bool{"wl-copy": true, "xclip": true}, false)
 	goos = "linux"
@@ -326,10 +358,10 @@ func TestOpenURL(t *testing.T) {
 	if !OpenURL(url) || len(*calls) != 1 {
 		t.Errorf("wayland: %+v", *calls)
 	}
-	calls, _ = fakeRunners(t, map[string]bool{"cmd": true}, false)
+	calls, _ = fakeRunners(t, map[string]bool{"rundll32": true}, false)
 	goos = "windows"
-	if !OpenURL(url) || strings.Join((*calls)[0].argv, " ") != "cmd /c start  "+url {
-		t.Errorf("windows: %+v", *calls)
+	if !OpenURL(url) || strings.Join((*calls)[0].argv, " ") != "rundll32 url.dll,FileProtocolHandler "+url {
+		t.Errorf("windows (never cmd /c start, which would interpret & in the URL): %+v", *calls)
 	}
 	// the opener failing to start is a false
 	calls, _ = fakeRunners(t, nil, false)
@@ -343,15 +375,15 @@ func TestRunReportsExit(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("needs sh")
 	}
-	if err := Run([]string{"sh", "-c", "exit 3"}); err == nil {
+	if err := runTTY([]string{"sh", "-c", "exit 3"}); err == nil {
 		t.Fatal("non-zero exit must be an error")
 	} else if es, ok := err.(exitStatus); !ok || es.ExitCode() != 3 {
 		t.Errorf("exit status: %v", err)
 	}
-	if err := Run([]string{"true"}); err != nil {
+	if err := runTTY([]string{"true"}); err != nil {
 		t.Errorf("zero exit: %v", err)
 	}
-	if err := Run(nil); err == nil {
+	if err := runTTY(nil); err == nil {
 		t.Error("empty argv")
 	}
 	// through EditInTemp, a real non-zero exit is ok=false

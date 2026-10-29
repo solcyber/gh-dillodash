@@ -84,11 +84,30 @@ func sortedKeys(set map[string]bool) []string {
 	return out
 }
 
-// Compute is the pure part: runs on the sha, and the pending deployments
+// RefreshInterval is the deploy watch interval for a configured number
+// of seconds (deploy_refresh_secs); zero or less means RefreshEvery.
+func RefreshInterval(secs int) time.Duration {
+	if secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return RefreshEvery
+}
+
+// compute is the pure part: runs on the sha, and the pending deployments
 // of the runs that wait. Phase priority: waiting, failed, stuck, running,
 // done, cancelled, none (a cancelled run beside a successful one is
-// usually superseded).
-func Compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time) State {
+// usually superseded). A run queued or running longer than StuckAfter
+// is stuck; ComputeWith takes the threshold.
+func compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time) State {
+	return ComputeWith(runs, pending, now, StuckAfter)
+}
+
+// ComputeWith is compute with the stuck threshold given (zero or less
+// means StuckAfter).
+func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time, stuckAfter time.Duration) State {
+	if stuckAfter <= 0 {
+		stuckAfter = StuckAfter
+	}
 	sorted := append([]model.WorkflowRun(nil), runs...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 	var st State
@@ -122,15 +141,15 @@ func Compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployme
 			st.Runs = append(st.Runs, Row{name, what, "chip.await", r.ID})
 		case r.Status == "queued" || r.Status == "in_progress" || r.Status == "requested" || r.Status == "pending":
 			status := strings.ReplaceAll(r.Status, "_", " ")
-			if age > StuckAfter {
+			if age > stuckAfter {
 				phases["stuck"] = true
 				if age > stuckFor {
 					stuckFor = age
 				}
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, FmtSecs(age)), "chip.rolled", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, fmtSecs(age)), "chip.rolled", r.ID})
 			} else {
 				phases["running"] = true
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, FmtSecs(age)), "chip.queued", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, fmtSecs(age)), "chip.queued", r.ID})
 			}
 		case r.Conclusion == "success" || r.Conclusion == "skipped" || r.Conclusion == "neutral":
 			phases["done"] = true
@@ -161,7 +180,7 @@ func Compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployme
 	case phases["failed"]:
 		st.Phase, st.Text = "failed", "deploy failed"
 	case phases["stuck"]:
-		st.Phase, st.Text = "stuck", "stuck? "+FmtSecs(stuckFor)
+		st.Phase, st.Text = "stuck", "stuck? "+fmtSecs(stuckFor)
 	case phases["running"]:
 		st.Phase, st.Text = "running", "deploying"
 	case phases["done"]:
@@ -175,8 +194,8 @@ func Compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployme
 	return st
 }
 
-// FmtSecs is 12s, 7m, 3h05m: a run's age.
-func FmtSecs(d time.Duration) string {
+// fmtSecs is 12s, 7m, 3h05m: a run's age.
+func fmtSecs(d time.Duration) string {
 	secs := int(d.Seconds())
 	if secs < 0 {
 		secs = 0
@@ -194,8 +213,20 @@ func FmtSecs(d time.Duration) string {
 // settled (done or failed) is re-read only every two minutes (a re-run
 // brings it back); Fetch with fresh=true always reads (the D key).
 type Cache struct {
+	// StuckAfter is the stuck threshold Fetch computes with; zero means
+	// the package default. The release config's deploy_stuck_secs.
+	StuckAfter time.Duration
+
 	mu    sync.Mutex
 	items map[string]cached
+}
+
+// Stuck is the threshold in effect.
+func (c *Cache) Stuck() time.Duration {
+	if c == nil || c.StuckAfter <= 0 {
+		return StuckAfter
+	}
+	return c.StuckAfter
 }
 
 type cached struct {
@@ -228,7 +259,7 @@ func (c *Cache) Fetch(ctx context.Context, gh ghapi.Client, repo model.Repo, sha
 			pending[r.ID] = p
 		}
 	}
-	st := Compute(runs, pending, now)
+	st := ComputeWith(runs, pending, now, c.Stuck())
 	st.SHA = sha
 	if c != nil {
 		c.mu.Lock()

@@ -216,6 +216,14 @@ func Client() *fake.Client {
 	gh.Issues[manifest.Ident()] = manifest
 	rel := *gh.PRs[portalPRs[0].Ident()]
 	rel.Labels = model.Labels{}
+	// the release copy has no rollup (what a fine-grained PAT sees), so
+	// its CI comes through the Actions fallback; the review copy keeps
+	// the rollup, so the demo shows both routes
+	rel.Commits = model.Commits{}
+	gh.Runs = map[string][]model.WorkflowRun{rel.HeadRefOid: {
+		{ID: 501, Name: "build", Path: ".github/workflows/build.yml", Status: "completed", Conclusion: "success", HeadSHA: rel.HeadRefOid},
+		{ID: 502, Name: "e2e", Path: ".github/workflows/e2e.yml", Status: "in_progress", HeadSHA: rel.HeadRefOid},
+	}}
 	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
 	gh.Tags = map[model.Repo][]string{portal: {"go/905", "hold/907"}}
 	gh.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 3, TotalCommits: 3, Commits: []ghapi.CompareCommit{

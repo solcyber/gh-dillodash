@@ -210,6 +210,74 @@ func Ellip(s string, cols int) string {
 	return Clip(s, cols-mw) + more
 }
 
+// EllipLeft clips s to cols cells from the left, so the END survives
+// (a file's base name, a ref's last segment), with the ellipsis first.
+func EllipLeft(s string, cols int) string {
+	if Width(s) <= cols {
+		return s
+	}
+	more := Ellipsis
+	if ASCIIOnly {
+		more = "..."
+	}
+	mw := Width(more)
+	if cols <= mw {
+		return clipLeft(s, cols)
+	}
+	return more + clipLeft(s, cols-mw)
+}
+
+// clipLeft keeps the last cols cells of s, whole graphemes only.
+func clipLeft(s string, cols int) string {
+	if cols <= 0 {
+		return ""
+	}
+	if isASCII(s) {
+		if len(s) <= cols {
+			return s
+		}
+		return s[len(s)-cols:]
+	}
+	var starts []int
+	var widths []int
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		a, _ := g.Positions()
+		starts = append(starts, a)
+		widths = append(widths, ansi.StringWidth(g.Str()))
+	}
+	used := 0
+	for i := len(starts) - 1; i >= 0; i-- {
+		if used+widths[i] > cols {
+			return s[starts[i+1]:]
+		}
+		used += widths[i]
+	}
+	return s
+}
+
+// EllipSegs clips segments to width cells and, when something was cut,
+// ends them in the ellipsis so the cut is visible.
+func EllipSegs(segs []Seg, width int) []Seg {
+	if SegsWidth(segs) <= width {
+		return segs
+	}
+	more := Ellipsis
+	if ASCIIOnly {
+		more = "..."
+	}
+	mw := Width(more)
+	if width <= mw {
+		return ClipSegs(segs, width)
+	}
+	out := ClipSegs(segs, width-mw)
+	style := "text"
+	if len(out) > 0 {
+		style = out[len(out)-1].Style
+	}
+	return append(out, Seg{Text: more, Style: style})
+}
+
 // Pad clips s to cols cells and pads it with spaces to exactly cols.
 func Pad(s string, cols int) string {
 	s = Clip(s, cols)
@@ -219,11 +287,10 @@ func Pad(s string, cols int) string {
 	return s
 }
 
-// LPad right-aligns s in cols cells.
-func LPad(s string, cols int) string {
-	s = Clip(s, cols)
-	if w := Width(s); w < cols {
-		return strings.Repeat(" ", cols-w) + s
+// OrQ is s, or "?" when it is empty: a login or a name GitHub left out.
+func OrQ(s string) string {
+	if s == "" {
+		return "?"
 	}
 	return s
 }

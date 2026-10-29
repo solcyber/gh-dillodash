@@ -26,6 +26,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 	"github.com/solcyber/gh-dillodash/internal/workflow/terraformapprove"
 )
@@ -498,7 +499,7 @@ func Place(pr *model.PR, manifests map[string]*Manifest, now time.Time, cfg *con
 			status = "scheduled " + local.TAt(t)
 		}
 		if item.Status != "" && item.Status != "scheduled" {
-			status = clip(item.Status, 40)
+			status = text.Ellip(item.Status, 40)
 			if w := waitingRE.FindStringSubmatch(item.Status); w != nil {
 				status = "awaiting " + cfg.ReleaseCommand
 				if t, err := clock.ParseUTC(w[1]); err == nil {
@@ -538,14 +539,6 @@ func Place(pr *model.PR, manifests map[string]*Manifest, now time.Time, cfg *con
 		st = "9"
 	}
 	return Placement{Night: night, Status: status, key: [4]string{night, st, marker.QueuedAt, fmt.Sprintf("%010d", pr.Number)}}, nil
-}
-
-func clip(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		return string(r[:n])
-	}
-	return s
 }
 
 // NightLabel is a night sub-header: "window 2026-10-21 23:00 ET, tonight".
@@ -651,7 +644,7 @@ func QueueRows(prs, releases []*model.PR, manifests map[string]*Manifest, now ti
 				label += " " + man.Phase
 			}
 			rows = append(rows, workflow.Row{Kind: "issue", Item: issue,
-				Meta: map[string]any{"label": clip(label, 16), workflow.NightRow: n}})
+				Meta: map[string]any{"label": text.Ellip(label, 16), workflow.NightRow: n}})
 		}
 		rows = append(rows, groups[n]...)
 	}

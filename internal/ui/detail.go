@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
@@ -71,7 +72,7 @@ func (m *Model) buildDetailLines(width int) {
 
 func (m *Model) issueLines(iss *model.Issue, wrap int) []text.Line {
 	lines := markdown.Wrap([]text.Seg{text.S(m.where(m.repoOf(iss), iss.Number)+" ", "num"), text.S(iss.Title, "strong")}, wrap, nil, nil, false)
-	author := orQ(iss.Author.Login)
+	author := text.OrQ(iss.Author.Login)
 	state := iss.State
 	if state == "" {
 		state = "OPEN"
@@ -94,7 +95,7 @@ func (m *Model) issueLines(iss *model.Issue, wrap int) []text.Line {
 	lines = append(lines, markdown.Render(iss.Body, wrap, m.raw, m.hooks())...)
 	var events []event
 	for _, c := range iss.Comments.Nodes {
-		events = append(events, event{c.CreatedAt, orQ(c.Author.Login), "commented", c.Body})
+		events = append(events, event{c.CreatedAt, text.OrQ(c.Author.Login), "commented", c.Body})
 	}
 	lines = append(lines, text.Line{})
 	lines = append(lines, section("comments", wrap, fmt.Sprintf("%d%s", len(events), ofTotal(len(iss.Comments.Nodes), iss.Comments.TotalCount, ""))))
@@ -104,7 +105,7 @@ func (m *Model) issueLines(iss *model.Issue, wrap int) []text.Line {
 
 func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	lines := markdown.Wrap([]text.Seg{text.S(m.where(m.repoOf(pr), pr.Number)+" ", "num"), text.S(pr.Title, "strong")}, wrap, nil, nil, false)
-	author := orQ(pr.Author.Login)
+	author := text.OrQ(pr.Author.Login)
 	state := pr.State
 	if state == "" {
 		state = "OPEN"
@@ -157,17 +158,17 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	// merge issue comments and reviews into one timeline
 	var events []event
 	for _, c := range pr.Comments.Nodes {
-		events = append(events, event{c.CreatedAt, orQ(c.Author.Login), "commented", c.Body})
+		events = append(events, event{c.CreatedAt, text.OrQ(c.Author.Login), "commented", c.Body})
 	}
 	for _, r := range pr.Reviews.Nodes {
-		rs := strings.ToLower(r.State)
+		rs := humanize(r.State)
 		if rs == "" {
 			rs = "?"
 		}
 		if rs == "pending" {
 			rs = "pending (yours, not submitted)"
 		}
-		events = append(events, event{r.SubmittedAt, orQ(r.Author.Login), "review: " + rs, r.Body})
+		events = append(events, event{r.SubmittedAt, text.OrQ(r.Author.Login), "review: " + rs, r.Body})
 	}
 	// an unsubmitted (pending) review has no timestamp: sort it LAST
 	sort.SliceStable(events, func(i, j int) bool {
@@ -178,9 +179,10 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 		return a.Before(b)
 	})
 	lines = append(lines, text.Line{})
-	lines = append(lines, section("comments & reviews", wrap, fmt.Sprintf("%d%s%s", len(events),
-		ofTotal(len(pr.Comments.Nodes), pr.Comments.TotalCount, "comments"),
-		ofTotal(len(pr.Reviews.Nodes), pr.Reviews.TotalCount, "reviews"))))
+	// "12" when everything is here, "12 of 49" when either list was cut
+	shown := len(events)
+	total := max(pr.Comments.TotalCount, len(pr.Comments.Nodes)) + max(pr.Reviews.TotalCount, len(pr.Reviews.Nodes))
+	lines = append(lines, section("comments & reviews", wrap, fmt.Sprintf("%d%s", shown, ofTotal(shown, total, ""))))
 	lines = append(lines, m.timeline(events, wrap)...)
 	return lines
 }
@@ -212,7 +214,7 @@ func (m *Model) timeline(events []event, width int) []text.Line {
 			switch rs {
 			case "approved":
 				st = "chip.rev.approved"
-			case "changes_requested":
+			case "changes requested":
 				st = "chip.rev.changes"
 			}
 			head = append(head, scenes.Chip(rs, st)...)
@@ -303,7 +305,7 @@ func (m *Model) currentHits() []hit {
 				hay := t
 				needle := q
 				if fold {
-					hay, needle = strings.ToLower(t), strings.ToLower(q)
+					hay, needle = foldRunes(t), foldRunes(q)
 				}
 				off := 0
 				for {
@@ -334,6 +336,10 @@ func (m *Model) hitsByLine() map[int][]text.Span {
 
 // searchStep moves to the next/previous hit.
 func (m *Model) searchStep(step int) {
+	if m.searchQ == "" {
+		m.notice("no search yet — / searches this page")
+		return
+	}
 	hits := m.currentHits()
 	if len(hits) == 0 {
 		m.notice(fmt.Sprintf("no match for %q", m.searchQ))
@@ -346,6 +352,23 @@ func (m *Model) searchStep(step int) {
 	} else {
 		m.scroll = target
 	}
+}
+
+// foldRunes lower-cases rune by rune: unlike strings.ToLower it never
+// changes the rune count (İ, ß), so a hit's rune offsets stay aligned
+// with the line they overlay.
+func foldRunes(s string) string {
+	r := []rune(s)
+	for i, c := range r {
+		r[i] = unicode.ToLower(c)
+	}
+	return string(r)
+}
+
+// humanize turns a GitHub enum into words: CHANGES_REQUESTED -> changes
+// requested.
+func humanize(enum string) string {
+	return strings.ReplaceAll(strings.ToLower(enum), "_", " ")
 }
 
 // applySearch sets a new query (after the prompt) and jumps to the first

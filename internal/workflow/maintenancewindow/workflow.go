@@ -104,7 +104,7 @@ func (w *Workflow) manifestRepo(repos []model.Repo) model.Repo {
 // Refresh fetches the open manifests and each queued PR's comments, when
 // some PR (or a queued release) carries the queued label. Best-effort: a
 // failure leaves the queue section showing labels only.
-func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (workflow.State, []string) {
+func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (workflow.State, []string, error) {
 	var queued []*model.PR
 	for _, p := range prs {
 		if HasQueuedLabel(p, w.cfg) {
@@ -112,7 +112,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.R
 		}
 	}
 	if len(queued) == 0 && !w.relQueued.Load() {
-		return &State{}, nil
+		return &State{}, nil, nil
 	}
 	st := &State{Manifests: map[string]*Manifest{}, infos: map[model.Ident]*Info{}}
 	var warns []string
@@ -121,6 +121,9 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.R
 		labelled, err := gh.IssuesWithLabel(ctx, repo, w.cfg.ManifestLabel, 10)
 		if err != nil {
 			warns = append(warns, "maintenance window: manifests not read: "+err.Error())
+			if ghapi.IsRateLimit(err) {
+				return st, warns, err
+			}
 		} else {
 			st.Issues = labelled
 			st.Manifests = ParseManifests(labelled, w.cfg)
@@ -129,6 +132,10 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.R
 	for _, p := range queued {
 		comments, err := gh.PRComments(ctx, p.Repo, p.Number)
 		if err != nil {
+			if ghapi.IsRateLimit(err) {
+				return st, warns, err
+			}
+			warns = append(warns, fmt.Sprintf("maintenance window: %s#%d comments not read: %s", p.Repo.Name, p.Number, err))
 			continue
 		}
 		marker := ParseMarker(comments, w.cfg)
@@ -136,7 +143,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.R
 		st.infos[p.Ident()] = &Info{Marker: marker, Stack: LatestPlanStack(comments, marker),
 			Stale: fate != FateQueued, Reapprove: fate == FateReplanned}
 	}
-	return st, warns
+	return st, warns, nil
 }
 
 // Annotate attaches each queued PR's Info (pr.Get("window")).
@@ -286,7 +293,7 @@ func revText(pr *model.PR) string {
 
 func statusOf(pr *model.PR) string {
 	if info := InfoOf(pr); info != nil && info.Status != "" {
-		return clip(info.Status, 30)
+		return text.Ellip(info.Status, 30)
 	}
 	return "queued"
 }

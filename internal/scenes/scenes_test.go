@@ -101,7 +101,7 @@ func TestSplashLogotypeAndMascot(t *testing.T) {
 	if !strings.ContainsAny(c.Text(ay+3), ball) {
 		t.Errorf("no ball at t=0.3: %q", c.Text(ay+3))
 	}
-	if strings.Contains(c.Text(ay), "__.------.__") {
+	if strings.Contains(c.Text(ay), strings.TrimSpace(glyphs.Armadillo[0])) {
 		t.Error("armadillo shown during the roll-in")
 	}
 
@@ -144,7 +144,7 @@ func TestSplashAmos(t *testing.T) {
 		t.Error("no sprite cells in color")
 	}
 	for r := 0; r < 30; r++ {
-		if strings.Contains(c.Text(r), "__.------.__") {
+		if strings.Contains(c.Text(r), strings.TrimSpace(glyphs.Armadillo[0])) {
 			t.Error("line art drawn alongside the sprite")
 		}
 	}
@@ -155,7 +155,7 @@ func TestSplashAmos(t *testing.T) {
 	}
 	found := false
 	for r := 0; r < 20; r++ {
-		found = found || strings.Contains(c.Text(r), "__.------.__")
+		found = found || strings.Contains(c.Text(r), strings.TrimSpace(glyphs.Armadillo[0]))
 	}
 	if !found {
 		t.Error("no line art on the short terminal")
@@ -589,8 +589,9 @@ func TestGleamSegs(t *testing.T) {
 	if len(segs) != 1 || segs[0].Style != "rule" || text.Width(segs[0].Text) != 20 {
 		t.Errorf("mono rule: %+v", segs)
 	}
-	if theme.Setup(colorprofile.TrueColor, false) != theme.TrueColor {
-		t.Skip("no color in this environment")
+	t.Setenv("NO_COLOR", "") // Setup reads only NO_COLOR and the profile it is given
+	if got := theme.Setup(colorprofile.TrueColor, false); got != theme.TrueColor {
+		t.Fatalf("Setup(TrueColor) = %v, want TrueColor", got)
 	}
 	t.Cleanup(func() { theme.Setup(0, true) })
 	segs = GleamSegs(20, 0)
@@ -673,5 +674,15 @@ func TestMascotNone(t *testing.T) {
 	Mascot = "ascii"
 	if useAmos(theme.TrueColor, 40, 120, 7) {
 		t.Error("mascot ascii must not use the sprite")
+	}
+}
+
+func TestCardTopTruncatesTitle(t *testing.T) {
+	line := CardTop("a title far wider than the card itself", 20)
+	if w := text.SegsWidth(line.Segs); w != 20 {
+		t.Errorf("card top width %d, want 20: %q", w, line.Text())
+	}
+	if !strings.HasSuffix(line.Text(), BoxGlyph(1)) {
+		t.Errorf("the corner survives: %q", line.Text())
 	}
 }

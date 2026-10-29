@@ -231,6 +231,9 @@ func TestShortAge(t *testing.T) {
 		{59 * 24 * time.Hour, "59d", "age.3"},
 		{60 * 24 * time.Hour, "8w", "age.3"},
 		{100 * 24 * time.Hour, "14w", "age.3"},
+		{364 * 24 * time.Hour, "52w", "age.3"}, // never "100w": the column is three cells
+		{400 * 24 * time.Hour, "1y", "age.3"},
+		{3 * 365 * 24 * time.Hour, "3y", "age.3"},
 		{-time.Hour, "1m", "age.0"}, // future: clamped to 0 seconds
 	}
 	for _, c := range cases {

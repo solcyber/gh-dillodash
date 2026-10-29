@@ -25,14 +25,14 @@ type Backoff struct {
 const BackoffBase = 15 * time.Second
 
 // Fail records a failed call at now and returns the time the next
-// attempt may run: err's RetryAt for a rate limit, else 15s * 2^n
-// capped at Refresh.
-func (b *Backoff) Fail(now time.Time, err error) time.Time {
+// attempt may run: retryAt when GitHub named one (a rate limit), else
+// 15s * 2^n capped at Refresh.
+func (b *Backoff) Fail(now time.Time, retryAt time.Time) time.Time {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if e, ok := AsError(err); ok && e.IsRateLimit() {
-		b.rateLimited = e.RetryAt
-		b.until = e.RetryAt
+	if !retryAt.IsZero() {
+		b.rateLimited = retryAt
+		b.until = retryAt
 		return b.until
 	}
 	b.streak++
@@ -55,6 +55,17 @@ func (b *Backoff) OK() {
 	b.streak = 0
 	b.until = time.Time{}
 	b.rateLimited = time.Time{}
+}
+
+// RateLimit records a wall GitHub named on an otherwise clean call (a
+// workflow hit it after the list landed): the streak resets, the wall
+// stands.
+func (b *Backoff) RateLimit(until time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.streak = 0
+	b.rateLimited = until
+	b.until = until
 }
 
 // Until is the time the next attempt may run (zero when unconstrained).

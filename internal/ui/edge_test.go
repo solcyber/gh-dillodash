@@ -8,6 +8,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
@@ -128,7 +129,7 @@ func TestDetailSurvivesVanishingPR(t *testing.T) {
 	if h.m.view != ViewDetail {
 		t.Fatalf("view = %s", h.m.view)
 	}
-	id := model.Ident{Repo: "infra", Number: 101}
+	id := model.Ident{Repo: infra, Number: 101}
 	h.gh.Open[infra] = ghapi.ListResult{PRs: h.gh.Open[infra].PRs[1:], Issues: h.gh.Open[infra].Issues}
 	delete(h.gh.PRs, id)
 	h.key('r')
@@ -249,4 +250,166 @@ func TestErrorMessagesNameTheThing(t *testing.T) {
 	if !strings.Contains(h.m.errText, "review approval of #101 failed") || !strings.Contains(h.m.errText, "Pull requests") {
 		t.Errorf("approve errText = %q", h.m.errText)
 	}
+}
+
+// TestGotoOwnerQualified: ":" accepts owner/repo#N, and tells two repos
+// with the same name under different owners apart.
+func TestGotoOwnerQualified(t *testing.T) {
+	beta := model.Repo{Owner: "beta", Name: "infra"}
+	h := newHarness(t, infra, beta)
+	h.load()
+	if !h.m.multiOwner {
+		t.Fatal("two owners should set multiOwner")
+	}
+	for _, tc := range []struct{ typed, ref string }{
+		{"acme/infra#101", "acme/infra#101"},
+		{"beta/infra#101", "beta/infra#101"},
+		{"#101", "acme/infra#101"}, // the first repo is the default
+	} {
+		h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return tc.typed, true }
+		h.key(':')
+		if h.m.view != ViewDetail || h.m.detailRef() != tc.ref {
+			t.Fatalf("%q: view=%s ref=%s", tc.typed, h.m.view, h.m.detailRef())
+		}
+		h.named("esc")
+	}
+	// the list rows carry the owner too
+	if s := h.screen(); !strings.Contains(s, "acme/infra#101") || !strings.Contains(s, "beta/infra#101") {
+		t.Errorf("rows lack owner-qualified refs:\n%s", s)
+	}
+}
+
+// TestWhereQualifiesForeignRepo: with one review repo, a PR from any
+// other repo (a release repo) still gets its repo in the heading.
+func TestWhereQualifiesForeignRepo(t *testing.T) {
+	h := newHarness(t, infra)
+	h.load()
+	if got := h.m.where(infra, 5); got != "#5" {
+		t.Errorf("own repo: %q", got)
+	}
+	if got := h.m.where(portal, 5); got != "web-portal#5" {
+		t.Errorf("foreign repo: %q", got)
+	}
+	h.m.mu.Lock()
+	h.m.multi = true
+	h.m.mu.Unlock()
+	if got := h.m.where(infra, 5); got != "infra#5" {
+		t.Errorf("multi: %q", got)
+	}
+	h.m.mu.Lock()
+	h.m.multi, h.m.repos = false, nil
+	h.m.mu.Unlock()
+	if got := h.m.where(portal, 5); got != "web-portal#5" {
+		t.Errorf("no repos: %q", got)
+	}
+	// and the detail heading of a foreign PR shows it
+	h.m.mu.Lock()
+	h.m.repos = []model.Repo{infra}
+	foreign := pr(portal, 7, "release 2026.10", "bob", false)
+	h.m.showDetail(foreign, "pr", 0, nil)
+	h.m.mu.Unlock()
+	if s := h.screen(); !strings.Contains(s, "web-portal#7") {
+		t.Errorf("heading lacks the repo:\n%s", s)
+	}
+	if ref := h.m.detailRef(); ref != "web-portal#7" {
+		t.Errorf("detailRef = %q", ref)
+	}
+}
+
+// TestNarrowLayouts: at 50 and 40 columns the list keeps its titles and
+// the bar keeps its help chip; files keep their base name; the help
+// scrolls when it overflows.
+func TestNarrowLayouts(t *testing.T) {
+	h := newHarness(t)
+	p := h.gh.Open[infra].PRs[0]
+	h.gh.Files = map[model.Ident][]model.PRFile{p.Ident(): {{Filename: "terraform/environments/production/eu-west-1/modules/iam/deploy-role/main.tf", Status: "modified", Additions: 3, Deletions: 1}}}
+	h.load()
+	for _, sz := range [][2]int{{50, 12}, {40, 10}} {
+		h.m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
+		s := h.screen()
+		lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+		if !strings.Contains(lines[0], "dillodash") {
+			t.Errorf("%dx%d: header lost the name:\n%s", sz[0], sz[1], s)
+		}
+		if !strings.Contains(s, "#101") || !strings.Contains(s, "widen") {
+			t.Errorf("%dx%d: the title vanished:\n%s", sz[0], sz[1], s)
+		}
+		bar := strings.TrimRight(lines[len(lines)-1], " ")
+		if !strings.HasSuffix(bar, "?  help") {
+			t.Errorf("%dx%d: bar %q", sz[0], sz[1], bar)
+		}
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 50, Height: 12})
+	h.named("enter")
+	if s := h.screen(); !strings.Contains(strings.Split(s, "\n")[0], "#101") {
+		t.Errorf("detail header at 50 cols:\n%s", s)
+	}
+	h.key('f')
+	if s := h.screen(); !strings.Contains(s, "main.tf") {
+		t.Errorf("files at 50 cols lose the base name:\n%s", s)
+	}
+	h.named("esc")
+	h.named("esc")
+	// the help at 80x12 overflows and scrolls
+	h.m.Update(tea.WindowSizeMsg{Width: 80, Height: 12})
+	h.key('?')
+	if h.m.overlay != "help" {
+		t.Fatal("help not open")
+	}
+	if s := h.screen(); !strings.Contains(s, "j/k scroll") {
+		t.Errorf("overflowing help shows the scroll hint:\n%s", s)
+	}
+	h.key('j')
+	h.key('j')
+	h.key('j')
+	if h.m.helpTop != 3 || h.m.overlay != "help" {
+		t.Errorf("j scrolls the help: top=%d overlay=%q", h.m.helpTop, h.m.overlay)
+	}
+	h.key('x')
+	if h.m.overlay != "" {
+		t.Error("any other key closes it")
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+}
+
+func TestFilterChipSurvivesNarrow(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	h.m.mu.Lock()
+	h.m.filter = "widen"
+	h.m.refilter()
+	h.m.mu.Unlock()
+	lines := strings.Split(h.screen(), "\n")
+	if !strings.Contains(lines[1], "widen") {
+		t.Errorf("summary row at 60 cols lost the filter chip: %q", lines[1])
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+}
+
+func TestStatusEllipsisAndMessageOverlay(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	long := "approval failed: " + strings.Repeat("the token lacks a permission ", 10) + "END"
+	h.m.mu.Lock()
+	h.m.fail(long)
+	h.m.mu.Unlock()
+	lines := strings.Split(h.screen(), "\n")
+	status := strings.TrimRight(lines[len(lines)-2], " ")
+	if !strings.HasSuffix(status, text.Ellipsis) || strings.Contains(status, "END") {
+		t.Errorf("a long error ends in an ellipsis: %q", status)
+	}
+	h.key('e')
+	if h.m.overlay != "message" {
+		t.Fatalf("e opens the message overlay, got %q", h.m.overlay)
+	}
+	if s := h.screen(); !strings.Contains(s, "END") || !strings.Contains(s, "last message") {
+		t.Errorf("the overlay shows the whole message:\n%s", s)
+	}
+	h.named("esc")
+	if h.m.overlay != "" {
+		t.Error("esc closes it")
+	}
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 }

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/solcyber/gh-dillodash/internal/external"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -130,10 +131,31 @@ func (m *Model) handleExec(msg execMsg) tea.Cmd {
 	})
 }
 
-// testPrompter scripts the answers in tests.
+// openURL starts a browser on url and reports whether one started.
+// Tests script it; nothing in the ui tests may reach the real browser.
+func (m *Model) openURL(url string) bool {
+	if m.tp != nil && m.tp.OpenURL != nil {
+		return m.tp.OpenURL(url)
+	}
+	return external.OpenURL(url)
+}
+
+// copy puts s on the clipboard and returns where it went ("" when nowhere).
+func (m *Model) copy(s string) string {
+	if m.tp != nil && m.tp.Copy != nil {
+		return m.tp.Copy(s)
+	}
+	return external.CopyToClipboard(s)
+}
+
+// testPrompter scripts the answers in tests, and stands in for the
+// programs a key would otherwise start on the developer's machine (the
+// browser, the clipboard, $PAGER): a test harness fills every field.
 type testPrompter struct {
 	Confirm     func(q string) bool
 	Prompt      func(p string, o workflow.PromptOpts) (string, bool)
 	Pick        func(title string, labels []string) int
 	RunExternal func(argv []string) error
+	OpenURL     func(url string) bool
+	Copy        func(s string) (where string)
 }

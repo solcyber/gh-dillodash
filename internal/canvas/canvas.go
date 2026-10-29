@@ -183,20 +183,6 @@ func (c *Canvas) Fill(y, x0, x1 int, style string, sel, band bool) {
 	}
 }
 
-// Line draws a text.Line at (y, x) padded with the row background to
-// right, honoring the line's band flag.
-func (c *Canvas) Line(y, x int, l text.Line, right int, sel bool) {
-	if right <= 0 || right > c.W {
-		right = c.W
-	}
-	bgStyle := "text"
-	if l.Band {
-		bgStyle = "band"
-	}
-	c.Fill(y, x, right, bgStyle, sel, l.Band)
-	c.PutSegs(y, x, l.Segs, right, sel, l.Band)
-}
-
 // Text returns the plain text of row y (for tests).
 func (c *Canvas) Text(y int) string {
 	if y < 0 || y >= c.H {

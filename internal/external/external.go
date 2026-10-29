@@ -27,11 +27,11 @@ var (
 	goos         = runtime.GOOS
 )
 
-// SplitWords splits a command line into words the way a POSIX shell
+// splitWords splits a command line into words the way a POSIX shell
 // would, enough for $EDITOR and $PAGER values: single quotes keep
 // everything literal, double quotes allow \" and \\, a backslash outside
 // quotes escapes the next character. An unterminated quote is an error.
-func SplitWords(s string) ([]string, error) {
+func splitWords(s string) ([]string, error) {
 	var out []string
 	var cur strings.Builder
 	have := false
@@ -89,17 +89,18 @@ func SplitWords(s string) ([]string, error) {
 	return out, nil
 }
 
-// EditorCommand is the editor to run: $VISUAL, else $EDITOR, else vi,
-// split into words.
+// EditorCommand is the editor to run: $GH_EDITOR (the gh convention),
+// else $VISUAL, else $EDITOR, else vi (notepad on Windows), split into
+// words.
 func EditorCommand() ([]string, error) {
-	ed := os.Getenv("VISUAL")
-	if ed == "" {
-		ed = os.Getenv("EDITOR")
-	}
+	ed := firstEnv("GH_EDITOR", "VISUAL", "EDITOR")
 	if ed == "" {
 		ed = "vi"
+		if goos == "windows" {
+			ed = "notepad"
+		}
 	}
-	argv, err := SplitWords(ed)
+	argv, err := splitWords(ed)
 	if err != nil {
 		return nil, fmt.Errorf("editor %q: %w", ed, err)
 	}
@@ -109,26 +110,42 @@ func EditorCommand() ([]string, error) {
 	return argv, nil
 }
 
-// PagerCommand is the pager to run: $PAGER split into words, else less.
+// PagerCommand is the pager to run: $GH_PAGER (the gh convention), else
+// $PAGER, split into words; else less (more on Windows, which has no
+// less out of the box).
 func PagerCommand() []string {
-	if p := os.Getenv("PAGER"); p != "" {
-		if argv, err := SplitWords(p); err == nil && len(argv) > 0 {
+	if p := firstEnv("GH_PAGER", "PAGER"); p != "" {
+		if argv, err := splitWords(p); err == nil && len(argv) > 0 {
 			return argv
 		}
 	}
+	if goos == "windows" {
+		return []string{"more"}
+	}
 	return []string{"less"}
+}
+
+// firstEnv is the first non-empty variable of the names.
+func firstEnv(names ...string) string {
+	for _, n := range names {
+		if v := os.Getenv(n); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // exitStatus is what a non-zero exit looks like (exec.ExitError, or a
 // test's stand-in).
 type exitStatus interface{ ExitCode() int }
 
-// Run runs an interactive program (editor, pager) on the real terminal
-// and returns its exit status as the error (an *exec.ExitError for a
-// non-zero exit). Ctrl-C meanwhile is swallowed here: it reaches the
-// child as well, and used to kill the dashboard too. A handler, not
-// SIG_IGN, which the child would inherit across exec.
-func Run(argv []string) error {
+// runTTY runs an interactive program (editor, pager) on the real
+// terminal and returns its exit status as the error (an *exec.ExitError
+// for a non-zero exit); the default runner of EditInTemp when the app
+// gives none (the app gives Bubble Tea's). Ctrl-C meanwhile is swallowed
+// here: it reaches the child as well. A handler, not SIG_IGN, which the
+// child would inherit across exec.
+func runTTY(argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("empty command")
 	}
@@ -151,7 +168,7 @@ func EditInTemp(seed string, run func(argv []string) error) (text string, ok boo
 		return "", false, err
 	}
 	if run == nil {
-		run = Run
+		run = runTTY
 	}
 	f, err := os.CreateTemp("", "dillodash-*.md")
 	if err != nil {
@@ -208,9 +225,12 @@ func WriteTempDiff(number int, diff string) (path string, cleanup func(), err er
 // CopyToClipboard puts s on the clipboard from inside a terminal app,
 // over SSH too. Inside tmux, `tmux load-buffer -w` (tmux forwards it to
 // the outer terminal's clipboard itself; its default set-clipboard=
-// external drops OSC 52 written by applications); otherwise an OSC 52
-// escape straight to the tty; failing that, the local clipboard tools.
-// Returns a word for the status line, "" when nothing worked.
+// external drops OSC 52 written by applications); otherwise the local
+// clipboard tool when the session has one (pbcopy, clip, wl-copy,
+// xclip), whose success is real; last an OSC 52 escape straight to the
+// tty, which a terminal may silently ignore (Terminal.app does), so its
+// word says so. Returns a word for the status line, "" when nothing
+// worked.
 func CopyToClipboard(s string) (where string) {
 	if os.Getenv("TMUX") != "" {
 		if runCommand([]string{"tmux", "load-buffer", "-w", "-"}, s) == nil {
@@ -219,10 +239,6 @@ func CopyToClipboard(s string) (where string) {
 		if runCommand([]string{"tmux", "load-buffer", "-"}, s) == nil {
 			return "tmux buffer"
 		}
-	}
-	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(s)) + "\x07"
-	if writeTTY(osc) == nil {
-		return "clipboard (OSC 52)"
 	}
 	switch goos {
 	case "darwin":
@@ -241,6 +257,10 @@ func CopyToClipboard(s string) (where string) {
 			return "xclip"
 		}
 	}
+	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(s)) + "\x07"
+	if writeTTY(osc) == nil {
+		return "the terminal via OSC 52 (if it allows it)"
+	}
 	return ""
 }
 
@@ -254,7 +274,8 @@ func OpenURL(url string) bool {
 	case goos == "darwin":
 		argv = []string{"open", url}
 	case goos == "windows":
-		argv = []string{"cmd", "/c", "start", "", url}
+		// not cmd /c start: cmd would interpret & | ^ in the URL
+		argv = []string{"rundll32", "url.dll,FileProtocolHandler", url}
 	case os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "":
 		argv = []string{"xdg-open", url}
 	default:

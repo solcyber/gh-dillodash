@@ -2,6 +2,7 @@ package scenes
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/solcyber/gh-dillodash/internal/amos"
 	"github.com/solcyber/gh-dillodash/internal/canvas"
@@ -66,7 +67,7 @@ func splash(c *canvas.Canvas, f *fx.Fx, h, w int, info SplashInfo, tier theme.Ti
 				if math.Abs(float64(i-2*r)-shine) < 2.5 {
 					st = "fx.logo.shine"
 				} else {
-					st = "fx.logo." + itoa(min(5, r))
+					st = "fx.logo." + strconv.Itoa(min(5, r))
 				}
 			default:
 				st = "fx.logo.shade"
@@ -118,25 +119,6 @@ func splash(c *canvas.Canvas, f *fx.Fx, h, w int, info SplashInfo, tier theme.Ti
 		c.PutSegs(y+1, (w-bw)/2, fx.ScannerSegs(bw, fx.Wave(1.3, 0)), 0, false, false)
 	}
 	return true
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b []byte
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	for i > 0 {
-		b = append([]byte{byte('0' + i%10)}, b...)
-		i /= 10
-	}
-	if neg {
-		b = append([]byte{'-'}, b...)
-	}
-	return string(b)
 }
 
 // StartCascade starts the list's cascade: the rows sweep in one after

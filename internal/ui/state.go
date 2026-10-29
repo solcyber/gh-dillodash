@@ -7,11 +7,13 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -22,8 +24,9 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
-// TickMS is the getch timeout while something animates (spinners);
-// tickMS() slows it to 400ms when nothing does. Drives the refresh clock.
+// TickMS is the frame interval while something animates (spinners,
+// running CI); tickMS() stretches it when nothing does and idleWakeMS()
+// sleeps to the next countdown boundary or the refresh.
 const TickMS = 100
 
 // Views.
@@ -78,10 +81,12 @@ type Model struct {
 	me    string
 	repos []model.Repo
 	multi bool
-	host  string
-	ctx   context.Context
-	prog  *tea.Program
-	ver   string
+	// multiOwner: the review repos span owners, so refs carry the owner
+	multiOwner bool
+	host       string
+	ctx        context.Context
+	prog       *tea.Program
+	ver        string
 
 	fx         *fx.Fx
 	w, h       int
@@ -108,16 +113,15 @@ type Model struct {
 	statusAt   float64
 
 	// refresh
-	refreshing       bool
-	refreshAgain     bool
-	ciFlush          bool
-	nextRefreshAt    float64
-	lastRefresh      float64
-	lastRefreshWall  string
-	rateLimitedUntil time.Time
-	ci               *ghapi.CIFallback
-	ciClusters       map[model.Ident]model.CICluster
-	failStreak       int
+	refreshing      bool
+	refreshAgain    bool
+	ciFlush         bool
+	nextRefreshAt   float64
+	lastRefresh     float64
+	lastRefreshWall string
+	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
+	ci              *ghapi.CIFallback
+	ciClusters      map[model.Ident]model.CICluster
 
 	approvedByMe map[model.Ident]string // ident -> head SHA at the time
 
@@ -161,8 +165,24 @@ type Model struct {
 
 	wfState map[string]any
 
-	// the running action, if any
-	action bool
+	// refreshStamp names the last landed refresh (the fortress rebuilds
+	// its map when it changes)
+	refreshStamp string
+	// canvas is the frame buffer View reuses between frames
+	canvas *canvas.Canvas
+	// tickGen is the frame clock's generation (retick orphans old ticks)
+	tickGen int
+	// helpTop is the help/message overlay's scroll offset; lastMsg the
+	// last status or error, whole, for the e overlay
+	helpTop int
+	lastMsg string
+	// manualPending: r was pressed, so the next landing says "refreshed at"
+	manualPending bool
+
+	// the running action, if any; quitArmedAt is when q was last pressed
+	// during one (a second press within quitArmSecs quits anyway)
+	action      bool
+	quitArmedAt float64
 
 	// tp scripts prompt answers in tests; sendFn replaces the program
 	tp     *testPrompter
@@ -193,6 +213,7 @@ func New(ctx context.Context, o Options) *Model {
 		me:              o.Me,
 		repos:           repos,
 		multi:           len(repos) > 1,
+		multiOwner:      spansOwners(repos),
 		host:            o.Host,
 		ctx:             ctx,
 		ver:             o.Version,
@@ -200,7 +221,9 @@ func New(ctx context.Context, o Options) *Model {
 		view:            ViewList,
 		detailFrom:      ViewList,
 		statusKind:      "info",
-		ci:              &ghapi.CIFallback{},
+		ci:              &ghapi.CIFallback{Recheck: time.Duration(o.Config.Reviews.CIRecheckSecs) * time.Second},
+		backoff:         ghapi.Backoff{Refresh: time.Duration(o.Config.Display.RefreshSecs) * time.Second},
+		deployCache:     deploys.Cache{StuckAfter: deployStuck(o.Config)},
 		ciClusters:      map[model.Ident]model.CICluster{},
 		approvedByMe:    map[model.Ident]string{},
 		users:           map[model.Repo][]model.Actor{},
@@ -227,6 +250,7 @@ func (m *Model) setStatus(msg string) {
 	m.statusAt = fx.Now()
 	if msg != "" {
 		m.errText = ""
+		m.lastMsg = msg
 		m.fx.Start("toast", 0.25, nil)
 	}
 }
@@ -245,6 +269,7 @@ func (m *Model) notice(msg string) {
 
 func (m *Model) fail(msg string) {
 	m.errText = msg
+	m.lastMsg = msg
 	m.status = ""
 	m.fx.Start("toast", 0.25, nil)
 	m.fx.Start("toast.shake", 0.3, nil)
@@ -327,7 +352,42 @@ func (m *Model) reposText() string {
 	return out
 }
 
-// where is "#N" or "repo#N" for status messages.
+// deployStuck is the release config's deploy_stuck_secs, or zero for
+// the deploys package's default.
+func deployStuck(cfg *config.Config) time.Duration {
+	if cfg != nil && cfg.ReleasePR != nil && cfg.ReleasePR.DeployStuckSecs > 0 {
+		return time.Duration(cfg.ReleasePR.DeployStuckSecs) * time.Second
+	}
+	return 0
+}
+
+// deployRefresh is how soon to look again while a deploy waits or runs:
+// the release config's deploy_refresh_secs, else the default.
+func (m *Model) deployRefresh() time.Duration {
+	if m.cfg != nil && m.cfg.ReleasePR != nil {
+		return deploys.RefreshInterval(m.cfg.ReleasePR.DeployRefreshSecs)
+	}
+	return deploys.RefreshEvery
+}
+
+// spansOwners reports whether the repos belong to more than one owner.
+func spansOwners(repos []model.Repo) bool {
+	for _, r := range repos[min(1, len(repos)):] {
+		if !strings.EqualFold(r.Owner, repos[0].Owner) {
+			return true
+		}
+	}
+	return false
+}
+
+// where names a PR or issue for headings and status messages: "#N" when
+// repo is the only review repo, "repo#N" when several are configured or
+// the item comes from elsewhere (a release repo), and "owner/repo#N"
+// when the configured repos span owners.
 func (m *Model) where(repo model.Repo, n int) string {
-	return model.Ref(repo, n, m.multi)
+	if m.multiOwner {
+		return model.Ident{Repo: repo, Number: n}.String()
+	}
+	foreign := len(m.repos) == 0 || repo != m.repos[0]
+	return model.Ref(repo, n, m.multi || foreign)
 }

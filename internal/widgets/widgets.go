@@ -11,28 +11,36 @@ package widgets
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/text"
 )
 
-// Key is a normalized key press: a printable rune, or a named key.
+// Key is a normalized key press: a printable rune, a named key, or a
+// run of text (a paste, or a multi-rune press such as an IME commit or
+// an emoji with a modifier) that only a prompt consumes.
 type Key struct {
 	Rune rune // the printable rune, 0 for a named key
 	// Name is "enter", "esc", "backspace", "delete", "up", "down",
 	// "left", "right", "home", "end", "pgup", "pgdn", "tab", "ctrl+u",
 	// "ctrl+w", "ctrl+a", "ctrl+e", "ctrl+k", "ctrl+c" (and the other
-	// ctrl+<letter> chords), "" for a plain rune.
+	// ctrl+<letter> chords), "text" for a run of text, "" for a plain
+	// rune.
 	Name string
+	// Text is the run when Name is "text".
+	Text string
 }
 
 // R is a plain-rune key.
 func R(r rune) Key { return Key{Rune: r} }
+
+// T is a run of text (a paste).
+func T(s string) Key { return Key{Name: "text", Text: s} }
 
 // K is a named key.
 func K(name string) Key { return Key{Name: name} }
@@ -52,12 +60,9 @@ type Modal interface {
 	Animated() bool
 }
 
-// ApproveCmdRe matches an /approve command line: the 64-hex plan id and
-// its optional --confirm-destroys / --outside-window flags.
-var ApproveCmdRe = regexp.MustCompile(
-	`^/approve [ \t\r\n\f\v]*([0-9a-f]{64})` +
-		`((?:[ \t]+--(?:confirm-destroys=[0-9]+|outside-window="[^"\r\n]*"))*)` +
-		`[ \t\r\n\f\v]*$`)
+// ApproveCmdRe matches an /approve command line: the validator's shape,
+// shared with the markdown renderer.
+var ApproveCmdRe = markdown.ApproveCmdRE
 
 // Wrap word-wraps s to width cells the way textwrap.wrap does: words move
 // whole to the next line, a word wider than a line is broken, whitespace
@@ -192,7 +197,7 @@ func ReasonProgress(s string, minLen int, forbid string) (ok bool, remaining int
 		}
 		return false, remaining, fmt.Sprintf("%d more character%s", remaining, plural)
 	}
-	return true, 0, "enough — enter continues"
+	return true, 0, "enough — Enter continues"
 }
 
 // HazardSegs is a gold hazard stripe width cells wide; it marches when

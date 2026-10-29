@@ -35,7 +35,7 @@ func CardTop(title string, width int) text.Line {
 	tl, tr, hz := BoxGlyph(0), BoxGlyph(1), BoxGlyph(4)
 	segs := []text.Seg{text.S(tl+hz, "card")}
 	if title != "" {
-		segs = append(segs, text.S(" "+title+" ", "card.title"))
+		segs = append(segs, text.S(" "+text.Ellip(title, max(0, width-6))+" ", "card.title"))
 	}
 	used := text.SegsWidth(segs)
 	segs = append(segs, text.S(strings.Repeat(hz, max(0, width-used-1))+tr, "card"))

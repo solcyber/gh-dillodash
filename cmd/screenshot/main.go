@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -137,10 +138,10 @@ func paint(img *image.RGBA, c *canvas.Canvas, left, top, cw, ch, ascent int, reg
 			}
 		} else {
 			st := theme.Style(cell.Style, cell.Sel, cell.Band)
-			if col := st.GetForeground(); col != nil {
+			if col := st.GetForeground(); col != (lipgloss.NoColor{}) {
 				fg = col
 			}
-			if col := st.GetBackground(); col != nil {
+			if col := st.GetBackground(); col != (lipgloss.NoColor{}) {
 				bg = col
 			}
 			isBold = st.GetBold() || cell.Extra&text.Bold != 0

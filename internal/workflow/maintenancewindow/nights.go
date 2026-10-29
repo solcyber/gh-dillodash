@@ -349,7 +349,7 @@ func CommandCheck(cmd string, info *Night, night, me string, now time.Time, item
 				return false, fmt.Sprintf("#%d has already started", item.PR)
 			}
 		}
-		return true, fmt.Sprintf("takes it out of this window; it needs a fresh approve to queue again")
+		return true, "takes it out of this window; it needs a fresh approve to queue again"
 	}
 	return false, fmt.Sprintf("unknown window command %q", cmd)
 }

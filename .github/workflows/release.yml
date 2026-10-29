@@ -3,13 +3,49 @@ on:
   push:
     tags: ["v*"]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  # a tag never ships a red tree: the same matrix as ci must pass first
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race ./... -count=1
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
       - uses: cli/gh-extension-precompile@v2
         with:
           go_version_file: go.mod
-          go_build_options: -ldflags=-s -w -X=main.version=${{ github.ref_name }}
+          generate_attestations: true
+          # this replaces the action's own -ldflags="-s -w", so both flags
+          # are repeated here next to the version stamp
+          go_build_options: '-ldflags=-s -w -X main.version=${{ github.ref_name }}'
+      - name: release notes from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v v="${TAG#v}" '
+            /^## / { on = ($2 == v) ; next }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            echo "no CHANGELOG section for $TAG; keeping the generated notes"
+          fi

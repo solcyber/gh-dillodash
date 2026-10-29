@@ -203,17 +203,33 @@ type Issue struct {
 	Ext map[string]any `json:"-"`
 }
 
-// Ident identifies a row across refreshes: (repo name, number).
+// Ident identifies a row across refreshes: (repo, number). The repo
+// carries its owner, so acme/api#5 and beta/api#5 are different rows.
 type Ident struct {
-	Repo   string
+	Repo   Repo
 	Number int
 }
 
+// String is "owner/name#N".
+func (id Ident) String() string { return fmt.Sprintf("%s#%d", id.Repo, id.Number) }
+
 // Ident is the PR's row identity.
-func (p *PR) Ident() Ident { return Ident{p.Repo.Name, p.Number} }
+func (p *PR) Ident() Ident { return Ident{p.Repo, p.Number} }
 
 // Ident is the issue's row identity.
-func (i *Issue) Ident() Ident { return Ident{i.Repo.Name, i.Number} }
+func (i *Issue) Ident() Ident { return Ident{i.Repo, i.Number} }
+
+// ShortSHA is the first seven characters of a commit SHA, the length
+// GitHub shows; "?" for an empty one.
+func ShortSHA(sha string) string {
+	if sha == "" {
+		return "?"
+	}
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
 
 // Ref is "#N" with one repo configured, "repo#N" with several.
 func Ref(repo Repo, number int, multi bool) string {

@@ -145,11 +145,14 @@ func (a *lockedApp) LocalApproved(pr *model.PR) bool {
 	return a.m.localApproved(pr)
 }
 func (a *lockedApp) MarkApproved(pr *model.PR) { defer a.lock()(); a.m.MarkApproved(pr) }
-func (a *lockedApp) Detail() any               { defer a.lock()(); return a.m.detail }
-func (a *lockedApp) DetailListed() *model.PR   { defer a.lock()(); return a.m.detailListed }
-func (a *lockedApp) DetailKind() string        { defer a.lock()(); return a.m.detailKind }
-func (a *lockedApp) CurrentView() string       { defer a.lock()(); return a.m.view }
-func (a *lockedApp) Rows() []workflow.Row      { defer a.lock()(); return a.m.rows }
+
+// IApproved reports whether I approved pr's current head (lock taken).
+func (a *lockedApp) IApproved(pr *model.PR) bool { defer a.lock()(); return a.m.iApproved(pr) }
+func (a *lockedApp) Detail() any                 { defer a.lock()(); return a.m.detail }
+func (a *lockedApp) DetailListed() *model.PR     { defer a.lock()(); return a.m.detailListed }
+func (a *lockedApp) DetailKind() string          { defer a.lock()(); return a.m.detailKind }
+func (a *lockedApp) CurrentView() string         { defer a.lock()(); return a.m.view }
+func (a *lockedApp) Rows() []workflow.Row        { defer a.lock()(); return a.m.rows }
 func (a *lockedApp) Selected() (workflow.Row, bool) {
 	defer a.lock()()
 	return a.m.Selected()

@@ -42,7 +42,9 @@ glyph tests were run against.
    ```
 2. Extract `HackNerdFontMono-Regular.ttf`, `HackNerdFontMono-Bold.ttf`,
    `LICENSE.md` and `README.md` into this directory. Save the README as
-   `NERD-FONTS-README.md`.
+   `NERD-FONTS-README.md`. `NERD-FONTS-LICENSE.md` is the `LICENSE` file
+   of the ryanoasis/nerd-fonts repository (the patcher's licence; it is
+   not in the font archive); refresh it from the same tag.
 3. Update `Version`, `RegularSHA256` and `BoldSHA256` in `fonts.go`
    (`sha256sum HackNerdFontMono-*.ttf`).
 4. Run `go test ./internal/fonts/`. It fails if any glyph the dashboard draws

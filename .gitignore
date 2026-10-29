@@ -1,13 +1,18 @@
 # local config and secrets never belong here
-config.toml
+/config.toml
 *.token
 # build output
 /gh-dillodash
 /gh-dillodash.exe
+/screenshot
+/gen-amos
 dist/
 *.test
 *.out
+coverage.*
 # editors / OS
 .DS_Store
+Thumbs.db
+*.swp
 .idea/
 .vscode/

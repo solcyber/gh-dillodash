@@ -5,18 +5,29 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
-// Run prints the report; it returns an error when something is broken.
+// Client is what the report needs of GitHub: the API plus where the
+// token came from.
+type Client interface {
+	ghapi.Client
+	Host() string
+	TokenSource() string
+}
+
+// Run builds the client from the gh login and prints the report; it
+// returns an error when something is broken.
 func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) error {
 	fmt.Fprintf(w, "dillodash %s\n", version)
 	fmt.Fprintf(w, "config: %s\n", cfg.Path)
@@ -24,33 +35,61 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 	var pulled bool
 	if raw, err := os.ReadFile(cfg.Path); err == nil {
 		if src, pulled = config.ParseSource(raw); pulled {
-			fmt.Fprintf(w, "  source: %s @ %s, pulled %s\n", src.Spec(), short7(src.SHA), ago(src.At))
+			fmt.Fprintf(w, "  source: %s @ %s, pulled %s\n", src.Spec(), model.ShortSHA(src.SHA), ago(src.At))
 		}
 	}
 	for _, warn := range cfg.Warnings {
 		fmt.Fprintf(w, "  warning: %s\n", warn)
 	}
 	fmt.Fprintf(w, "reviews: %s\n", joinRepos(cfg.Reviews.Repos))
-	host := cfg.GitHub.Host
-	if host == "" {
-		host = "github.com"
-	}
-	gh, err := ghapi.New(ghapi.Options{Host: host, Version: version, Timeout: 15 * time.Second})
+	gh, err := ghapi.New(ghapi.Options{Host: cfg.GitHub.Host, Version: version, Timeout: 15 * time.Second})
 	if err != nil {
-		fmt.Fprintf(w, "auth: FAILED: %s\n  sign in with: gh auth login\n", err)
-		return err
+		fmt.Fprintf(w, "auth: FAILED: %s\n", err)
+		return ErrFailed
 	}
+	return Report(ctx, w, cfg, gh, src, pulled)
+}
+
+// ErrFailed is what Run returns for anything the report printed as
+// FAILED, so the caller prints one summary line, not the detail twice.
+var ErrFailed = errors.New("config check failed (see above)")
+
+// BotHint is the second half of the bot-login message: how to run as
+// yourself, which depends on where the token came from.
+func BotHint(source string) string {
+	if ghapi.TokenFromEnv(source) {
+		return "unset " + source + " to use gh's own login, or export your own token in it"
+	}
+	return "gh auth switch (or GH_TOKEN=<your token>) to run as yourself"
+}
+
+// Report prints everything after the client exists: the token and the
+// login, the source check, every repo's reach, the budget and the
+// workflows. A login listed in [bots] fails the report: the dashboard
+// would post reviews, comments and merges as the bot, and the audit
+// trail of who approved is only meaningful when it is the human who
+// decided.
+func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src config.Source, pulled bool) error {
 	fmt.Fprintf(w, "host: %s\ntoken: from %s\n", gh.Host(), gh.TokenSource())
+	if ghapi.TokenFromEnv(gh.TokenSource()) {
+		fmt.Fprintf(w, "  note: %s in the environment overrides the gh login (gh auth status shows it); unset it to use gh's account\n", gh.TokenSource())
+	}
 	me, err := gh.Whoami(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "login: FAILED: %s\n", err)
-		return err
+		return ErrFailed
 	}
-	fmt.Fprintf(w, "login: %s", me)
-	if cfg.GitHub.Login != "" && !strings.EqualFold(cfg.GitHub.Login, me) {
-		fmt.Fprintf(w, "  (config expects %s: gh auth switch)", cfg.GitHub.Login)
+	var botErr error
+	if cfg.Bots.IsBot(me) {
+		botErr = ErrFailed
+		fmt.Fprintf(w, "login: FAILED: %s is a bot login ([bots] logins, or the [bot] suffix); reviews, comments and merges would be signed by it — %s\n", me, BotHint(gh.TokenSource()))
+	} else {
+		fmt.Fprintf(w, "login: %s", me)
+		if cfg.GitHub.Login != "" && !strings.EqualFold(cfg.GitHub.Login, me) {
+			fmt.Fprintf(w, "  (config expects %s: gh auth switch)", cfg.GitHub.Login)
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w)
 	if pulled {
 		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {
 			fmt.Fprintf(w, "  source: could not check %s: %s\n", src.Spec(), err)
@@ -80,7 +119,7 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 			fmt.Fprintf(w, "  note: %s\n", n)
 		}
 		if _, err := gh.WorkflowRuns(ctx, repo, "0000000000000000000000000000000000000000"); err != nil {
-			fmt.Fprintf(w, "  actions: not readable (%s) — the CI column falls back to '?' when the check rollup is hidden too\n", short(err))
+			fmt.Fprintf(w, "  actions: not readable (%s) — the CI column falls back to '?' when the check rollup is hidden too\n", verbose(err))
 		} else {
 			fmt.Fprintln(w, "  actions: readable")
 		}
@@ -112,8 +151,8 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) e
 		on("release_pr", false, "")
 	}
 	fmt.Fprintln(w, "write permissions (reviews, comments, merges, deployments) are not probed: a 403 names the missing one when it happens")
-	if failed {
-		return fmt.Errorf("some repos could not be read")
+	if botErr != nil || failed {
+		return ErrFailed
 	}
 	return nil
 }
@@ -126,31 +165,18 @@ func joinRepos(repos []model.Repo) string {
 	return strings.Join(parts, ", ")
 }
 
-func short(err error) string {
-	s := err.Error()
-	if i := strings.Index(s, ": "); i > 0 && len(s) > 80 {
-		return s[i+2:]
+// verbose is the long form of a GitHub error (method and URL) for the
+// report, where detail helps.
+func verbose(err error) string {
+	if e, ok := ghapi.AsError(err); ok {
+		return e.Verbose()
 	}
-	return s
-}
-
-func short7(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
+	return err.Error()
 }
 
 func ago(t time.Time) string {
 	if t.IsZero() {
 		return "at an unknown time"
 	}
-	d := time.Since(t)
-	switch {
-	case d < time.Hour:
-		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%d hours ago", int(d.Hours()))
-	}
-	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+	return clock.Ago(t, clock.Now())
 }

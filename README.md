@@ -6,18 +6,20 @@ without leaving the terminal. Runs as a GitHub CLI extension, so it signs in
 the way `gh` does, and it works against any GitHub organization, including
 GitHub Enterprise Server.
 
-![dillodash](docs/screenshot.png)
+![The dillodash list: pull requests with status chips, CI glyphs, diffstat, author and age, issues below, and a pull request's detail view](docs/screenshot.png)
 
 Amos the armadillo lives in the splash screen and keeps you company when the
 list is empty.
 
 ## Install
 
-Needs the GitHub CLI (`gh`); the release binaries cover macOS, Linux and
-Windows, and building from source needs Go 1.26 or newer.
+Needs the GitHub CLI (`gh` 2.x) and a terminal with 256 colors or
+truecolor; the release binaries cover macOS, Linux, FreeBSD and Windows,
+and building from source needs Go 1.27 or newer.
 
 ```sh
 gh extension install solcyber/gh-dillodash
+gh dillodash --demo            # try it on an offline fixture first, no GitHub needed
 gh dillodash font install      # optional: the bundled Nerd Font for the icons
 ```
 
@@ -30,7 +32,7 @@ gh dillodash config check      # validates it and probes what your token can rea
 gh dillodash
 ```
 
-The smallest working config is three lines:
+The smallest working config is two lines:
 
 ```toml
 [reviews]
@@ -40,6 +42,12 @@ repos = ["acme/infra", "acme/web-portal"]
 Everything else is optional and documented in [`config.example.toml`](config.example.toml).
 An organization can keep its config in a repo and install it with
 `gh dillodash config pull owner/repo` (see [docs/configuration.md](docs/configuration.md)).
+
+Upgrade with `gh extension upgrade dillodash`; remove it with
+`gh extension remove dillodash` (the config in `~/.config/dillodash` and
+any installed font stay until you delete them). When something looks
+wrong, [docs/troubleshooting.md](docs/troubleshooting.md) lists the
+symptoms.
 
 ## What you see
 
@@ -79,26 +87,12 @@ fast reviewer.
 
 ## Keys
 
-| Key | Where | Does |
-|---|---|---|
-| `j`/`k`, `g`/`G`, pgup/pgdn | list, detail | move, scroll |
-| `enter` | list | open |
-| `/` | list | filter (live); detail, diff: search (`n`/`N` next/prev) |
-| `A` | list | toggle PRs approved by others |
-| `a` | detail | approve |
-| `c` / `C` | detail | comment inline / in `$EDITOR` |
-| `t` | detail | tag someone (`$EDITOR` seeded with the mention) |
-| `M` / `D` | detail (and `D` in the list) | merge an approved PR / approve its waiting deployments |
-| `f`, `v` | detail | changed files, full diff in `$PAGER` |
-| `m` | detail | raw markdown |
-| `d` | list | fortress mode |
-| `y`, `o` | anywhere | copy the URL, open it in the browser |
-| `:` | anywhere | go to `#N` |
-| `r` | anywhere | refresh now |
-| `?` | anywhere | help, with the glyph legend |
-| `q` | list | quit (`Esc` clears the filter instead) |
-
-The full table is in [docs/keys.md](docs/keys.md).
+The essentials: `enter` opens, `a` approves, `c` comments, `M` merges,
+`D` approves deployments, `/` filters or searches, `d` is fortress mode,
+`?` is the help with every key and the glyph legend, `q` quits (`Esc`
+clears the filter instead). Every key, per view, is in
+[docs/keys.md](docs/keys.md), which is generated from the key table the
+dashboard itself runs on.
 
 ## More
 
@@ -112,5 +106,10 @@ The full table is in [docs/keys.md](docs/keys.md).
 - [Troubleshooting](docs/troubleshooting.md).
 - [Contributing](CONTRIBUTING.md), [Changelog](CHANGELOG.md), [Security](SECURITY.md).
 
-dillodash is MIT licensed. The bundled Hack Nerd Font Mono is under the MIT
-and SIL Open Font licenses (see `internal/fonts`).
+dillodash is [MIT licensed](LICENSE). The bundled Hack Nerd Font Mono is
+redistributed under Hack's MIT license and the Bitstream Vera license
+([internal/fonts/LICENSE.md](internal/fonts/LICENSE.md)) and the Nerd
+Fonts SIL Open Font License 1.1
+([internal/fonts/NERD-FONTS-LICENSE.md](internal/fonts/NERD-FONTS-LICENSE.md));
+`gh dillodash font license` prints them, and `font install` writes them
+beside the font files.

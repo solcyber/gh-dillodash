@@ -526,7 +526,7 @@ func TestMergeConfirm(t *testing.T) {
 	app.Confirms = []bool{true}
 	ok, handled := w.MergeConfirm(app, mergeableRelease())
 	if !ok || !handled || len(app.Questions) != 1 || !strings.Contains(app.Questions[0], "DEPLOYS production") ||
-		!strings.Contains(app.Questions[0], "634f4548") || !strings.Contains(app.Questions[0], "admin-portal#133") ||
+		!strings.Contains(app.Questions[0], "634f454") || !strings.Contains(app.Questions[0], "admin-portal#133") ||
 		!strings.Contains(app.Questions[0], "as a merge commit") {
 		t.Errorf("in the window: %v %v %q", ok, handled, app.Questions)
 	}
@@ -680,7 +680,7 @@ func fixture(t *testing.T, window bool) (*Workflow, *wftest.App, *State) {
 		ID   int64  `json:"id"`
 		Name string `json:"name"`
 	}{4, "prod"}, CurrentUserCanApprove: true}}}
-	s, warns := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st := s.(*State)
 	if len(warns) != 1 || !strings.Contains(warns[0], "etl-jobs") {
 		t.Errorf("the repo that failed warns: %v", warns)
@@ -713,7 +713,7 @@ func TestRefreshAndSections(t *testing.T) {
 	if q := st.QueuedForWindow(); len(q) != 1 || q[0].Number != 42 {
 		t.Errorf("QueuedForWindow: %v", q)
 	}
-	if len(st.Releases) != 5 || st.Find(model.Ident{Repo: "web-portal", Number: 7}) != nil {
+	if len(st.Releases) != 5 || st.Find(model.Ident{Repo: portal, Number: 7}) != nil {
 		t.Errorf("an 18-hour-old merge is dropped: %d", len(st.Releases))
 	}
 	for _, pr := range st.Releases {
@@ -721,13 +721,13 @@ func TestRefreshAndSections(t *testing.T) {
 			t.Errorf("#%d carries its rel info", pr.Number)
 		}
 	}
-	if InfoOf(st.Find(model.Ident{Repo: "web-portal", Number: 45})).Kind != KindHotfix || st.Find(model.Ident{Repo: "web-portal", Number: 45}).Get(ExtIcon) != "hotfix" {
+	if InfoOf(st.Find(model.Ident{Repo: portal, Number: 45})).Kind != KindHotfix || st.Find(model.Ident{Repo: portal, Number: 45}).Get(ExtIcon) != "hotfix" {
 		t.Error("the hotfix is a hotfix with its icon")
 	}
-	if InfoOf(st.Find(model.Ident{Repo: "web-portal", Number: 951})).Kind != KindOther {
+	if InfoOf(st.Find(model.Ident{Repo: portal, Number: 951})).Kind != KindOther {
 		t.Error("the docs branch is 'other'")
 	}
-	m := st.Find(model.Ident{Repo: "web-portal", Number: 133})
+	m := st.Find(model.Ident{Repo: portal, Number: 133})
 	dep, ok := m.Get(ExtDeploy).(deploys.State)
 	if !ok || dep.Phase != "waiting" || dep.Text != "approve: prod" || dep.SHA != mergedSHA {
 		t.Errorf("the merged release's deploy state: %+v %v", dep, ok)
@@ -797,14 +797,14 @@ func TestSectionsWithoutWindowListQueued(t *testing.T) {
 func TestRefreshKeepsLastGood(t *testing.T) {
 	w, app, _ := fixture(t, true)
 	app.Fake.Fail["releases"] = &ghapi.Error{Message: "network error: timed out"}
-	s, warns := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st := s.(*State)
 	if len(st.Releases) != 5 || len(st.Stages) != 1 || len(warns) != 1 || !strings.Contains(warns[0], "last good") {
 		t.Errorf("a failed read keeps every repo's last rows: %d %d %v", len(st.Releases), len(st.Stages), warns)
 	}
 	delete(app.Fake.Fail, "releases")
 	delete(app.Fake.Releases, portal)
-	s, warns = w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ = w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st = s.(*State)
 	if len(st.Releases) != 5 || len(st.Stages) != 1 || len(warns) != 2 || !strings.Contains(warns[0], "showing") || !strings.Contains(warns[0], "'s data") {
 		t.Errorf("a failed repo keeps its last good rows, not a blank: %d %v", len(st.Releases), warns)
@@ -894,7 +894,7 @@ func TestRowsRenderAndFit(t *testing.T) {
 			}
 		}
 	}
-	items := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: "web-portal", Number: 951})}}
+	items := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: portal, Number: 951})}}
 	L := kinds[RowRelease].Layout(app, items, 120, 4, 0)
 	segs := kinds[RowRelease].Segs(app, items[0], L, 120, 0)
 	txt := text.SegsText(segs)
@@ -924,7 +924,7 @@ func TestRowsRenderAndFit(t *testing.T) {
 	if _, ok := L40["age"]; ok {
 		t.Error("narrow: the age drops first")
 	}
-	hot := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: "web-portal", Number: 45})}}
+	hot := []workflow.Row{{Kind: RowRelease, Item: st.Find(model.Ident{Repo: portal, Number: 45})}}
 	segs = kinds[RowRelease].Segs(app, hot[0], kinds[RowRelease].Layout(app, hot, 120, 4, 0), 120, 0)
 	txt = text.SegsText(segs)
 	attn := false
@@ -975,15 +975,15 @@ func TestRowsRenderAndFit(t *testing.T) {
 func TestClassifyAndChips(t *testing.T) {
 	w, app, st := fixture(t, true)
 	_ = app
-	c := w.Classify(st.Find(model.Ident{Repo: "web-portal", Number: 44}), nil, "alice", false)
+	c := w.Classify(st.Find(model.Ident{Repo: portal, Number: 44}), nil, "alice", false)
 	if c == nil || c.Label != LabelNeeds || c.Style != "chip.await" || !c.NeedsYou || c.Done {
 		t.Errorf("an open release needs approval: %+v", c)
 	}
-	c = w.Classify(st.Find(model.Ident{Repo: "web-portal", Number: 951}), nil, "alice", false)
+	c = w.Classify(st.Find(model.Ident{Repo: portal, Number: 951}), nil, "alice", false)
 	if c == nil || c.Label != LabelOther || c.Style != "chip.state" || c.NeedsYou || !c.Done {
 		t.Errorf("not a release: %+v", c)
 	}
-	c = w.Classify(st.Find(model.Ident{Repo: "web-portal", Number: 42}), nil, "alice", false)
+	c = w.Classify(st.Find(model.Ident{Repo: portal, Number: 42}), nil, "alice", false)
 	if c == nil || c.Label != "approved by carol" || c.Style != "chip.approved" {
 		t.Errorf("approved by carol: %+v", c)
 	}
@@ -1003,7 +1003,7 @@ func TestClassifyAndChips(t *testing.T) {
 		t.Error("EnrichDetail copies the rel info by identity")
 	}
 	detail2 := &model.PR{Repo: portal, Number: 133}
-	w.EnrichDetail(context.Background(), app.Fake, detail2, st.Find(model.Ident{Repo: "web-portal", Number: 133}))
+	w.EnrichDetail(context.Background(), app.Fake, detail2, st.Find(model.Ident{Repo: portal, Number: 133}))
 	if _, ok := detail2.Get(ExtDeploy).(deploys.State); !ok || detail2.Get(ExtIcon) != "release" {
 		t.Error("EnrichDetail copies the deploy state and icon from the listed row")
 	}
@@ -1019,9 +1019,9 @@ func TestDetailCards(t *testing.T) {
 		}
 		return b.String()
 	}
-	m := st.Find(model.Ident{Repo: "web-portal", Number: 133})
+	m := st.Find(model.Ident{Repo: portal, Number: 133})
 	card := flat(w.DetailCards(app, m, m, 80))
-	if !strings.Contains(card, "deploys on "+short(mergedSHA)) || !strings.Contains(card, "approve: prod") || !strings.Contains(card, "Migrate") || !strings.Contains(card, "waiting for prod") {
+	if !strings.Contains(card, "deploys on "+model.ShortSHA(mergedSHA)) || !strings.Contains(card, "approve: prod") || !strings.Contains(card, "Migrate") || !strings.Contains(card, "waiting for prod") {
 		t.Errorf("the merged card lists the deploy and its runs:\n%s", card)
 	}
 	for _, l := range w.DetailCards(app, m, m, 80) {
@@ -1034,19 +1034,19 @@ func TestDetailCards(t *testing.T) {
 	if card = flat(w.DetailCards(app, unread, nil, 80)); !strings.Contains(card, "not read yet") {
 		t.Errorf("a merged release without a read says D reads it:\n%s", card)
 	}
-	hot := st.Find(model.Ident{Repo: "web-portal", Number: 45})
+	hot := st.Find(model.Ident{Repo: portal, Number: 45})
 	if card = flat(w.DetailCards(app, hot, hot, 80)); !strings.Contains(card, "emergency by definition") || !strings.Contains(card, "hotfix/login") {
 		t.Errorf("the hotfix card:\n%s", card)
 	}
-	other := st.Find(model.Ident{Repo: "web-portal", Number: 951})
+	other := st.Find(model.Ident{Repo: portal, Number: 951})
 	if card = flat(w.DetailCards(app, other, other, 80)); !strings.Contains(card, "refuse anything else") || !strings.Contains(card, "not a release") {
 		t.Errorf("the non-release card:\n%s", card)
 	}
-	rel := st.Find(model.Ident{Repo: "web-portal", Number: 44})
+	rel := st.Find(model.Ident{Repo: portal, Number: 44})
 	if card = flat(w.DetailCards(app, rel, rel, 80)); !strings.Contains(card, "queues it for tonight's") || !strings.Contains(card, "/release-now") {
 		t.Errorf("the release card says what a does:\n%s", card)
 	}
-	q := st.Find(model.Ident{Repo: "web-portal", Number: 42})
+	q := st.Find(model.Ident{Repo: portal, Number: 42})
 	if card = flat(w.DetailCards(app, q, q, 80)); !strings.Contains(card, "queued") {
 		t.Errorf("a queued release shows its window chip:\n%s", card)
 	}
@@ -1094,5 +1094,100 @@ func TestConstructor(t *testing.T) {
 	w2 := New(&workflow.Context{Config: cfg, Repos: cfg.Reviews.Repos})
 	if w2.org != "acme" {
 		t.Errorf("the org falls back to the review repos' owner: %q", w2.org)
+	}
+}
+
+// TestLastGoodRowsAreFreshCopies: when a read fails and the last good
+// rows are shown again, they are copies. The originals may be on screen,
+// and re-annotating them would write their Ext maps under the UI's feet.
+func TestLastGoodRowsAreFreshCopies(t *testing.T) {
+	w, app, first := fixture(t, true)
+	app.Fake.Fail["releases"] = &ghapi.Error{Status: 502, Message: "Bad Gateway"}
+	s, _, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("a 502 is a warning, not an error: %v", err)
+	}
+	st := s.(*State)
+	if len(st.Releases) != len(first.Releases) {
+		t.Fatalf("rows: %d vs %d", len(st.Releases), len(first.Releases))
+	}
+	for i, p := range st.Releases {
+		if p == first.Releases[i] {
+			t.Fatalf("row %d is the same pointer as the previous state's", i)
+		}
+		if p.Ext != nil && first.Releases[i].Ext != nil && &p.Ext == &first.Releases[i].Ext {
+			t.Fatalf("row %d shares its Ext map", i)
+		}
+		p.Set("probe", true)
+		if first.Releases[i].Get("probe") != nil {
+			t.Fatalf("row %d: writing the copy wrote the original", i)
+		}
+	}
+}
+
+func TestReleaseRefreshReturnsRateLimit(t *testing.T) {
+	w, app, _ := fixture(t, true)
+	app.Fake.Fail["releases"] = &ghapi.Error{Status: 403, Message: "secondary rate limit", RetryAt: time.Now().Add(time.Minute)}
+	s, warns, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	if !ghapi.IsRateLimit(err) {
+		t.Fatalf("a rate limit is returned so the refresh backs off: %v", err)
+	}
+	if st := s.(*State); st == nil || len(st.Releases) == 0 || len(warns) == 0 {
+		t.Error("the last good state still comes back with it")
+	}
+}
+
+func TestStateCIPRs(t *testing.T) {
+	var none *State
+	if none.CIPRs() != nil {
+		t.Error("a nil state contributes nothing")
+	}
+	_, _, st := fixture(t, true)
+	if got := st.CIPRs(); len(got) != len(st.Releases) {
+		t.Errorf("CIPRs = %d, Releases = %d", len(got), len(st.Releases))
+	}
+	w, _ := newWF(t, false)
+	if !w.ProvidesDeploys() {
+		t.Error("the release workflow provides deploys (D in the list bar)")
+	}
+}
+
+func TestListOtherPRsFalseHidesThem(t *testing.T) {
+	w, app, _ := fixture(t, true)
+	all := w.Sections(app, nil, "alice")
+	has := func(rows []workflow.Row, n int) bool {
+		for _, r := range rows {
+			if p, ok := r.Item.(*model.PR); ok && p.Number == n {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(all, 951) {
+		t.Fatal("the fixture's docs PR (951) lists by default")
+	}
+	w.cfg.ListOtherPRs = false
+	some := w.Sections(app, nil, "alice")
+	if has(some, 951) {
+		t.Error("list_other_prs = false hides PRs that are not releases")
+	}
+	if !has(some, 44) || !has(some, 45) {
+		t.Error("releases and hotfixes still list")
+	}
+	if all[0].Item != some[0].Item {
+		t.Errorf("the header count is releases only either way: %v vs %v", all[0].Item, some[0].Item)
+	}
+}
+
+func TestDeployStuckSecsReachesTheCache(t *testing.T) {
+	cfg := newCfg(false)
+	cfg.ReleasePR.DeployStuckSecs = 600
+	w := New(&workflow.Context{Config: cfg, Repos: cfg.Reviews.Repos})
+	if w.deploy.Stuck() != 10*time.Minute {
+		t.Errorf("deploy stuck = %v", w.deploy.Stuck())
+	}
+	cfg.ReleasePR.DeployRefreshSecs = 0
+	if w.refreshEvery() != deploys.RefreshEvery {
+		t.Errorf("refreshEvery default = %v", w.refreshEvery())
 	}
 }

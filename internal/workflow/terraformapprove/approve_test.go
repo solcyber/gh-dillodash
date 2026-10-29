@@ -83,7 +83,7 @@ func TestApproveBodies(t *testing.T) {
 	check(t, "0 destroys: review approval follows", len(app.Fake.Approvals) == 1 && app.Fake.Approvals[0] == 3622)
 	check(t, "0 destroys: the confirm shows the exact command", len(app.Questions) == 1 && strings.Contains(app.Questions[0], "/approve "+idA))
 	check(t, "0 destroys: success message + refresh re-queued", hasLog(app, "ok:", "posted /approve") && len(app.Refreshes) == 1 && app.Refreshes[0])
-	check(t, "0 destroys: marked approved at this head", app.Approved[model.Ident{Repo: "infra", Number: 3622}] == "sha1")
+	check(t, "0 destroys: marked approved at this head", app.Approved[model.Ident{Repo: infra, Number: 3622}] == "sha1")
 	check(t, "0 destroys: celebrates big", len(app.Celebrated) == 1 && app.Celebrated[0])
 
 	app, _ = approve(t, cfg, simple("prod/07-warehouse", idA, 0), script{confirms: []bool{false}})

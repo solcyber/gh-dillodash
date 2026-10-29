@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
@@ -170,7 +169,31 @@ func (m *Model) refilter() {
 	if m.selected < 0 {
 		m.selected = 0
 	}
-	m.cursorOffHeaders(+1)
+	m.parkCursor()
+}
+
+// parkCursor settles the cursor on a selectable row near where it is:
+// down first, then up, without wrapping to the far end (a row that
+// vanished under the cursor must not send it to the top of the list).
+func (m *Model) parkCursor() {
+	n := len(m.rows)
+	if n == 0 {
+		m.selected = 0
+		return
+	}
+	for i := m.selected; i < n; i++ {
+		if m.rows[i].Kind != "header" {
+			m.selected = i
+			return
+		}
+	}
+	for i := m.selected; i >= 0; i-- {
+		if m.rows[i].Kind != "header" {
+			m.selected = i
+			return
+		}
+	}
+	m.selected = 0
 }
 
 // cursorOffHeaders parks the cursor on a selectable row.
@@ -263,13 +286,14 @@ func abs(x int) int {
 
 // ---- layout ----
 
-// numText is the "#N" / "repo#N" column text of an item.
+// numText is the "#N" / "repo#N" / "owner/repo#N" column text of an item
+// (the same rule as where, so a row and its heading agree).
 func (m *Model) numText(row workflow.Row) string {
 	switch v := row.Item.(type) {
 	case *model.PR:
-		return model.Ref(v.Repo, v.Number, m.multi)
+		return m.where(v.Repo, v.Number)
 	case *model.Issue:
-		return model.Ref(v.Repo, v.Number, m.multi)
+		return m.where(v.Repo, v.Number)
 	}
 	return ""
 }
@@ -292,6 +316,9 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 	if numW < 2 {
 		numW = 2
 	}
+	if m.multi || m.multiOwner {
+		numW = min(numW, 18) // a long repo#N is clipped from the left, keeping #N
+	}
 	repoW := 0
 	if m.multi {
 		for _, r := range m.rows {
@@ -313,9 +340,9 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 	author := func(r workflow.Row) string {
 		switch v := r.Item.(type) {
 		case *model.PR:
-			return orQ(v.Author.Login)
+			return text.OrQ(v.Author.Login)
 		case *model.Issue:
-			return orQ(v.Author.Login)
+			return text.OrQ(v.Author.Login)
 		}
 		return ""
 	}
@@ -333,7 +360,7 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 			"author": maxw(prs, author, 14),
 			"age":    3,
 		}
-		lay["pr"] = fit(cols, w, numW, "diff", "age", "author")
+		lay["pr"] = fit(cols, w, numW, "diff", "age", "author", "ci", "chip")
 	}
 	if iss := byKind["issue"]; len(iss) > 0 {
 		cols := workflow.Layout{
@@ -344,7 +371,7 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 			"author": maxw(iss, author, 14),
 			"age":    3,
 		}
-		lay["issue"] = fit(cols, w, numW, "age", "author")
+		lay["issue"] = fit(cols, w, numW, "age", "author", "count", "chip")
 	}
 	for kind, rk := range m.wf.RowKinds() {
 		if items := byKind[kind]; len(items) > 0 && rk.Layout != nil {
@@ -354,15 +381,13 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 	return lay
 }
 
-func orQ(s string) string {
-	if s == "" {
-		return "?"
-	}
-	return s
-}
-
-// fit drops columns in order until the title keeps 24 cells.
+// fit drops columns in order until the title keeps 24 cells (16 under
+// 60 columns, where every cell counts).
 func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout {
+	minTitle := 24
+	if w < 60 {
+		minTitle = 16
+	}
 	fixed := func() int { // gutter 2 + icon 2 + "#num " + each column + its gap
 		n := 4 + numW + 1
 		for _, v := range cols {
@@ -371,7 +396,7 @@ func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout
 		return n
 	}
 	for _, name := range dropOrder {
-		if w-fixed() >= 24 {
+		if w-fixed() >= minTitle {
 			break
 		}
 		delete(cols, name)
@@ -384,26 +409,16 @@ func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout
 // workflow may override it through Row.Meta["label"].
 func (m *Model) issueLabel(r workflow.Row) string {
 	if l, ok := r.Meta["label"].(string); ok && l != "" {
-		return clipRunes(l, 16)
+		return text.Ellip(l, 16)
 	}
 	i := r.Item.(*model.Issue)
 	if names := i.Labels.Names(); len(names) > 0 {
-		return clipRunes(names[0], 16)
+		return text.Ellip(names[0], 16)
 	}
 	return "issue"
 }
 
-func clipRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		return string(r[:n])
-	}
-	return s
-}
-
 // ---- row pieces ----
-
-var ciCount = regexp.MustCompile(`^\d+`)
 
 var ciGlyph = map[byte][2]string{
 	'+': {"pass", "ci.pass"}, 'x': {"fail", "ci.fail"}, '.': {"wait", "ci.wait"},
@@ -417,9 +432,13 @@ func (m *Model) ciSegs(codes string) []text.Seg {
 	i := 0
 	for i < len(codes) {
 		count := ""
-		if c := ciCount.FindString(codes[i:]); c != "" {
-			count = c
-			i += len(c)
+		j := i
+		for j < len(codes) && codes[j] >= '0' && codes[j] <= '9' {
+			j++
+		}
+		if j > i {
+			count = codes[i:j]
+			i = j
 			if i >= len(codes) {
 				break
 			}
@@ -479,18 +498,22 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		if g := glyphs.G(icon); g != "" {
 			segs = append(segs, text.S(g+" ", "icon."+icon))
 		}
-		segs = append(segs, text.S(text.Pad(m.numText(row), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num")))
-		segs = append(segs, text.PadSegs(scenes.GlintChip(label, style, pos, ambient, mono), L["chip"])...)
-		segs = append(segs, text.S(" ", "text"))
+		segs = append(segs, text.S(text.Pad(text.EllipLeft(m.numText(row), L["num"]), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num")))
+		if cw, ok := L["chip"]; ok {
+			segs = append(segs, text.PadSegs(scenes.GlintChip(label, style, pos, ambient, mono), cw)...)
+			segs = append(segs, text.S(" ", "text"))
+		}
 		c, _ := m.ciOf(item)
-		segs = append(segs, text.PadSegs(m.ciSegs(c.Glyphs), L["ci"])...)
-		segs = append(segs, text.S(" ", "text"))
+		if cw, ok := L["ci"]; ok {
+			segs = append(segs, text.PadSegs(m.ciSegs(c.Glyphs), cw)...)
+			segs = append(segs, text.S(" ", "text"))
+		}
 		if dw, ok := L["diff"]; ok {
 			segs = append(segs, text.PadSegs(diffSegs(item), dw)...)
 			segs = append(segs, text.S(" ", "text"))
 		}
 		if aw, ok := L["author"]; ok {
-			a := orQ(item.Author.Login)
+			a := text.OrQ(item.Author.Login)
 			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))
 		}
 		if aw, ok := L["age"]; ok {
@@ -507,7 +530,7 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		if len(c.Failed) > 0 {
 			suffix = "  " + glyphs.G("fail") + " " + strings.Join(c.Failed, ", ")
 		}
-		room := w - 3 - text.SegsWidth(segs)
+		room := max(0, w-3-text.SegsWidth(segs))
 		sw := min(text.Width(suffix), max(0, room-16))
 		segs = append(segs, text.S(text.Ellip(item.Title, room-sw), tstyle))
 		if suffix != "" {
@@ -524,16 +547,20 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		if g := glyphs.G("issue"); g != "" {
 			segs = append(segs, text.S(g+" ", "icon.issue"))
 		}
-		segs = append(segs, text.S(text.Pad(m.numText(row), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num.issue")))
-		segs = append(segs, text.PadSegs(scenes.Chip(m.issueLabel(row), "chip.label"), L["chip"])...)
-		segs = append(segs, text.S(" ", "text"))
-		cnt := ""
-		if n := item.Comments.TotalCount; n > 0 {
-			cnt = glyphs.Ico("comment") + fmt.Sprint(n)
+		segs = append(segs, text.S(text.Pad(text.EllipLeft(m.numText(row), L["num"]), L["num"])+" ", scenes.NumStyle(m.fx, identKey(item.Ident()), "num.issue")))
+		if cw, ok := L["chip"]; ok {
+			segs = append(segs, text.PadSegs(scenes.Chip(m.issueLabel(row), "chip.label"), cw)...)
+			segs = append(segs, text.S(" ", "text"))
 		}
-		segs = append(segs, text.S(text.Pad(cnt, L["count"])+" ", "count"))
+		if cw, ok := L["count"]; ok {
+			cnt := ""
+			if n := item.Comments.TotalCount; n > 0 {
+				cnt = glyphs.Ico("comment") + fmt.Sprint(n)
+			}
+			segs = append(segs, text.S(text.Pad(cnt, cw)+" ", "count"))
+		}
 		if aw, ok := L["author"]; ok {
-			a := orQ(item.Author.Login)
+			a := text.OrQ(item.Author.Login)
 			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))
 		}
 		if aw, ok := L["age"]; ok {
@@ -550,7 +577,27 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 	return []text.Seg{text.S(fmt.Sprintf("(%s row)", row.Kind), "faint")}
 }
 
-var headerCount = regexp.MustCompile(`^(.*) \((\d+)\)$`)
+// splitHeaderCount splits "pull requests (6)" into its name and count;
+// a header without a count keeps its whole text.
+func splitHeaderCount(txt string) (name, count string) {
+	if !strings.HasSuffix(txt, ")") {
+		return txt, ""
+	}
+	i := strings.LastIndex(txt, " (")
+	if i < 0 {
+		return txt, ""
+	}
+	n := txt[i+2 : len(txt)-1]
+	if n == "" {
+		return txt, ""
+	}
+	for _, r := range n {
+		if r < '0' || r > '9' {
+			return txt, ""
+		}
+	}
+	return txt[:i], n
+}
 
 // headerSegs draws section bars ('▌ pull requests  6 ────') and the
 // indented sub-headers (a night), which get a workflow's countdown.
@@ -561,7 +608,7 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		label := strings.TrimSpace(txt)
 		extra, more := m.wf.HeaderExtra(m, row, w)
 		segs = []text.Seg{
-			text.S("   "+boxGlyph(2)+glyphs.G("rule")+" ", "rule"),
+			text.S("   "+scenes.BoxGlyph(2)+glyphs.G("rule")+" ", "rule"),
 			text.S(glyphs.Ico("clock"), "subsection"),
 		}
 		room := w - 2 - text.SegsWidth(segs)
@@ -573,10 +620,7 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		segs = append(segs, more...)
 		segs = append(segs, text.S(extra, "faint"), text.S(" ", "text"))
 	} else {
-		name, count := txt, ""
-		if mm := headerCount.FindStringSubmatch(txt); mm != nil {
-			name, count = mm[1], mm[2]
-		}
+		name, count := splitHeaderCount(txt)
 		icon := "pr"
 		switch {
 		case strings.Contains(name, "window"):
@@ -594,13 +638,4 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		segs = append(segs, text.S(text.Ellip(name, w-2-text.SegsWidth(segs)-text.Width(tail.Text)), "section"), tail)
 	}
 	return append(segs, scenes.GleamSegs(w-1-text.SegsWidth(segs), pos)...)
-}
-
-// boxGlyph is one of the box-drawing set's characters.
-func boxGlyph(i int) string {
-	r := []rune(glyphs.G("box"))
-	if i < len(r) {
-		return string(r[i])
-	}
-	return "|"
 }

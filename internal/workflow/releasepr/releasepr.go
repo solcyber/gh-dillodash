@@ -17,6 +17,7 @@ package releasepr
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -62,10 +63,10 @@ const (
 
 // Ext keys the workflow writes on a PR.
 const (
-	ExtRel    = "rel"    // *Info
-	ExtDeploy = "deploy" // deploys.State (the core writes it too, after D)
-	ExtCI     = "ci"     // model.CICluster
-	ExtIcon   = "icon"   // "release" | "hotfix" (the detail header icon)
+	ExtRel    = "rel"          // *Info
+	ExtDeploy = "deploy"       // deploys.State (the core writes it too, after D)
+	ExtCI     = workflow.CIKey // model.CICluster, written by the core (rollup or Actions fallback)
+	ExtIcon   = "icon"         // "release" | "hotfix" (the detail header icon)
 )
 
 // mergeable are the GitHub mergeStateStatus values M accepts (UNKNOWN:
@@ -98,7 +99,7 @@ type Stage struct {
 }
 
 // Ident identifies the stage row across refreshes.
-func (s *Stage) Ident() model.Ident { return model.Ident{Repo: s.Repo.Name, Number: 0} }
+func (s *Stage) Ident() model.Ident { return model.Ident{Repo: s.Repo, Number: 0} }
 
 // State is one refresh's result: the release PRs of every enrolled
 // repo (each annotated with ExtRel, ExtCI and, when merged, ExtDeploy),
@@ -113,7 +114,24 @@ type State struct {
 	byIdent     map[model.Ident]*model.PR
 }
 
-var _ workflow.QueuedProvider = (*State)(nil)
+var (
+	_ workflow.QueuedProvider = (*State)(nil)
+	_ workflow.CIProvider     = (*State)(nil)
+	_ workflow.DeployProvider = (*Workflow)(nil)
+)
+
+// CIPRs hands the releases to the core's CI pass, so a release row gets
+// the Actions fallback when the token cannot read the check rollup, the
+// same as a review PR (#5).
+func (s *State) CIPRs() []*model.PR {
+	if s == nil {
+		return nil
+	}
+	return s.Releases
+}
+
+// ProvidesDeploys: merged releases wait on environment approvals.
+func (w *Workflow) ProvidesDeploys() bool { return true }
 
 // QueuedForWindow lists the release PRs carrying the maintenance window's
 // queued label, for the window workflow to list under their night.
@@ -216,6 +234,7 @@ func New(ctx *workflow.Context) *Workflow {
 		w.win = ctx.Config.MaintenanceWindow
 	}
 	w.nowRE = ReleaseNowRE(cfg.ReleaseNowCommand, cfg.ReleaseNowMinReason)
+	w.deploy.StuckAfter = time.Duration(cfg.DeployStuckSecs) * time.Second
 	return w
 }
 
@@ -257,7 +276,7 @@ func (w *Workflow) Current() *State {
 // per repo and the deploy state of each merged release. Anything but a
 // rate limit degrades to a warning; a repo that fails keeps its last
 // good rows.
-func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo, _ []*model.PR, _ []*model.Issue) (workflow.State, []string) {
+func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo, _ []*model.PR, _ []*model.Issue) (workflow.State, []string, error) {
 	now := clock.Now()
 	st := &State{}
 	if w.win != nil {
@@ -281,7 +300,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
 			for _, r := range repos {
 				lg := w.last[r]
-				st.Releases = append(st.Releases, lg.rows...)
+				st.Releases = append(st.Releases, clonePRs(lg.rows)...)
 				if lg.stage != nil {
 					st.Stages = append(st.Stages, lg.stage)
 				}
@@ -295,7 +314,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			st.Warnings = warns
 			st.index()
 			w.annotate(st)
-			return st, warns
+			return st, warns, rateLimit(err)
 		}
 	}
 	for _, repo := range names {
@@ -305,7 +324,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		}
 		if info.Err != nil {
 			if lg, ok := w.last[repo]; ok {
-				st.Releases = append(st.Releases, lg.rows...)
+				st.Releases = append(st.Releases, clonePRs(lg.rows)...)
 				if lg.stage != nil {
 					st.Stages = append(st.Stages, lg.stage)
 				}
@@ -338,6 +357,12 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 				stage = lg.stage
 			}
 			warns = append(warns, fmt.Sprintf("%s stage: %s", repo.Name, err))
+			if ghapi.IsRateLimit(err) {
+				st.Warnings = warns
+				st.index()
+				w.annotate(st)
+				return st, warns, err
+			}
 		}
 		st.Releases = append(st.Releases, rows...)
 		if stage != nil {
@@ -359,12 +384,39 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		dep, err := w.deploy.Fetch(ctx, gh, pr.Repo, sha, false, now)
 		if err != nil {
 			warns = append(warns, fmt.Sprintf("%s#%d deploys: %s", pr.Repo.Name, pr.Number, err))
+			if ghapi.IsRateLimit(err) {
+				st.Warnings = warns
+				return st, warns, err
+			}
 			continue
 		}
 		pr.Set(ExtDeploy, dep)
 	}
 	st.Warnings = warns
-	return st, warns
+	return st, warns, nil
+}
+
+// rateLimit is err when it is a rate limit, else nil: the one error a
+// Refresh returns rather than turns into a warning.
+func rateLimit(err error) error {
+	if ghapi.IsRateLimit(err) {
+		return err
+	}
+	return nil
+}
+
+// clonePRs copies the last-good rows before they are re-annotated. The
+// originals may be on screen: the UI goroutine reads their Ext maps
+// while this goroutine would write them, and a Go map must not be
+// written while it is read.
+func clonePRs(in []*model.PR) []*model.PR {
+	out := make([]*model.PR, len(in))
+	for i, p := range in {
+		c := *p
+		c.Ext = maps.Clone(p.Ext)
+		out[i] = &c
+	}
+	return out
 }
 
 func (w *Workflow) keep() time.Duration {
@@ -374,7 +426,9 @@ func (w *Workflow) keep() time.Duration {
 	return time.Duration(w.cfg.MergedKeepSecs) * time.Second
 }
 
-// annotate writes the per-PR info the renderers and actions read.
+// annotate writes the per-PR info the renderers and actions read. CI
+// comes from the rollup here when the token can see it; the core fills
+// ExtCI through the Actions fallback for the rest (State.CIPRs).
 func (w *Workflow) annotate(st *State) {
 	for _, pr := range st.Releases {
 		kind := w.Kind(pr)
@@ -393,12 +447,9 @@ func (w *Workflow) annotate(st *State) {
 	}
 }
 
-// Annotate tags the state's PRs (the core's PRs are not releases).
-func (w *Workflow) Annotate(_ []*model.PR, _ []*model.Issue, s workflow.State) {
-	if st, ok := s.(*State); ok && st != nil {
-		w.annotate(st)
-	}
-}
+// Annotate is a no-op: Refresh annotates the state it builds (the
+// core's PRs are not releases), and a second pass would only redo it.
+func (w *Workflow) Annotate(_ []*model.PR, _ []*model.Issue, _ workflow.State) {}
 
 // Apply stores the state.
 func (w *Workflow) Apply(app workflow.App, s workflow.State) {
@@ -449,10 +500,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 }
 
 func (w *Workflow) refreshEvery() time.Duration {
-	if w.cfg.DeployRefreshSecs > 0 {
-		return time.Duration(w.cfg.DeployRefreshSecs) * time.Second
-	}
-	return deploys.RefreshEvery
+	return deploys.RefreshInterval(w.cfg.DeployRefreshSecs)
 }
 
 // stateOf is the applied state as the app holds it.
@@ -645,16 +693,6 @@ func (w *Workflow) NightPhrase(now time.Time) string {
 
 // where is "repo#N": a release lives in another repo than the reviews.
 func where(pr *model.PR) string { return model.Ref(pr.Repo, pr.Number, true) }
-
-func short(sha string) string {
-	if len(sha) > 8 {
-		return sha[:8]
-	}
-	if sha == "" {
-		return "?"
-	}
-	return sha
-}
 
 func plural(n int, one, many string) string {
 	if n == 1 {

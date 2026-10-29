@@ -28,8 +28,9 @@ the day after it is enrolled, or at once after the cache file is deleted.
   open PR into production, per repo, as `repo#N`: a chip for its review
   state (`needs approval` gold, `approved by <who>`, `approved by me`,
   `changes requested`, `DRAFT`), a kind chip (`release`, or gold
-  `hotfix`), CI, author, age, title. `A` never hides a release: an approved
-  one is in flight until it merges.
+  `hotfix`), CI (read through the same Actions fallback as the review list
+  when the token cannot see the check rollup), author, age, title. `A`
+  never hides a release: an approved one is in flight until it merges.
 - **The `stage:` line** under each repo counts what the staging branch
   carries ahead of production by tag: `stage: 3 units ahead of main · 1 go
   · 1 hold · 1 untagged`. A unit is a first-parent commit of staging that
@@ -39,17 +40,18 @@ the day after it is enrolled, or at once after the cache file is deleted.
   counts as hold: a unit nobody tagged does not release. `enter` does
   nothing on this line; `o` and `y` give its compare page.
 - **A PR into production that is not a release** (its branch has neither
-  prefix) is listed last in its repo, dimmed, with the chips `not a
-  release` and `goes to dev`. It is not counted, and `a`, `M` and `D`
-  refuse it. Set `list_other_prs = false` to hide them.
+  prefix) is listed last in its repo, dimmed, with the chip `not a
+  release`. It is not counted, and `a`, `M` and `D` refuse it. Set
+  `list_other_prs = false` to hide them.
 - **A queued release** (with `maintenance_window` enabled and the
   conductor's queued label on it) shows under its night in the window
   section; its manifest item id is `rel:<repo>#<N>`.
 - **A merged release** stays listed for `merged_keep_secs` (12 hours) and
   shows its deploy in the second chip: `approve: prod` (an environment you
   review waits), `waits: prod` (someone else's), `deploying`, `deployed`,
-  `deploy failed`, `deploy cancelled`, `stuck? 1h05m` (a run longer than
-  `deploy_stuck_secs`), or `no Actions runs`. The card lists every run.
+  `deploy failed`, `deploy cancelled`, `stuck? 1h05m` (a run queued or
+  running longer than `deploy_stuck_secs`, 45 minutes by default), or `no
+  Actions runs`. The card lists every run.
 - **The summary row** counts `N releases need approval`, `N deploys wait
   on you (D)` and `N deploys stuck or failed`.
 

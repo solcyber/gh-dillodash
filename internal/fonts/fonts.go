@@ -38,6 +38,24 @@ var regular []byte
 //go:embed HackNerdFontMono-Bold.ttf
 var bold []byte
 
+// The licences the fonts are redistributed under: MIT and Bitstream Vera
+// for Hack, SIL OFL 1.1 and MIT for the Nerd Fonts patch. They travel
+// with the binary and are written beside the installed fonts.
+//
+//go:embed LICENSE.md
+var hackLicense []byte
+
+//go:embed NERD-FONTS-LICENSE.md
+var nerdLicense []byte
+
+// Licenses lists the licence texts, as files to write beside the fonts.
+func Licenses() []File {
+	return []File{
+		{Name: "LICENSE-Hack.md", Data: hackLicense},
+		{Name: "LICENSE-NerdFonts.md", Data: nerdLicense},
+	}
+}
+
 // The pinned font: the family name terminals list it under, the Nerd
 // Fonts release it comes from, and the two files with their SHA256.
 const (
@@ -236,8 +254,8 @@ func targets(o Options) ([]target, error) {
 	}
 	out, err := o.Run([]string{"cmd.exe", "/d", "/c", "echo %LOCALAPPDATA%"})
 	if err != nil {
-		return nil, fmt.Errorf("this is WSL, but cmd.exe isn't usable (Windows interop off?), so the font can't reach Windows, where your terminal draws it: %w. "+
-			"Copy %s and %s to Windows, right-click, Install.", err, RegularName, BoldName)
+		return nil, fmt.Errorf("this is WSL, but cmd.exe isn't usable (Windows interop off?), so the font can't reach Windows, where your terminal draws it; "+
+			"copy %s and %s to Windows, right-click, Install: %w", RegularName, BoldName, err)
 	}
 	winLocal := strings.TrimSpace(out)
 	if winLocal == "" || strings.Contains(winLocal, "%") {
@@ -362,6 +380,17 @@ func Install(o Options) (Result, error) {
 			}
 			res.Installed = append(res.Installed, p)
 			changed = true
+		}
+		// the licences go beside the fonts (not counted as font files:
+		// a missing one never makes a font "missing")
+		for _, l := range Licenses() {
+			p := filepath.Join(t.dir, l.Name)
+			if cur, err := os.ReadFile(p); err == nil && string(cur) == string(l.Data) && !o.Force {
+				continue
+			}
+			if err := os.WriteFile(p, l.Data, 0o644); err != nil {
+				return res, fmt.Errorf("can't write %s: %w", p, err)
+			}
 		}
 		switch {
 		case !changed:

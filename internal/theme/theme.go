@@ -673,12 +673,6 @@ func Render(segs []text.Seg, sel, band bool) string {
 	return out.String()
 }
 
-// RenderLine draws one row, clipped or padded to width cells with the
-// row's (or the code band's) background.
-func RenderLine(l text.Line, sel bool, width int) string {
-	return Render(text.PadSegs(l.Segs, width), sel, l.Band)
-}
-
 // Palette writes the --glyph-test color dump in raw xterm-256 ANSI: the
 // palette swatches, a meter and two chips.
 func Palette(w io.Writer) {

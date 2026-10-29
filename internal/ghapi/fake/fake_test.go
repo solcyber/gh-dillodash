@@ -24,7 +24,7 @@ func TestFakeServesAndRecords(t *testing.T) {
 			Notes:  []string{"showing the newest 2 of 3 open PRs"},
 		},
 	}
-	f.PRs = map[model.Ident]*model.PR{{Repo: "infra", Number: 3543}: {Number: 3543, Title: "canary", Body: "detail"}}
+	f.PRs = map[model.Ident]*model.PR{{Repo: infra, Number: 3543}: {Number: 3543, Title: "canary", Body: "detail"}}
 	f.Runs = map[string][]model.WorkflowRun{"h1": {
 		{ID: 7, Name: "apply", Status: "waiting"},
 		{ID: 8, Name: "plan", Status: "completed", Conclusion: "success"},

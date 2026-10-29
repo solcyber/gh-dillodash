@@ -192,8 +192,8 @@ func TestMirrorRoundTrips(t *testing.T) {
 		}
 	}
 	once := Mirror(Armadillo)
-	if !strings.HasPrefix(strings.TrimLeft(once[3], " "), "`--.") {
-		t.Errorf("mirrored tail = %q", once[3])
+	if !strings.HasPrefix(strings.TrimLeft(once[3], " "), "<   o  )") {
+		t.Errorf("mirrored snout = %q", once[3])
 	}
 	if len(ArmadilloStep) != len(Armadillo) || ArmadilloStep[0] != Armadillo[0] ||
 		ArmadilloStep[4] == Armadillo[4] {
