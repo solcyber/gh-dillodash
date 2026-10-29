@@ -68,7 +68,15 @@ and a PR that is not a release, then offers:
   quotes, shows the exact comment, then posts the review **first** and
   `/release-now "<reason>"` second. If the comment fails after the review
   landed, the status line says the release is approved but the command
-  was not posted.
+  was not posted. With the window workflow on and `release_now_dispatch`
+  (default true), it then fires a `repository_dispatch` on the window's
+  `manifest_repo`, event `release_now_dispatch_event` (default
+  `release-now`), payload `{repo, pr, comment_id}`: the comment lives in
+  the release repo, whose events never reach the manifest repo's
+  workflows, so this is how the conductor there learns to merge now. The
+  payload only points at the comment; the receiver re-reads it by id. If
+  the dispatch fails after the comment landed, the status line says the
+  manifest repo was not told and points at `M`.
 - A **hotfix** lists NOW first (enter picks it): a hotfix into production
   is an emergency by definition.
 
@@ -99,6 +107,8 @@ Without the window workflow, an approving review is just an approval, and
 On every release repo the token needs Pull requests read and write (the
 review), Issues read and write (the `/release-now` comment), Contents read,
 Actions read, Metadata read (discovery), and for `M` and `D` Contents and
-Deployments read and write. A repo the token cannot see shrinks the
+Deployments read and write. The release-now dispatch needs Contents read
+and write on the window's `manifest_repo` (a `repository_dispatch` is a
+contents write there). A repo the token cannot see shrinks the
 section and puts the reason on the warn line; a repo whose read fails keeps
 its last good rows with a warning.

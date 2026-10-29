@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0]
+
+### Added
+
+- `release_pr`: *release NOW* also tells the maintenance-window repo.
+  After the review and the `/release-now "<reason>"` comment land, the
+  dashboard fires a `repository_dispatch` on the window's `manifest_repo`
+  (`release_now_dispatch`, default true; event
+  `release_now_dispatch_event`, default `release-now`; payload
+  `{repo, pr, comment_id}`), because a comment in the release repo never
+  reaches the manifest repo's workflows on its own. The payload only names
+  the comment; the receiver re-reads it. A failed dispatch after the
+  comment landed is reported on the status line with a pointer at `M`.
+  The token needs Contents write on the manifest repo for it (#11).
+- `ghapi.Client` gained `PostComment` (the comment's id) and `Dispatch`.
+
 ## [1.2.0]
 
 A polish release: three filed issues, several latent bugs, and a pass

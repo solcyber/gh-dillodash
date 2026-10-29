@@ -665,6 +665,8 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.ListOtherPRs = t.boolean("list_other_prs", w.ListOtherPRs)
 	w.ReleaseNowCommand = t.nonEmpty("release_now_command", w.ReleaseNowCommand)
 	w.ReleaseNowMinReason = t.int("release_now_min_reason", w.ReleaseNowMinReason)
+	w.ReleaseNowDispatch = t.boolean("release_now_dispatch", w.ReleaseNowDispatch)
+	w.ReleaseNowDispatchEvent = t.nonEmpty("release_now_dispatch_event", w.ReleaseNowDispatchEvent)
 	w.ApprovalQueuesForWindow = t.boolean("approval_queues_for_window", false)
 	w.MergeMethod = t.choice("merge_method", w.MergeMethod, MergeChoices)
 	w.MergedKeepSecs = t.int("merged_keep_secs", w.MergedKeepSecs)

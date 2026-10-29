@@ -15,15 +15,18 @@ import (
 
 // Call is one recorded mutation.
 type Call struct {
-	Op     string // approve, comment, merge, approve_deployments
-	Repo   model.Repo
-	Number int
-	Body   string  // review/comment body, or the deployment comment
-	SHA    string  // merge: the expected head
-	Title  string  // merge: the commit title
-	Method string  // merge: merge/squash/rebase
-	RunID  int64   // approve_deployments
-	EnvIDs []int64 // approve_deployments
+	Op      string // approve, comment, merge, approve_deployments, dispatch
+	Repo    model.Repo
+	Number  int
+	Body    string         // review/comment body, or the deployment comment
+	SHA     string         // merge: the expected head
+	Title   string         // merge: the commit title
+	Method  string         // merge: merge/squash/rebase
+	RunID   int64          // approve_deployments
+	EnvIDs  []int64        // approve_deployments
+	Event   string         // dispatch: the event type
+	Payload map[string]any // dispatch: the client payload
+	ID      int64          // comment: the id handed back (1, 2, ... per fake)
 }
 
 // Client is the fake. Fill the maps, then hand it to the UI; every
@@ -80,9 +83,9 @@ type Client struct {
 	FileData map[string][]byte
 
 	// Fail makes the named op return the error: whoami, list, pr_detail,
-	// issue_detail, users, comments, labelled, approve, comment, merge,
-	// waiting_runs, pending, approve_deployments, workflow_runs, files,
-	// diff, compare, tags, org_repos, rulesets, fortress, releases.
+	// issue_detail, users, comments, labelled, approve, comment, dispatch,
+	// merge, waiting_runs, pending, approve_deployments, workflow_runs,
+	// files, diff, compare, tags, org_repos, rulesets, fortress, releases.
 	Fail map[string]error
 
 	// Merge is MergePR's answer when it succeeds (zero: sha "m3rge"+sha[:3],
@@ -98,6 +101,7 @@ type Client struct {
 	CommentsPosted  []Call
 	Merges          []Call
 	DeployApprovals []Call
+	Dispatches      []Call
 	// Reads counts every read op by name, for tests that assert caching.
 	Reads map[string]int
 }
@@ -132,6 +136,8 @@ func (f *Client) record(c Call) {
 		f.Merges = append(f.Merges, c)
 	case "approve_deployments":
 		f.DeployApprovals = append(f.DeployApprovals, c)
+	case "dispatch":
+		f.Dispatches = append(f.Dispatches, c)
 	}
 }
 
@@ -293,10 +299,29 @@ func (f *Client) Approve(ctx context.Context, repo model.Repo, number int, body 
 
 // Comment records the comment.
 func (f *Client) Comment(ctx context.Context, repo model.Repo, number int, body string) error {
+	_, err := f.PostComment(ctx, repo, number, body)
+	return err
+}
+
+// PostComment records the comment and hands back its id: the count of
+// comments posted so far (1, 2, ...).
+func (f *Client) PostComment(ctx context.Context, repo model.Repo, number int, body string) (int64, error) {
 	if err := f.fail("comment"); err != nil {
+		return 0, err
+	}
+	f.mu.Lock()
+	id := int64(len(f.CommentsPosted) + 1)
+	f.mu.Unlock()
+	f.record(Call{Op: "comment", Repo: repo, Number: number, Body: body, ID: id})
+	return id, nil
+}
+
+// Dispatch records the repository_dispatch event.
+func (f *Client) Dispatch(ctx context.Context, repo model.Repo, eventType string, payload map[string]any) error {
+	if err := f.fail("dispatch"); err != nil {
 		return err
 	}
-	f.record(Call{Op: "comment", Repo: repo, Number: number, Body: body})
+	f.record(Call{Op: "dispatch", Repo: repo, Event: eventType, Payload: payload})
 	return nil
 }
 
