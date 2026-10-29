@@ -198,7 +198,7 @@ func TestHelpGroupsCoverTheTable(t *testing.T) {
 	if strings.Join(labels, ",") != "list,detail,files,diff,fortress,anywhere,prompts" {
 		t.Errorf("groups %v", labels)
 	}
-	for _, want := range []string{"D  approve a merged row's deployments", "D  approve its waiting deployments", "ctrl-c  quit", "HJKL  look by 8"} {
+	for _, want := range []string{"D  approve a merged row's or a waiting run's deployments", "D  approve its waiting deployments", "ctrl-c  quit", "HJKL  look by 8"} {
 		if strings.Count(all, want) != 1 {
 			t.Errorf("help has %q %d times", want, strings.Count(all, want))
 		}

@@ -29,7 +29,7 @@ func TestExampleParsesClean(t *testing.T) {
 	if len(c.Reviews.Repos) != 1 || c.Reviews.Repos[0].String() != "acme/infra" {
 		t.Errorf("example repos = %v", c.Reviews.Repos)
 	}
-	if c.TerraformApprove != nil || c.MaintenanceWindow != nil || c.ReleasePR != nil {
+	if c.TerraformApprove != nil || c.MaintenanceWindow != nil || c.ReleasePR != nil || c.WaitingRuns != nil {
 		t.Error("example workflows should be off")
 	}
 }
@@ -55,7 +55,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		"hotfix_prefix", "go_tag_prefix", "hold_tag_prefix", "list_other_prs", "release_now_command",
 		"release_now_min_reason", "release_now_dispatch", "release_now_dispatch_event", "apply_workflow", "apply_run_match",
 		"progress_poll_secs", "progress_timeout_secs", "approval_queues_for_window", "merge_method", "merged_keep_secs",
-		"deploy_stuck_secs", "deploy_refresh_secs", "deploy_approval_comment",
+		"deploy_stuck_secs", "deploy_refresh_secs", "deploy_approval_comment", "approval_comment",
 	}
 	for _, k := range want {
 		if !seen[k] {
@@ -113,6 +113,11 @@ func TestExampleCoversEveryKey(t *testing.T) {
 	rp.Cache = c.ReleasePR.Cache // expanded
 	if !reflect.DeepEqual(c.ReleasePR, rp) {
 		t.Errorf("release_pr defaults differ:\n got %+v\nwant %+v", *c.ReleasePR, *rp)
+	}
+	wr := DefaultWaitingRuns()
+	wr.Repos = c.Reviews.Repos
+	if !reflect.DeepEqual(c.WaitingRuns, wr) {
+		t.Errorf("waiting_runs defaults differ:\n got %+v\nwant %+v", c.WaitingRuns, wr)
 	}
 	if !strings.HasSuffix(rp.Cache, "release-repos-acme.json") {
 		t.Errorf("cache = %q", rp.Cache)

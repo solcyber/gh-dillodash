@@ -755,6 +755,10 @@ func TestRESTOperations(t *testing.T) {
 	s.jsonOK("PUT", "/repos/acme/infra/pulls/1042/merge", `{"sha":"m3rge","merged":true,"message":"Pull Request successfully merged"}`)
 	s.handle("GET", "/repos/acme/infra/actions/runs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("status") == "waiting" && r.URL.Query().Get("head_sha") == "" {
+			io.WriteString(w, `{"workflow_runs":[{"id":9,"name":"deploy","status":"waiting","head_sha":"h9","head_branch":"main","display_title":"deploy web-portal to prod","event":"workflow_dispatch","actor":{"login":"bob"},"triggering_actor":{"login":"carol"},"html_url":"https://github.com/acme/infra/actions/runs/9"}]}`)
+			return
+		}
 		if r.URL.Query().Get("status") == "waiting" {
 			io.WriteString(w, `{"workflow_runs":[{"id":7,"name":"apply","status":"waiting","head_sha":"h1","path":".github/workflows/apply.yml"}]}`)
 			return
@@ -762,7 +766,7 @@ func TestRESTOperations(t *testing.T) {
 		io.WriteString(w, `{"workflow_runs":[{"id":7,"name":"apply","status":"completed","conclusion":"success","head_sha":"h1","run_attempt":2,"event":"push"},{"id":8,"name":"plan","status":"in_progress"}]}`)
 	})
 	s.jsonOK("GET", "/repos/acme/infra/actions/runs/7/pending_deployments",
-		`[{"environment":{"id":55,"name":"prod"},"wait_timer":0,"current_user_can_approve":true}]`)
+		`[{"environment":{"id":55,"name":"prod"},"wait_timer":0,"current_user_can_approve":true,"reviewers":[{"type":"User","reviewer":{"login":"bob"}},{"type":"Team","reviewer":{"slug":"deployers","name":"Deployers"}}]}]`)
 	s.jsonOK("POST", "/repos/acme/infra/actions/runs/7/pending_deployments", `[]`)
 	s.handle("GET", "/repos/acme/infra/pulls/1042/files", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -838,6 +842,14 @@ func TestRESTOperations(t *testing.T) {
 	if req.URL.RawQuery != "head_sha=h1&status=waiting&per_page=50" {
 		t.Errorf("waiting query: %s", req.URL.RawQuery)
 	}
+	runs, err = cl.RepoWaitingRuns(ctx, infra)
+	if err != nil || len(runs) != 1 || runs[0].ID != 9 || runs[0].HeadBranch != "main" || runs[0].Actor.Login != "bob" ||
+		runs[0].DisplayTitle != "deploy web-portal to prod" || runs[0].HTMLURL != "https://github.com/acme/infra/actions/runs/9" {
+		t.Fatalf("repo waiting runs: %+v %v", runs, err)
+	}
+	if req, _ := s.last(); req.URL.Path != "/repos/acme/infra/actions/runs" || req.URL.RawQuery != "status=waiting&per_page=50" {
+		t.Errorf("repo waiting runs URL: %s?%s", req.URL.Path, req.URL.RawQuery)
+	}
 	runs, err = cl.WorkflowRuns(ctx, infra, "h1")
 	if err != nil || len(runs) != 2 || runs[0].RunAttempt != 2 || runs[1].Status != "in_progress" {
 		t.Fatalf("workflow runs: %+v %v", runs, err)
@@ -845,6 +857,9 @@ func TestRESTOperations(t *testing.T) {
 	pend, err := cl.PendingDeployments(ctx, infra, 7)
 	if err != nil || len(pend) != 1 || pend[0].Environment.ID != 55 || !pend[0].CurrentUserCanApprove {
 		t.Fatalf("pending: %+v %v", pend, err)
+	}
+	if rv := pend[0].Reviewers; len(rv) != 2 || rv[0].Name() != "bob" || rv[1].Name() != "team deployers" {
+		t.Errorf("pending reviewers: %+v", rv)
 	}
 	if err := cl.ApproveDeployments(ctx, infra, 7, []int64{55}, "go"); err != nil {
 		t.Fatal(err)

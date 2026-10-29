@@ -307,12 +307,17 @@ func mergeSHA(pr *model.PR) string {
 
 // doDeployApprove is the D key: approve the environment deployments
 // waiting on a merged PR's merge commit (from its detail, or a row a
-// workflow points at), and nothing else.
+// workflow points at), or on a workflow row of its own (a waiting run,
+// RowDeployer), and nothing else.
 func (m *Model) doDeployApprove(app *lockedApp) {
 	var pr *model.PR
 	if app.CurrentView() == ViewDetail {
 		pr, _ = app.Detail().(*model.PR)
 	} else {
+		// a workflow row with deployments of its own (a waiting run) first
+		if row, ok := app.Selected(); ok && m.wf.DeployRow(app, row) {
+			return
+		}
 		pr = m.wf.DeployTarget(app)
 		if pr == nil {
 			if row, ok := app.Selected(); ok {
@@ -323,7 +328,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		}
 	}
 	if pr == nil {
-		app.Notice("D approves the deployments of a merged PR; select or open one first")
+		app.Notice("D approves the deployments of a merged PR or a waiting run; select or open one first")
 		return
 	}
 	repo := m.repoOf(pr)

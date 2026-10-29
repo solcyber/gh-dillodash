@@ -292,6 +292,12 @@ type WorkflowRun struct {
 	// DisplayTitle is the run's title as the Actions page shows it (a
 	// workflow's run-name, else the commit headline).
 	DisplayTitle string `json:"display_title"`
+	// HeadBranch is the branch the run ran on (a dispatch's ref).
+	HeadBranch string `json:"head_branch"`
+	// Actor is who started the run: the dispatcher of a workflow_dispatch,
+	// the pusher of a push. A re-run keeps it (GitHub's triggering_actor
+	// names who re-ran it; the dashboard does not read that one).
+	Actor Actor `json:"actor"`
 }
 
 // WorkflowJob is one job of an Actions run with its steps, as
@@ -329,6 +335,26 @@ type PendingDeployment struct {
 	WaitTimer             int    `json:"wait_timer"`
 	WaitTimerStartedAt    string `json:"wait_timer_started_at"`
 	CurrentUserCanApprove bool   `json:"current_user_can_approve"`
+	// Reviewers are the environment's required reviewers: who can approve.
+	Reviewers []DeploymentReviewer `json:"reviewers"`
+}
+
+// DeploymentReviewer is one required reviewer of an environment: a user
+// (Type "User", Login) or a team (Type "Team", Slug).
+type DeploymentReviewer struct {
+	Type     string `json:"type"`
+	Reviewer struct {
+		Login string `json:"login"`
+		Slug  string `json:"slug"`
+	} `json:"reviewer"`
+}
+
+// Name is the reviewer as a person reads it: the login, or "team <slug>".
+func (r DeploymentReviewer) Name() string {
+	if r.Type == "Team" || (r.Reviewer.Login == "" && r.Reviewer.Slug != "") {
+		return "team " + r.Reviewer.Slug
+	}
+	return r.Reviewer.Login
 }
 
 // PRFile is one changed file of a PR.
