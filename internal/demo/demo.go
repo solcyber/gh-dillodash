@@ -110,7 +110,7 @@ func bodyOf(n int) string {
 	return body
 }
 
-// Config is the demo's config: the two repos and all three workflows on.
+// Config is the demo's config: the two repos and all four workflows on.
 func Config() *config.Config {
 	cfg := config.Default()
 	cfg.Reviews.Repos = Repos
@@ -125,7 +125,51 @@ func Config() *config.Config {
 	rp.Org = "acme"
 	rp.ApprovalQueuesForWindow = true
 	cfg.ReleasePR = rp
+	wr := config.DefaultWaitingRuns()
+	wr.Repos = Repos
+	cfg.WaitingRuns = wr
 	return cfg
+}
+
+// reviewer is a required reviewer of an environment: a login, or a team
+// as "team:<slug>".
+func reviewer(who string) model.DeploymentReviewer {
+	var r model.DeploymentReviewer
+	if slug, ok := strings.CutPrefix(who, "team:"); ok {
+		r.Type, r.Reviewer.Slug = "Team", slug
+	} else {
+		r.Type, r.Reviewer.Login = "User", who
+	}
+	return r
+}
+
+// pending is one environment a run waits on.
+func pending(env string, mine bool, reviewers ...string) model.PendingDeployment {
+	var p model.PendingDeployment
+	p.Environment.Name, p.CurrentUserCanApprove = env, mine
+	for _, r := range reviewers {
+		p.Reviewers = append(p.Reviewers, reviewer(r))
+	}
+	return p
+}
+
+// waitingRuns are the runs waiting on an environment with no listed PR
+// behind them (the waiting_runs section): a production deploy bob
+// dispatched by hand that waits on the viewer, and an ops run of carol's
+// that waits on the database team.
+func waitingRuns(gh *fake.Client) {
+	infra, portal := Repos[0], Repos[1]
+	deploy := model.WorkflowRun{ID: 7101, Name: "deploy", Path: ".github/workflows/deploy.yml", Status: "waiting", Event: "workflow_dispatch",
+		DisplayTitle: "deploy tier=prod · v2026.10.28", HeadBranch: "main", Actor: actor("bob"), RunAttempt: 1,
+		HTMLURL: "https://github.com/acme/infra/actions/runs/7101", CreatedAt: at(25 * time.Minute), UpdatedAt: at(24 * time.Minute)}
+	vacuum := model.WorkflowRun{ID: 7102, Name: "db-maintenance", Path: ".github/workflows/db-maintenance.yml", Status: "waiting", Event: "workflow_dispatch",
+		DisplayTitle: "vacuum the sessions table", HeadBranch: "main", Actor: actor("carol"), RunAttempt: 1,
+		HTMLURL: "https://github.com/acme/web-portal/actions/runs/7102", CreatedAt: at(2 * time.Hour), UpdatedAt: at(2 * time.Hour)}
+	gh.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {deploy}, portal: {vacuum}}
+	gh.Pending = map[int64][]model.PendingDeployment{
+		7101: {pending("prod", true, "alice", "team:sre")},
+		7102: {pending("prod-db", false, "team:dba")},
+	}
 }
 
 // night is the next window night as YYYY-MM-DD: tonight before the 21:00
@@ -299,6 +343,7 @@ func Client() *fake.Client {
 		job.Steps = append(job.Steps, s)
 	}
 	gh.Jobs = map[int64][]model.WorkflowJob{4062601: {job}}
+	waitingRuns(gh)
 	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel, flight}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
 	gh.Tags = map[model.Repo][]string{portal: {"go/905", "hold/907"}}
 	gh.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 3, TotalCommits: 3, Commits: []ghapi.CompareCommit{
