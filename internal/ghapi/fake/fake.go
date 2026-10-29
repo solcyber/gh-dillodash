@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -63,6 +64,11 @@ type Client struct {
 	Runs map[string][]model.WorkflowRun
 	// Pending are PendingDeployments' answers per run id.
 	Pending map[int64][]model.PendingDeployment
+	// FileRuns are WorkflowFileRuns' answers keyed "owner/name:file"; the
+	// fake filters them by event and by created at or after since.
+	FileRuns map[string][]model.WorkflowRun
+	// Jobs are RunJobs' answers per run id.
+	Jobs map[int64][]model.WorkflowJob
 	// Files are PRFiles' answers.
 	Files map[model.Ident][]model.PRFile
 	// Diffs are PRDiff's answers.
@@ -85,7 +91,8 @@ type Client struct {
 	// Fail makes the named op return the error: whoami, list, pr_detail,
 	// issue_detail, users, comments, labelled, approve, comment, dispatch,
 	// merge, waiting_runs, pending, approve_deployments, workflow_runs,
-	// files, diff, compare, tags, org_repos, rulesets, fortress, releases.
+	// file_runs, jobs, files, diff, compare, tags, org_repos, rulesets,
+	// fortress, releases.
 	Fail map[string]error
 
 	// Merge is MergePR's answer when it succeeds (zero: sha "m3rge"+sha[:3],
@@ -371,6 +378,37 @@ func (f *Client) WorkflowRuns(ctx context.Context, repo model.Repo, headSHA stri
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]model.WorkflowRun(nil), f.Runs[headSHA]...), nil
+}
+
+// WorkflowFileRuns is FileRuns["owner/name:file"] narrowed to the event
+// and to runs created at or after since.
+func (f *Client) WorkflowFileRuns(ctx context.Context, repo model.Repo, file, event string, since time.Time) ([]model.WorkflowRun, error) {
+	if err := f.fail("file_runs"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []model.WorkflowRun
+	for _, r := range f.FileRuns[repo.String()+":"+file] {
+		if event != "" && r.Event != event {
+			continue
+		}
+		if !since.IsZero() && r.CreatedAt.Before(since) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// RunJobs is Jobs[runID].
+func (f *Client) RunJobs(ctx context.Context, repo model.Repo, runID int64) ([]model.WorkflowJob, error) {
+	if err := f.fail("jobs"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]model.WorkflowJob(nil), f.Jobs[runID]...), nil
 }
 
 // PendingDeployments is Pending[runID].

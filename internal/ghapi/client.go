@@ -153,6 +153,13 @@ type Client interface {
 	ApproveDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error
 	// WorkflowRuns is every run on headSHA, newest first.
 	WorkflowRuns(ctx context.Context, repo model.Repo, headSHA string) ([]model.WorkflowRun, error)
+	// WorkflowFileRuns is the runs of one workflow file (apply.yml) with
+	// the event, created at or after since (zero: no bound), newest
+	// first, one page of 50: how a release finds the run that carries it
+	// in another repo.
+	WorkflowFileRuns(ctx context.Context, repo model.Repo, file, event string, since time.Time) ([]model.WorkflowRun, error)
+	// RunJobs is a run's jobs with their steps (the latest attempt).
+	RunJobs(ctx context.Context, repo model.Repo, runID int64) ([]model.WorkflowJob, error)
 
 	// PRFiles is the PR's changed files (up to ten pages of 100).
 	PRFiles(ctx context.Context, repo model.Repo, number int) ([]model.PRFile, error)

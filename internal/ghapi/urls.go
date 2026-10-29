@@ -95,6 +95,11 @@ func IssueURL(host string, repo model.Repo, number int) string {
 	return webURL(host, repo, "issue", fmt.Sprint(number))
 }
 
+// RunURL is the browser URL of an Actions run.
+func RunURL(host string, repo model.Repo, id int64) string {
+	return webURL(host, repo, "actions", fmt.Sprint(id))
+}
+
 // CompareURL is the browser URL of base...head.
 func CompareURL(host string, repo model.Repo, base, head string) string {
 	return webURL(host, repo, "compare", base+"..."+head)

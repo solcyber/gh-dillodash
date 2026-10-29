@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
@@ -212,6 +213,39 @@ func (c *GitHub) WorkflowRuns(ctx context.Context, repo model.Repo, headSHA stri
 		return nil, err
 	}
 	return page.WorkflowRuns, nil
+}
+
+// WorkflowFileRuns is one page of a workflow file's runs with the event,
+// created at or after since (zero: unbounded), newest first. The
+// created filter keeps a busy repo from pushing the run we want past
+// the page.
+func (c *GitHub) WorkflowFileRuns(ctx context.Context, repo model.Repo, file, event string, since time.Time) ([]model.WorkflowRun, error) {
+	q := "per_page=50"
+	if event != "" {
+		q += "&event=" + url.QueryEscape(event)
+	}
+	if !since.IsZero() {
+		q += "&created=" + url.QueryEscape(">="+since.UTC().Format(time.RFC3339))
+	}
+	var page runsPage
+	path := repoPath(repo, "actions/workflows/"+url.PathEscape(file)+"/runs?"+q)
+	if err := c.restJSON(ctx, http.MethodGet, path, nil, &page); err != nil {
+		return nil, err
+	}
+	return page.WorkflowRuns, nil
+}
+
+// RunJobs is a run's jobs with their steps; GitHub's default filter
+// returns the latest attempt's jobs.
+func (c *GitHub) RunJobs(ctx context.Context, repo model.Repo, runID int64) ([]model.WorkflowJob, error) {
+	var page struct {
+		Jobs []model.WorkflowJob `json:"jobs"`
+	}
+	path := repoPath(repo, fmt.Sprintf("actions/runs/%d/jobs?per_page=100", runID))
+	if err := c.restJSON(ctx, http.MethodGet, path, nil, &page); err != nil {
+		return nil, err
+	}
+	return page.Jobs, nil
 }
 
 // PendingDeployments is the environments a run waits on.

@@ -289,6 +289,35 @@ type WorkflowRun struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 	RunAttempt int       `json:"run_attempt"`
 	Event      string    `json:"event"`
+	// DisplayTitle is the run's title as the Actions page shows it (a
+	// workflow's run-name, else the commit headline).
+	DisplayTitle string `json:"display_title"`
+}
+
+// WorkflowJob is one job of an Actions run with its steps, as
+// GET /actions/runs/{id}/jobs returns them (the latest attempt).
+type WorkflowJob struct {
+	ID          int64          `json:"id"`
+	RunID       int64          `json:"run_id"`
+	Name        string         `json:"name"`
+	Status      string         `json:"status"`     // queued, in_progress, completed, waiting
+	Conclusion  string         `json:"conclusion"` // success, failure, cancelled, skipped, ...
+	HTMLURL     string         `json:"html_url"`
+	RunAttempt  int            `json:"run_attempt"`
+	StartedAt   time.Time      `json:"started_at"`
+	CompletedAt time.Time      `json:"completed_at"` // zero while the job runs
+	Steps       []WorkflowStep `json:"steps"`
+}
+
+// WorkflowStep is one step of a job: its name as the workflow file
+// names it, and when it ran.
+type WorkflowStep struct {
+	Number      int       `json:"number"`
+	Name        string    `json:"name"`
+	Status      string    `json:"status"`
+	Conclusion  string    `json:"conclusion"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at"` // zero until the step ends
 }
 
 // PendingDeployment is one environment a run waits on.

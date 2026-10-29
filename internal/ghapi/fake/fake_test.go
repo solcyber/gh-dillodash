@@ -117,3 +117,42 @@ func TestFakeFailures(t *testing.T) {
 	}
 	var _ ghapi.Client = f
 }
+
+// TestFakeFileRunsAndJobs: FileRuns answers by repo and file, narrowed
+// to the event and the since bound; Jobs answers by run id; both have a
+// Fail key and count as reads.
+func TestFakeFileRunsAndJobs(t *testing.T) {
+	f := New("alice")
+	t0 := time.Date(2026, 10, 29, 3, 0, 0, 0, time.UTC)
+	f.FileRuns = map[string][]model.WorkflowRun{"acme/infra:apply.yml": {
+		{ID: 3, Event: "repository_dispatch", CreatedAt: t0.Add(time.Minute), DisplayTitle: "apply · plan rel:web-portal#42"},
+		{ID: 2, Event: "push", CreatedAt: t0.Add(time.Minute)},
+		{ID: 1, Event: "repository_dispatch", CreatedAt: t0.Add(-time.Hour)},
+	}}
+	f.Jobs = map[int64][]model.WorkflowJob{3: {{ID: 30, Name: "app release", Steps: []model.WorkflowStep{{Name: "Merge the release PR"}}}}}
+	ctx := context.Background()
+	runs, err := f.WorkflowFileRuns(ctx, infra, "apply.yml", "repository_dispatch", t0)
+	if err != nil || len(runs) != 1 || runs[0].ID != 3 {
+		t.Fatalf("filtered: %+v %v", runs, err)
+	}
+	if runs, _ := f.WorkflowFileRuns(ctx, infra, "apply.yml", "", time.Time{}); len(runs) != 3 {
+		t.Errorf("unfiltered: %d", len(runs))
+	}
+	if runs, _ := f.WorkflowFileRuns(ctx, portal, "apply.yml", "", time.Time{}); len(runs) != 0 {
+		t.Errorf("another repo: %d", len(runs))
+	}
+	if jobs, err := f.RunJobs(ctx, infra, 3); err != nil || len(jobs) != 1 || jobs[0].Steps[0].Name != "Merge the release PR" {
+		t.Errorf("jobs: %+v %v", jobs, err)
+	}
+	if f.Reads["file_runs"] != 3 || f.Reads["jobs"] != 1 {
+		t.Errorf("reads: %v", f.Reads)
+	}
+	f.Fail["jobs"] = &ghapi.Error{Status: 404, Message: "Not Found"}
+	f.Fail["file_runs"] = &ghapi.Error{Status: 403, Message: "forbidden"}
+	if _, err := f.RunJobs(ctx, infra, 3); err == nil {
+		t.Error("jobs fail")
+	}
+	if _, err := f.WorkflowFileRuns(ctx, infra, "apply.yml", "", time.Time{}); err == nil {
+		t.Error("file runs fail")
+	}
+}
