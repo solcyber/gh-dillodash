@@ -12,8 +12,10 @@
   (`approve: prod` when you are a reviewer, `waits: prod` when someone
   else is), and `N runs waiting, M on you (D)` in the summary. `D` on a
   row approves the environments you review, with `approval_comment`; when
-  none is yours it names who can. A run on a listed PR's head or merge
-  commit (a release's deploy) stays under that PR. New table
+  none is yours it names who can (or that you dispatched it and the
+  environment forbids self-review). A run on a listed merged PR's merge
+  commit (a release's deploy) stays under that PR; a run on an open PR's
+  head is listed, since `D` on an open PR does not approve. New table
   `[workflows.waiting_runs]` with `enabled`, `repos` (default: the review
   repos) and `approval_comment`; the token needs Actions read and, for
   `D`, Deployments read and write on those repos.
