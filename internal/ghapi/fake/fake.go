@@ -62,6 +62,11 @@ type Client struct {
 	// Runs are WorkflowRuns' answers per head SHA; WaitingRuns filters
 	// them to Status == "waiting".
 	Runs map[string][]model.WorkflowRun
+	// RepoRuns are RepoWaitingRuns' answers per repo, filtered to Status
+	// "waiting"; RepoFail makes one repo's RepoWaitingRuns fail (Fail
+	// ["repo_waiting_runs"] fails every repo).
+	RepoRuns map[model.Repo][]model.WorkflowRun
+	RepoFail map[model.Repo]error
 	// Pending are PendingDeployments' answers per run id.
 	Pending map[int64][]model.PendingDeployment
 	// FileRuns are WorkflowFileRuns' answers keyed "owner/name:file"; the
@@ -90,7 +95,7 @@ type Client struct {
 
 	// Fail makes the named op return the error: whoami, list, pr_detail,
 	// issue_detail, users, comments, labelled, approve, comment, dispatch,
-	// merge, waiting_runs, pending, approve_deployments, workflow_runs,
+	// merge, waiting_runs, repo_waiting_runs, pending, approve_deployments, workflow_runs,
 	// file_runs, jobs, files, diff, compare, tags, org_repos, rulesets,
 	// fortress, releases.
 	Fail map[string]error
@@ -363,6 +368,26 @@ func (f *Client) WaitingRuns(ctx context.Context, repo model.Repo, headSHA strin
 	defer f.mu.Unlock()
 	var out []model.WorkflowRun
 	for _, r := range f.Runs[headSHA] {
+		if r.Status == "waiting" {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// RepoWaitingRuns is RepoRuns[repo] filtered to Status "waiting", or
+// RepoFail[repo].
+func (f *Client) RepoWaitingRuns(ctx context.Context, repo model.Repo) ([]model.WorkflowRun, error) {
+	if err := f.fail("repo_waiting_runs"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.RepoFail[repo]; err != nil {
+		return nil, err
+	}
+	var out []model.WorkflowRun
+	for _, r := range f.RepoRuns[repo] {
 		if r.Status == "waiting" {
 			out = append(out, r)
 		}
