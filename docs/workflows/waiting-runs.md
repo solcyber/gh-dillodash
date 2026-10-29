@@ -27,6 +27,8 @@ deployment APIs.
 
 ## What you see
 
+![The waiting approvals section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is](../shots/waiting-runs.png)
+
 - **The `waiting approvals` section** sits between the pull requests and
   the releases, one row per waiting run, the one waiting longest first:
   `run`, the repo (when more than one repo is configured or reviewed), a
@@ -65,6 +67,8 @@ does not approve it (it approves merged PRs only), so this row is where it
 can be.
 
 ## `D`
+
+![D on a waiting run: the environments you review, confirmed before they are approved](../shots/waiting-runs-approve.png)
 
 `D` on a run row reads the run's environments again (someone may have
 approved one since the refresh), then:

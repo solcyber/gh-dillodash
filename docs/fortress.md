@@ -1,6 +1,8 @@
 # Fortress mode (`d`)
 
-![Fortress mode: every repo as a lane of branches and pull requests, the oldest work furthest out](shots/fortress.png)
+![Fortress mode over Manhattan: every repo as a lane of branches and pull requests, the oldest work furthest north](shots/fortress.png)
+
+![Fortress mode over Chicago: Madison is today and older work lies south toward Indiana, Lake Michigan to the east](shots/fortress-chicago.png)
 
 `d` in the list draws everything open as a Dwarf Fortress map over
 **Manhattan** or **Chicago** (a coin flip on each `d`; `c` swaps). It is a

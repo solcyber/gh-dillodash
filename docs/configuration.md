@@ -116,9 +116,10 @@ times and malformed repo names are errors. Errors read
 `gh dillodash config migrate` converts a `~/.config/pr-dash/config.ini`
 (pass `--from PATH` for another location). Token sources are dropped (the
 `gh` login replaces them), `[defaults]` becomes `[reviews]` and
-`[display]`, and the three workflows are written enabled with their
+`[display]`, and pr-dash's three workflows (`terraform_approve`,
+`maintenance_window`, `release_pr`) are written enabled with their
 defaults, headed by a comment telling you to disable the ones your repos
-do not speak.
+do not speak. `waiting_runs` is new in dillodash; add its table by hand.
 
 ## Files dillodash writes
 
