@@ -923,3 +923,48 @@ func TestNoTokenError(t *testing.T) {
 		t.Errorf("no token: %v", err)
 	}
 }
+
+// TestWorkflowFileRunsAndJobs: the runs of one workflow file carry the
+// event and created filters and decode the display title; a run's jobs
+// decode their steps with zero times where GitHub sends null; a refusal
+// surfaces as the status.
+func TestWorkflowFileRunsAndJobs(t *testing.T) {
+	s := newServer(t)
+	since := time.Date(2026, 10, 29, 3, 0, 0, 0, time.UTC)
+	s.handle("GET", "/repos/acme/infra/actions/workflows/apply.yml/runs", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("event") != "repository_dispatch" || q.Get("created") != ">=2026-10-29T03:00:00Z" || q.Get("per_page") != "50" {
+			t.Errorf("query: %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"workflow_runs":[{"id":91,"name":"apply","display_title":"apply · PR #42 · plan rel:web-portal#42","status":"in_progress","event":"repository_dispatch","run_attempt":1,"html_url":"https://github.com/acme/infra/actions/runs/91","created_at":"2026-10-29T03:01:02Z"}]}`)
+	})
+	s.jsonOK("GET", "/repos/acme/infra/actions/runs/91/jobs", `{"total_count":1,"jobs":[{"id":5,"run_id":91,"name":"app release (merge at the slot / release-now)","status":"in_progress","conclusion":null,"run_attempt":1,"started_at":"2026-10-29T03:01:10Z","completed_at":null,"steps":[{"number":1,"name":"Inspect dispatch payload","status":"completed","conclusion":"success","started_at":"2026-10-29T03:01:10Z","completed_at":"2026-10-29T03:01:12Z"},{"number":2,"name":"Merge the release PR (merge commit, named head)","status":"in_progress","conclusion":null,"started_at":"2026-10-29T03:01:12Z","completed_at":null}]}]}`)
+	s.handle("GET", "/repos/acme/infra/actions/workflows/secret.yml/runs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		io.WriteString(w, `{"message":"Resource not accessible by personal access token"}`)
+	})
+	cl := s.client(t)
+	ctx := context.Background()
+	runs, err := cl.WorkflowFileRuns(ctx, infra, "apply.yml", "repository_dispatch", since)
+	if err != nil || len(runs) != 1 || runs[0].ID != 91 || runs[0].DisplayTitle != "apply · PR #42 · plan rel:web-portal#42" ||
+		runs[0].Event != "repository_dispatch" || runs[0].CreatedAt.Minute() != 1 {
+		t.Fatalf("file runs: %+v %v", runs, err)
+	}
+	jobs, err := cl.RunJobs(ctx, infra, 91)
+	if err != nil || len(jobs) != 1 || !strings.HasPrefix(jobs[0].Name, "app release") || jobs[0].Status != "in_progress" ||
+		!jobs[0].CompletedAt.IsZero() || len(jobs[0].Steps) != 2 {
+		t.Fatalf("jobs: %+v %v", jobs, err)
+	}
+	st := jobs[0].Steps
+	if st[0].Conclusion != "success" || st[0].CompletedAt.Sub(st[0].StartedAt) != 2*time.Second ||
+		st[1].Status != "in_progress" || !st[1].CompletedAt.IsZero() || st[1].Number != 2 {
+		t.Errorf("steps: %+v", st)
+	}
+	if _, err := cl.WorkflowFileRuns(ctx, infra, "secret.yml", "", time.Time{}); err == nil {
+		t.Error("a 403 is an error")
+	} else if e, ok := AsError(err); !ok || e.Status != 403 {
+		t.Errorf("403 shape: %v", err)
+	}
+}

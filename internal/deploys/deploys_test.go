@@ -47,8 +47,8 @@ func TestCompute(t *testing.T) {
 
 func TestFmtSecs(t *testing.T) {
 	for d, want := range map[time.Duration]string{12 * time.Second: "12s", 7 * time.Minute: "7m", 3*time.Hour + 5*time.Minute: "3h05m", -5 * time.Second: "0s"} {
-		if got := fmtSecs(d); got != want {
-			t.Errorf("fmtSecs(%v) = %q, want %q", d, got, want)
+		if got := FmtSecs(d); got != want {
+			t.Errorf("FmtSecs(%v) = %q, want %q", d, got, want)
 		}
 	}
 }

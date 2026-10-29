@@ -23,6 +23,8 @@ time on screen is formatted in the configured zone with its abbreviation
 
 ## What you see
 
+![A PR queued for the maintenance window, opened: its plan card, the night it waits for](../docs/shots/window-card.png)
+
 - **The section** `queued for the maintenance window` sits below the pull
   requests. It is grouped by the night each item will run in, the next
   window first. Each row shows the status (`queued`, `scheduled 23:04 EDT`
@@ -68,7 +70,9 @@ an issue.
 **Labels** on a queued pull request: `queued_label` (default
 `window:queued`) when queued; `scheduled_label` (`window:scheduled`) once
 the freeze gave it a slot; `rolled_label` (`window:rolled`) when it rolled
-to a later night.
+to a later night; on a release the conductor ran, `applied_label`
+(`window:applied`) when it verified and `failed_label` (`window:failed`)
+when it did not (the release workflow's live progress reads them).
 
 **The queue notice**, a comment by `conductor_bot` on the PR when it is
 queued:

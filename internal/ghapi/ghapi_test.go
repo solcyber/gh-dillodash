@@ -397,6 +397,9 @@ func TestWebURLs(t *testing.T) {
 	if got := TreeURL("GitHub.com", infra, "release/2026-10-27"); got != "https://github.com/acme/infra/tree/release/2026-10-27" {
 		t.Errorf("tree: %s", got)
 	}
+	if got := RunURL("github.com", infra, 40812345); got != "https://github.com/acme/infra/actions/runs/40812345" {
+		t.Errorf("run: %s", got)
+	}
 	if got := CommitURL("github.com", infra, "abc123"); got != "https://github.com/acme/infra/commit/abc123" {
 		t.Errorf("commit: %s", got)
 	}

@@ -49,6 +49,18 @@ any installed font stay until you delete them). When something looks
 wrong, [docs/troubleshooting.md](docs/troubleshooting.md) lists the
 symptoms.
 
+## A tour
+
+![A pull request's detail: the header, the cards, the description rendered from markdown, then comments and reviews in order](docs/shots/pr-detail.png)
+
+![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](docs/shots/release-card.png)
+
+![When a release lands: the rocket, the fireworks and RELEASED! across the screen](docs/shots/release-launch.png)
+
+![The help overlay: every key of the current view by group, the workflows' keys, and the legend of chips](docs/shots/help.png)
+
+More in [docs/keys.md](docs/keys.md) and each workflow's page.
+
 ## What you see
 
 - **The list.** Open pull requests across your repos, with a status chip
@@ -71,6 +83,8 @@ It refreshes in the background every five minutes by default (`r` refreshes
 now) and backs off by itself when GitHub rate-limits the token.
 
 ## Workflows
+
+![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](docs/shots/release-rail.png)
 
 If your repositories run a bot that speaks one of these protocols, turn the
 matching workflow on in the config and dillodash drives it:

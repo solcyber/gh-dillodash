@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -130,5 +131,69 @@ func TestCIPRsAndProvidesDeploys(t *testing.T) {
 	}
 	if !d.ProvidesDeploys() {
 		t.Error("a DeployProvider turns the D key on")
+	}
+}
+
+// pollStub is a workflow with something in flight.
+type pollStub struct {
+	stub
+	live    bool
+	every   time.Duration
+	patch   any
+	err     error
+	polls   int
+	applied []any
+}
+
+func (p *pollStub) PollEvery() time.Duration { return p.every }
+func (p *pollStub) Live(App) bool            { return p.live }
+func (p *pollStub) Poll(context.Context, ghapi.Client) (any, error) {
+	p.polls++
+	return p.patch, p.err
+}
+func (p *pollStub) ApplyPoll(_ App, patch any) { p.applied = append(p.applied, patch) }
+
+// TestPollersAggregate: the set polls at the shortest live cadence, 0
+// when nothing is live; PollAll stops at the first rate limit and still
+// returns the patches before it; ApplyPolls hands each its own.
+func TestPollersAggregate(t *testing.T) {
+	a := &pollStub{stub: stub{name: "a", order: 10}, live: true, every: 30 * time.Second, patch: "pa"}
+	b := &pollStub{stub: stub{name: "b", order: 20}, live: false, every: 5 * time.Second, patch: "pb"}
+	c := &stub{name: "c", order: 30}
+	s, err := NewSet(nil, a, b, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := s.PollEvery(nil); d != 30*time.Second {
+		t.Errorf("only live pollers count: %v", d)
+	}
+	b.live = true
+	if d := s.PollEvery(nil); d != 5*time.Second {
+		t.Errorf("shortest live cadence: %v", d)
+	}
+	a.live, b.live = false, false
+	if d := s.PollEvery(nil); d != 0 {
+		t.Errorf("idle: %v", d)
+	}
+	patches, err := s.PollAll(context.Background(), nil)
+	if err != nil || len(patches) != 2 || patches["a"] != "pa" || patches["b"] != "pb" || a.polls != 1 || b.polls != 1 {
+		t.Fatalf("PollAll: %v %v", patches, err)
+	}
+	s.ApplyPolls(nil, patches)
+	if len(a.applied) != 1 || a.applied[0] != "pa" || len(b.applied) != 1 || b.applied[0] != "pb" {
+		t.Errorf("applied: %v %v", a.applied, b.applied)
+	}
+	a.err = &ghapi.Error{Status: 403, Message: "rate limited", RetryAt: time.Now().Add(time.Minute)}
+	patches, err = s.PollAll(context.Background(), nil)
+	if !ghapi.IsRateLimit(err) || len(patches) != 1 || patches["a"] != "pa" || b.polls != 1 {
+		t.Errorf("a rate limit stops the loop with a's patch kept: %v %v b.polls=%d", patches, err, b.polls)
+	}
+	if s.LiveRow(nil, Row{Kind: "x"}) {
+		t.Error("an unknown kind is not live")
+	}
+	live := &stub{name: "d", order: 40, kinds: map[string]RowKind{"hot": {Live: func(App, Row) bool { return true }}}}
+	s, _ = NewSet(nil, live)
+	if !s.LiveRow(nil, Row{Kind: "hot"}) {
+		t.Error("RowKind.Live")
 	}
 }

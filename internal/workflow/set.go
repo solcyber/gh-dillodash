@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
@@ -176,6 +177,73 @@ func (s *Set) ProvidesDeploys() bool {
 		}
 	}
 	return false
+}
+
+// PollEvery is the shortest poll cadence among the workflows with
+// something live, or 0 when nothing is in flight (no poll goroutine).
+func (s *Set) PollEvery(app App) time.Duration {
+	if s == nil {
+		return 0
+	}
+	var d time.Duration
+	for _, w := range s.Items {
+		p, ok := w.(Poller)
+		if !ok || !p.Live(app) {
+			continue
+		}
+		if e := p.PollEvery(); e > 0 && (d == 0 || e < d) {
+			d = e
+		}
+	}
+	return d
+}
+
+// PollAll runs every poller's Poll (worker goroutine); patches keyed by
+// name. The first rate limit stops the loop, the patches gathered so far
+// still come back.
+func (s *Set) PollAll(ctx context.Context, gh ghapi.Client) (map[string]any, error) {
+	out := map[string]any{}
+	if s == nil {
+		return out, nil
+	}
+	for _, w := range s.Items {
+		p, ok := w.(Poller)
+		if !ok {
+			continue
+		}
+		patch, err := p.Poll(ctx, gh)
+		if patch != nil {
+			out[w.Name()] = patch
+		}
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// ApplyPolls hands each poller its patch on the UI goroutine.
+func (s *Set) ApplyPolls(app App, patches map[string]any) {
+	if s == nil {
+		return
+	}
+	for _, w := range s.Items {
+		if p, ok := w.(Poller); ok {
+			if patch, ok := patches[w.Name()]; ok {
+				p.ApplyPoll(app, patch)
+			}
+		}
+	}
+}
+
+// LiveRow reports whether the row's kind says it changes between
+// refreshes (RowKind.Live).
+func (s *Set) LiveRow(app App, row Row) bool {
+	if s == nil {
+		return false
+	}
+	rk, ok := s.kinds[row.Kind]
+	return ok && rk.Live != nil && rk.Live(app, row)
 }
 
 // ApplyAll hands each workflow its state on the UI goroutine.

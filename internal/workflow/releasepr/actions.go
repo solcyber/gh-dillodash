@@ -137,6 +137,9 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	app.MarkApproved(pr)
 	if body != "" {
 		id, err := app.GH().PostComment(app.Context(), pr.Repo, pr.Number, body)
+		if err == nil {
+			w.notePosted(pr, app.Now()) // the release is in flight from here
+		}
 		if err != nil {
 			if queues {
 				app.Fail(fmt.Sprintf("approved %s (it is queued for the window), but %s NOT posted: %s", wh, cmd, err))

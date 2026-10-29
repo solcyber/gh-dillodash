@@ -172,9 +172,14 @@ func (w *Workflow) Apply(app workflow.App, s workflow.State) {
 	app.SetState(Name, st)
 }
 
-// AfterApply notes whether the release workflow holds queued releases.
+// AfterApply notes whether the release workflow holds queued or
+// scheduled releases: the manifests are read while it does.
 func (w *Workflow) AfterApply(app workflow.App) {
-	w.relQueued.Store(len(w.queuedReleases(app)) > 0)
+	scheduled := 0
+	if sp, ok := app.State(ReleaseState).(workflow.ScheduledProvider); ok && sp != nil {
+		scheduled = len(sp.ScheduledForWindow())
+	}
+	w.relQueued.Store(len(w.queuedReleases(app)) > 0 || scheduled > 0)
 }
 
 func (w *Workflow) state(app workflow.App) *State {

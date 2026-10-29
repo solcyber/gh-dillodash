@@ -224,7 +224,56 @@ func Client() *fake.Client {
 		{ID: 501, Name: "build", Path: ".github/workflows/build.yml", Status: "completed", Conclusion: "success", HeadSHA: rel.HeadRefOid},
 		{ID: 502, Name: "e2e", Path: ".github/workflows/e2e.yml", Status: "in_progress", HeadSHA: rel.HeadRefOid},
 	}}
-	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
+	// a release in flight: yesterday's cut, released NOW forty minutes
+	// ago; the manifest repo's apply run is deploying it (the row's rail
+	// and the detail's mission-control card come from this)
+	flight := pr(portal, 90, "release/2026-10-27", "infra-bot", "release/2026-10-27", 26*time.Hour, 980, 240, "build:success", "e2e:success")
+	flight.State, flight.ReviewDecision = "MERGED", "APPROVED"
+	flight.Opinions.Nodes = []model.Review{{Author: actor("alice"), State: "APPROVED"}}
+	mergedAt := at(6 * time.Minute)
+	flight.MergedAt = &mergedAt
+	flight.MergeCommit = &model.MergeCommit{Oid: hexID(90)[:40]}
+	flight.Commits = model.Commits{}
+	fd := *flight
+	fd.Body = body
+	fd.Comments.Nodes = []model.Comment{{Author: actor("alice"), CreatedAt: at(8 * time.Minute), Body: "/release-now \"the referral fix is holding up signups\""}}
+	fd.Comments.TotalCount = 1
+	fd.Reviews.Nodes = []model.Review{{Author: actor("alice"), State: "APPROVED", SubmittedAt: at(9 * time.Minute), Body: "Ship it."}}
+	fd.Reviews.TotalCount = 1
+	gh.PRs[flight.Ident()] = &fd
+	gh.Comments[flight.Ident()] = fd.Comments.Nodes
+	gh.Runs[flight.MergeCommit.Oid] = []model.WorkflowRun{
+		{ID: 601, Name: "deploy-api", Path: ".github/workflows/deploy-api.yml", Status: "completed", Conclusion: "success", HeadSHA: flight.MergeCommit.Oid, CreatedAt: at(5 * time.Minute)},
+		{ID: 602, Name: "deploy-web", Path: ".github/workflows/deploy-web.yml", Status: "completed", Conclusion: "success", HeadSHA: flight.MergeCommit.Oid, CreatedAt: at(5 * time.Minute)},
+		{ID: 603, Name: "migrate", Path: ".github/workflows/migrate.yml", Status: "in_progress", HeadSHA: flight.MergeCommit.Oid, CreatedAt: at(5 * time.Minute)},
+	}
+	gh.FileRuns = map[string][]model.WorkflowRun{infra.String() + ":apply.yml": {{
+		ID: 4062601, Name: "apply", DisplayTitle: "apply · PR #90 · plan rel:web-portal#90", Event: "repository_dispatch", Status: "in_progress", RunAttempt: 1,
+		HTMLURL: "https://github.com/acme/infra/actions/runs/4062601", CreatedAt: at(7*time.Minute + 30*time.Second), UpdatedAt: at(time.Minute),
+	}}}
+	steps := []string{"Inspect dispatch payload", "Checkout main", "Re-validate the approval from the release PR", "Registry facts", "Assume the deploy role", "Alarm baseline",
+		"Merge the release PR (merge commit, named head)", "Approve the environment deployments of that merge", "Wait for the deploy", "Verify (alarms after the settle)", "Outcome, labels, event and comment", "Write the apply-log entry", "Fail the run unless the release verified"}
+	job := model.WorkflowJob{ID: 11, RunID: 4062601, Name: "app release (merge at the slot / release-now)", Status: "in_progress", RunAttempt: 1, StartedAt: at(7 * time.Minute)}
+	t := at(7 * time.Minute)
+	for i, name := range steps {
+		s := model.WorkflowStep{Number: i + 1, Name: name}
+		switch {
+		case i < 8:
+			d := []time.Duration{2, 4, 3, 1, 6, 9, 2, 0}[i] * time.Second
+			s.Status, s.Conclusion, s.StartedAt, s.CompletedAt = "completed", "success", t, t.Add(d)
+			if i == 7 {
+				s.Conclusion = "skipped"
+			}
+			t = t.Add(d)
+		case i == 8:
+			s.Status, s.StartedAt = "in_progress", t
+		default:
+			s.Status = "queued"
+		}
+		job.Steps = append(job.Steps, s)
+	}
+	gh.Jobs = map[int64][]model.WorkflowJob{4062601: {job}}
+	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel, flight}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
 	gh.Tags = map[model.Repo][]string{portal: {"go/905", "hold/907"}}
 	gh.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 3, TotalCommits: 3, Commits: []ghapi.CompareCommit{
 		{SHA: "bbbb0001", Message: "Merge pull request #905 from acme/feat-search", Parents: []string{"aaaa0001", "dddd0001"}},

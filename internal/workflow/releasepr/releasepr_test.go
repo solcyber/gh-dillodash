@@ -818,7 +818,7 @@ func TestRefreshAndSections(t *testing.T) {
 	if app.Bumps != 1 {
 		t.Errorf("an open release's card is rebuilt: %d", app.Bumps)
 	}
-	if got := w.kindChipText(m); got != "approve: prod" {
+	if got := w.kindChipText(m, app.Now()); got != "approve: prod" {
 		t.Errorf("a merged row's kind chip shows the deploy, not merged twice: %q", got)
 	}
 	// claims: a core row for the same PR is ours
@@ -1106,11 +1106,11 @@ func TestDetailCards(t *testing.T) {
 	if card = flat(w.DetailCards(app, stuck, nil, 80)); !strings.Contains(card, "run 77 has gone longer than 45 minutes") {
 		t.Errorf("a stuck run is called out:\n%s", card)
 	}
-	if rows := w.HelpRows(); len(rows) != 2 || rows[0][0] != "releases" || !strings.Contains(rows[0][1], "/release-now") {
+	if rows := w.HelpRows(); len(rows) != 3 || rows[0][0] != "releases" || !strings.Contains(rows[0][1], "/release-now") || !strings.Contains(rows[2][1], "rail") {
 		t.Errorf("help rows: %v", rows)
 	}
-	if len(w.LegendRows()) != 1 {
-		t.Error("one legend row")
+	if rows := w.LegendRows(); len(rows) != 2 || !strings.Contains(text.SegsText(rows[1]), "released") {
+		t.Errorf("two legend rows, the second the rail's: %v", rows)
 	}
 }
 

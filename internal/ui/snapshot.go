@@ -9,13 +9,44 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/fx"
 )
+
+// SnapshotOptions tune a snapshot's clock and effects: the screenshot
+// gallery draws the splash, the launch and Amos's walk mid-motion.
+type SnapshotOptions struct {
+	Motion     bool      // motion "full" with the frame clock pinned at Clock
+	Clock      float64   // the pinned frame clock (seconds) during the script
+	Advance    float64   // seconds added to the clock before the frame is drawn
+	KeepSplash bool      // leave the splash playing (it is stopped otherwise)
+	Fx         []FxStart // effects started before the frame, already Elapsed seconds in
+}
+
+// FxStart is one effect to start for a snapshot.
+type FxStart struct {
+	Name    string
+	Secs    float64
+	Elapsed float64
+}
 
 // Snapshots drives the dashboard offline: it loads the data, then for each
 // script of keys ("j", "enter", "esc", "G"...) presses them and paints the
 // frame onto a canvas of w x h. The screenshot tool uses it with the demo
 // fixture; nothing here touches the terminal.
 func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]*canvas.Canvas, error) {
+	return SnapshotsWith(ctx, o, SnapshotOptions{}, w, h, scripts)
+}
+
+// SnapshotsWith is Snapshots with the clock and effects set.
+func SnapshotsWith(ctx context.Context, o Options, so SnapshotOptions, w, h int, scripts [][]string) ([]*canvas.Canvas, error) {
+	if so.Motion {
+		wasMotion, wasNow := fx.Motion, fx.Now
+		defer func() { fx.Motion, fx.Now = wasMotion, wasNow }()
+		fx.Motion = "full"
+		clockAt := so.Clock
+		fx.Now = func() float64 { return clockAt }
+		defer func() { clockAt = so.Clock }()
+	}
 	m := New(ctx, o)
 	msgs := make(chan tea.Msg, 256)
 	m.sendFn = func(msg tea.Msg) { msgs <- msg }
@@ -34,9 +65,19 @@ func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]
 	if err := pump(); err != nil {
 		return nil, err
 	}
+	if !so.KeepSplash {
+		m.mu.Lock()
+		m.fx.Stop("splash")
+		m.mu.Unlock()
+	}
+	// a workflow with something in flight gets its first poll now, as it
+	// would thirty seconds in
 	m.mu.Lock()
-	m.fx.Stop("splash")
+	m.poll()
 	m.mu.Unlock()
+	if err := pump(); err != nil {
+		return nil, err
+	}
 	var out []*canvas.Canvas
 	for _, script := range scripts {
 		for _, k := range script {
@@ -46,6 +87,19 @@ func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]
 			}
 		}
 		m.mu.Lock()
+		if so.Motion {
+			for _, e := range so.Fx {
+				was := fx.Now
+				at := so.Clock + so.Advance - e.Elapsed
+				fx.Now = func() float64 { return at }
+				m.fx.Start(e.Name, e.Secs, nil)
+				fx.Now = was
+			}
+			if so.Advance != 0 {
+				at := so.Clock + so.Advance
+				fx.Now = func() float64 { return at }
+			}
+		}
 		c := canvas.New(w, h)
 		m.draw(c)
 		m.mu.Unlock()
@@ -70,7 +124,7 @@ func settle(m *Model, msgs <-chan tea.Msg, deadline time.Duration) error {
 	for {
 		drain(m, msgs)
 		m.mu.Lock()
-		busy := m.refreshing || m.action
+		busy := m.refreshing || m.action || m.polling
 		modal := m.modal != nil
 		m.mu.Unlock()
 		if modal || !busy {

@@ -70,6 +70,7 @@ type Item struct {
 	Status       string
 	Revertible   *bool
 	Reasons      []string
+	Final        *bool // the conductor is done with it (set once terminal)
 }
 
 // Manifest is a night's manifest as its issue carries it.
@@ -199,7 +200,7 @@ func (o obj) has(k string) bool { _, ok := o[k]; return ok }
 func parseItem(o obj) Item {
 	return Item{ID: o.str("id"), Kind: o.str("kind"), Repo: o.str("repo"), PR: o.num("pr"),
 		Flag: o.str("flag"), StartUTC: o.str("start_utc"), ReleaseByUTC: o.str("release_by_utc"),
-		Status: o.str("status"), Revertible: o.boolp("revertible"), Reasons: o.strs("reasons")}
+		Status: o.str("status"), Revertible: o.boolp("revertible"), Reasons: o.strs("reasons"), Final: o.boolp("final")}
 }
 
 // ---- markers ----
@@ -418,6 +419,37 @@ func WindowItem(pr *model.PR, manifests map[string]*Manifest, cfg *config.Mainte
 		}
 	}
 	return bestNight, best
+}
+
+// ManifestItem implements workflow.ManifestItemProvider: the newest
+// night's item for the release (repo short name, number), as another
+// workflow needs it.
+func (s *State) ManifestItem(repo string, number int) (workflow.ManifestItem, bool) {
+	if s == nil || len(s.Manifests) == 0 {
+		return workflow.ManifestItem{}, false
+	}
+	want := ref{repo, number}
+	nights := make([]string, 0, len(s.Manifests))
+	for n := range s.Manifests {
+		nights = append(nights, n)
+	}
+	sort.Strings(nights)
+	var out workflow.ManifestItem
+	found := false
+	for _, n := range nights {
+		m := s.Manifests[n]
+		for k := range m.Items {
+			if itemRef(m.Items[k]) == want {
+				it := m.Items[k]
+				out = workflow.ManifestItem{ID: it.ID, Status: it.Status, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue}
+				if out.Night == "" {
+					out.Night = n
+				}
+				found = true
+			}
+		}
+	}
+	return out, found
 }
 
 // Placement is where a queued PR sits in the section.

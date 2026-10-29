@@ -2,6 +2,8 @@
 
 ## The list
 
+![The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases with a release in flight; the night's queue; the issues](../docs/shots/list.png)
+
 Columns, left to right: the kind icon and `#number` (`repo#number` with
 several repos), the status chip, CI, the diffstat, the author, the age, the
 title. Columns drop on a narrow terminal (diffstat first, then age, then
@@ -92,6 +94,10 @@ colors, including red and green, and every state there also has its own
 shape or motion. Amos is drawn in his own colors.
 
 ## Motion
+
+![The splash while the first refresh runs: the logotype cascades in and Amos walks](../docs/shots/splash.png)
+
+![Nothing to show: Amos walks the empty list under the stars](../docs/shots/amos.png)
 
 `--motion full` (the default) animates; `--motion off` or `motion = "off"`
 is the static dashboard.

@@ -4,3 +4,4 @@
 internal/amos/sprite_gen.go linguist-generated=true
 config.example.toml linguist-generated=true
 docs/keys.md linguist-generated=true
+docs/shots/*.png binary

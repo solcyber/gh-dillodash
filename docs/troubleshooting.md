@@ -32,3 +32,13 @@ every repo.
 | Too much motion, or a slow SSH link | `--motion off` (or `motion = "off"`). Ambient effects rest by themselves after five minutes without a key. |
 | Detail header says `last 100 of N comments` | GraphQL returns at most 100 comments, the newest. Older ones (and digests in them) are not seen; read the thread on GitHub. |
 | A workflow's command "bounced" | dillodash posts the comment; the bot still validates it and replies on the PR or issue. The reply is shown on the next refresh. |
+
+## Small terminals
+
+The layout folds as the terminal narrows: the diffstat and the author go
+first, then the CI glyphs; the titles and the key bar's `?` stay to the
+last.
+
+![The list at eighty columns: the diffstat and author go first, the titles stay](../docs/shots/list-narrow.png)
+
+![Fifty columns by twelve rows: number, chip and title, and a key bar down to ? help](../docs/shots/narrow-50x12.png)

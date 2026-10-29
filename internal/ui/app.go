@@ -144,6 +144,9 @@ func (m *Model) idleWakeMS() int {
 		return f
 	}
 	at(m.nextRefreshAt)
+	if m.nextPollAt > 0 {
+		at(m.nextPollAt)
+	}
 	if (m.loaded && !m.refreshing) || (!m.loaded && m.errText != "") {
 		at(now + frac(m.nextRefreshAt-now))
 	}
@@ -172,9 +175,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.refreshDue() {
 			m.refresh(false) // no-ops while rate-limited
 		}
+		if m.pollDue() {
+			m.poll()
+		}
 		return m, m.tick()
 	case refreshDoneMsg:
 		m.applyRefresh(msg.out)
+	case pollDoneMsg:
+		m.applyPoll(msg.out)
 	case showModalMsg:
 		m.modal = msg.modal
 		m.modalDone = msg.done
