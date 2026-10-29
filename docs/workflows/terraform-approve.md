@@ -19,9 +19,9 @@ flags, the minimum reason length, the ceremony window.
 
 ## What `a` does
 
-![A terraform PR's detail with its plan cards: the plan id, what changes, the destroy count and the window verdict](../docs/shots/terraform-approve.png)
+![A terraform PR's detail with its plan cards: the plan id, what changes, the destroy count and the window verdict](../shots/terraform-approve.png)
 
-![a on a terraform PR: which plan to approve, with its destroys](../docs/shots/terraform-approve-menu.png)
+![a on a terraform PR: which plan to approve, with its destroys](../shots/terraform-approve-menu.png)
 
 1. Scans the PR's comment thread for plan digests and keeps only the
    **live** ones. Several live stacks: a menu asks which; a plan-set is

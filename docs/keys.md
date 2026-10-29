@@ -62,7 +62,7 @@ Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
 
 **The list**
 
-![The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases; the night's queue; the issues](shots/list.png)
+![The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases with a release in flight; the night's queue; the issues](shots/list.png)
 
 **`/` filters as you type**
 
@@ -74,7 +74,7 @@ Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
 
 **A pull request's detail**
 
-![A pull request's detail: the header, the cards, the description, the comments and reviews](shots/pr-detail.png)
+![A pull request's detail: the header, the description rendered from markdown, then comments and reviews in order](shots/pr-detail.png)
 
 **An issue's detail**
 
@@ -82,11 +82,11 @@ Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
 
 **`f`: the changed files**
 
-![The changed files of a pull request, with their status and diffstat](shots/pr-files.png)
+![The changed files of a pull request, with their status and diffstat; enter opens a file's diff](shots/pr-files.png)
 
 **enter on a file: its diff**
 
-![One file's diff in-app, hunks colored](shots/pr-diff.png)
+![One file's diff in-app, hunks colored; / searches it](shots/pr-diff.png)
 
 **`?`: the help overlay**
 
@@ -94,4 +94,4 @@ Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
 
 **`d`: fortress mode**
 
-![Fortress mode: every repo as a lane of branches and pull requests](shots/fortress.png)
+![Fortress mode: every repo as a lane of branches and pull requests, the oldest work furthest out](shots/fortress.png)

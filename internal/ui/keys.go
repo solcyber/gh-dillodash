@@ -441,21 +441,22 @@ func KeysDoc() string {
 	b.WriteString("\nEsc never quits the list: Alt+key and some terminals' Ctrl+arrow sequences\nbegin with an escape, so a stray one must never quit.\n")
 	b.WriteString("\n## The screens\n\nRendered from the offline demo fixture by `go run ./cmd/screenshot`.\n")
 	for _, sc := range docScreens {
-		b.WriteString("\n**" + sc.title + "**\n\n![" + sc.alt + "](shots/" + sc.name + ".png)\n")
+		b.WriteString("\n**" + sc.title + "**\n\n![" + ShotCaptions[sc.name] + "](shots/" + sc.name + ".png)\n")
 	}
 	return b.String()
 }
 
 // docScreens are the gallery shots docs/keys.md shows under its table,
-// in order: the name is the PNG in docs/shots, the alt text its caption.
-var docScreens = []struct{ name, title, alt string }{
-	{"list", "The list", "The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases; the night's queue; the issues"},
-	{"filter", "`/` filters as you type", "The filter, live as you type: the rows narrow to the words"},
-	{"goto", "`:` goes to a number", "Go to a number: #N, or repo#N when the repos share numbers"},
-	{"pr-detail", "A pull request's detail", "A pull request's detail: the header, the cards, the description, the comments and reviews"},
-	{"issue-detail", "An issue's detail", "An issue's detail: labels, assignees, the body and the comments"},
-	{"pr-files", "`f`: the changed files", "The changed files of a pull request, with their status and diffstat"},
-	{"pr-diff", "enter on a file: its diff", "One file's diff in-app, hunks colored"},
-	{"help", "`?`: the help overlay", "The help overlay: every key of the current view by group, the workflows' keys, and the legend of chips"},
-	{"fortress", "`d`: fortress mode", "Fortress mode: every repo as a lane of branches and pull requests"},
+// in order: the name is the PNG in docs/shots (its caption, the alt
+// text, is ShotCaptions'), the title the heading above it.
+var docScreens = []struct{ name, title string }{
+	{"list", "The list"},
+	{"filter", "`/` filters as you type"},
+	{"goto", "`:` goes to a number"},
+	{"pr-detail", "A pull request's detail"},
+	{"issue-detail", "An issue's detail"},
+	{"pr-files", "`f`: the changed files"},
+	{"pr-diff", "enter on a file: its diff"},
+	{"help", "`?`: the help overlay"},
+	{"fortress", "`d`: fortress mode"},
 }

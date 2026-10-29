@@ -88,6 +88,28 @@ resource "aws_iam_role_policy" "warehouse_read" {
 - [ ] approved
 `
 
+// bodies are the other pull requests' descriptions, by number (the
+// warehouse one above is infra#41's and the fallback).
+var bodies = map[int]string{
+	42: "## Summary\n\nThe quarterly drill: rotate the DKIM signing keys for the mail domain and publish the new selector. " +
+		"The old selector stays published for a week so mail in flight still verifies.\n\n- [x] planned in CI\n- [x] drill runbook followed\n",
+	43: "Automated: the canary's p95 CPU sat above 80% for seven days, so its instance size moves up one step.\n\n" +
+		"| stack | from | to |\n|---|---|---|\n| nonprod/15-window-canary | t3.medium | t3.large |\n\nQueued for the window: the resize restarts the canary.\n",
+	44: "Work in progress: splitting the network stack into the VPC and the edge, so a change to one stops planning the other.\n\n- [x] VPC\n- [ ] edge\n- [ ] state moves\n",
+	90: "Yesterday's cut for production.\n\n- fix: the signup form loses the referral code (#92)\n- the dashboard's empty state after a password reset (#19)\n",
+	91: "Today's cut for production.\n\n- the billing page's new invoice table\n- faster search on the accounts list\n- dependency updates\n",
+	92: "## Summary\n\nThe referral code from the landing page was dropped when the form re-rendered after a validation error. " +
+		"It now lives in the form state, not the query string.\n\n```ts\nconst [referral] = useState(() => params.get(\"ref\") ?? \"\");\n```\n\n- [x] unit test for the re-render\n- [ ] e2e: the referral flow\n",
+}
+
+// bodyOf is a pull request's description in the demo.
+func bodyOf(n int) string {
+	if b, ok := bodies[n]; ok {
+		return b
+	}
+	return body
+}
+
 // Config is the demo's config: the two repos and all three workflows on.
 func Config() *config.Config {
 	cfg := config.Default()
@@ -170,10 +192,14 @@ func Client() *fake.Client {
 	gh.Open[portal] = ghapi.ListResult{PRs: portalPRs, Issues: issues[2:]}
 	for _, p := range append(infraPRs, portalPRs...) {
 		d := *p
-		d.Body = body
+		d.Body = bodyOf(p.Number)
 		d.Comments.Nodes = []model.Comment{
-			{Author: actor("carol"), CreatedAt: at(20 * time.Hour), Body: "Looks right to me. One question: does the read need `s3:ListBucket` on the whole bucket, or only the prefix?"},
-			{Author: actor(p.Author.Login), CreatedAt: at(18 * time.Hour), Body: "Only the prefix, I tightened it in the last push."},
+			{Author: actor("carol"), CreatedAt: at(20 * time.Hour), Body: "Looks right to me. One question: was this tried against staging first?"},
+			{Author: actor(p.Author.Login), CreatedAt: at(18 * time.Hour), Body: "Yes, it ran there yesterday; the run is linked in the description of the last push."},
+		}
+		if p.Number == 41 {
+			d.Comments.Nodes[0].Body = "Looks right to me. One question: does the read need `s3:ListBucket` on the whole bucket, or only the prefix?"
+			d.Comments.Nodes[1].Body = "Only the prefix, I tightened it in the last push."
 		}
 		d.Comments.TotalCount = 2
 		d.Reviews.Nodes = []model.Review{{Author: actor("carol"), State: "COMMENTED", SubmittedAt: at(20 * time.Hour)}}
@@ -235,7 +261,7 @@ func Client() *fake.Client {
 	flight.MergeCommit = &model.MergeCommit{Oid: hexID(90)[:40]}
 	flight.Commits = model.Commits{}
 	fd := *flight
-	fd.Body = body
+	fd.Body = bodyOf(90)
 	fd.Comments.Nodes = []model.Comment{{Author: actor("alice"), CreatedAt: at(8 * time.Minute), Body: "/release-now \"the referral fix is holding up signups\""}}
 	fd.Comments.TotalCount = 1
 	fd.Reviews.Nodes = []model.Review{{Author: actor("alice"), State: "APPROVED", SubmittedAt: at(9 * time.Minute), Body: "Ship it."}}

@@ -39,6 +39,6 @@ The layout folds as the terminal narrows: the diffstat and the author go
 first, then the CI glyphs; the titles and the key bar's `?` stay to the
 last.
 
-![The list at eighty columns: the diffstat and author go first, the titles stay](../docs/shots/list-narrow.png)
+![The list at eighty columns: the diffstat and author go first, the titles stay](shots/list-narrow.png)
 
-![Fifty columns by twelve rows: number, chip and title, and a key bar down to ? help](../docs/shots/narrow-50x12.png)
+![Fifty columns by twelve rows: number, chip and title, and a key bar down to ? help](shots/narrow-50x12.png)
