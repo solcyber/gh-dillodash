@@ -60,7 +60,8 @@ a test (`TestNoPrivateTerms`) checks for a denylist the maintainers hold.
 ## Running it against a fake
 
 `go run . --demo` opens the dashboard on the fixture without touching
-GitHub. `go run ./cmd/screenshot` renders the same fixture offline with
+GitHub (it carries a release in flight, so the rail and the mission-control
+card are on screen). `go run ./cmd/screenshot` renders the same fixture offline with
 the embedded font and the theme's colors into `docs/screenshot.png` (the
 list, then a pull request's detail); regenerate it after a visible change.
 

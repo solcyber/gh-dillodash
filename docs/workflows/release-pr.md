@@ -46,8 +46,13 @@ the day after it is enrolled, or at once after the cache file is deleted.
 - **A queued release** (with `maintenance_window` enabled and the
   conductor's queued label on it) shows under its night in the window
   section; its manifest item id is `rel:<repo>#<N>`.
-- **A merged release** stays listed for `merged_keep_secs` (12 hours) and
-  shows its deploy in the second chip: `approve: prod` (an environment you
+- **A release in flight** (released NOW, or on tonight's manifest) shows
+  its **rail** in the kind chip: a meter that fills as the release moves
+  through the manifest repo's run, with the phase and its clock
+  (`▰▰▰▰▱▱▱ deploying 3/9 · 2m`, `scheduled 23:00`, `released`, `release
+  FAILED`). See [Live progress](#live-progress).
+- **A merged release** stays listed for `merged_keep_secs` (12 hours) and,
+  when nothing is following it, shows its deploy in the second chip: `approve: prod` (an environment you
   review waits), `waits: prod` (someone else's), `deploying`, `deployed`,
   `deploy failed`, `deploy cancelled`, `stuck? 1h05m` (a run queued or
   running longer than `deploy_stuck_secs`, 45 minutes by default), or `no
@@ -102,6 +107,65 @@ Without the window workflow, an approving review is just an approval, and
   press D on its row`). Approve `stg`, wait for the message, press `D`
   again for `prod`.
 
+## Live progress
+
+From the moment a release is sent on its way, dillodash follows it to its
+outcome and shows where it stands, in near real time, without waiting for
+the next refresh.
+
+**What it watches.** The conductor's release job runs in the window's
+`manifest_repo` as one run of `apply_workflow` (default `apply.yml`), fired
+by a `repository_dispatch`; its title names the release
+(`apply_run_match`, default `rel:{repo}#{number}`). The run's steps say the
+phase: *validating*, *merging*, *approving envs*, *deploying*, *verifying*
+(the alarms are read after a five-minute settle), *finishing*. On the
+release PR the job leaves an outcome comment (`## Released`, `## Release
+FAILED: …`, `## Release UNVERIFIABLE`, `## Release NOT RUN`) and the
+conductor's labels (`applied_label`, `failed_label`); on a window night the
+manifest item's status says *scheduled*, *waiting for slot* (terraform
+items first, or `/release`), *dispatched*. The app repo's own deploy runs
+on the merge give the `n/m` while deploying. The newest signal wins, so a
+`/release-now` posted again after a failed run reopens the story with the
+new run.
+
+**What you see.**
+
+- **The row's rail**: one segment per run phase, filling blue as the
+  release moves (deploying by runs done, verifying by the settle), a gold
+  head that breathes while the phase runs, a sweep of light when it
+  changes, stripes when it failed, a full rail once released. Next to it
+  the phase and its clock, and a spinner (a rolling ball while a dispatch
+  waits for its run). A scheduled release shows its slot and no spinner.
+- **The detail's mission control**, in the release card: the state chip,
+  the run and attempt (or the night and slot), a `T+` clock since the
+  command (`T-` to the slot), the rail across the card with Amos walking
+  it, one row per phase with its glyph and clock and a technical tail
+  (the merge sha, `n/m runs`, the settle countdown, the approver), the
+  outcome and the merge once it ends, the run's URL, and the last poll
+  error if there was one. It redraws every frame while live.
+- **One message when it ends**: `web-portal#90 released — verified on
+  9f8e7d6 after 6m02s`, with the launch; `release FAILED at verifying —
+  <detail>; run: <url>`; `release refused — <reason>`; a notice for
+  *rolled*, *not run*, *cancelled* and *lost track*.
+
+**How often.** Every `progress_poll_secs` (30 s) while something is in
+flight: one listing of the apply runs when a release has no run yet, the
+jobs of each run in progress, the comments of each release waiting for its
+outcome, and nothing at all when nothing is in flight (a scheduled release
+is polled from ten minutes before its slot). The whole-dashboard refresh is
+untouched. A release with no outcome after `progress_timeout_secs` (90
+minutes) is marked *lost track* and left alone. With `progress_poll_secs =
+0` nothing is followed and the chips read as before.
+
+**Without the manifest repo.** A token that cannot read the manifest
+repo's Actions turns that half off for the session, with one notice; the
+PR's labels, comments and deploy runs still carry the release to its
+outcome. Set `apply_workflow = ""` to skip the runs on purpose.
+
+**ASCII and motion off.** The rail draws with `#` and `-`, the stripes
+with `/\`, Amos in line art; with `motion = "off"` nothing breathes or
+sweeps and the card still redraws on every poll.
+
 ## Permissions
 
 On every release repo the token needs Pull requests read and write (the
@@ -109,6 +173,7 @@ review), Issues read and write (the `/release-now` comment), Contents read,
 Actions read, Metadata read (discovery), and for `M` and `D` Contents and
 Deployments read and write. The release-now dispatch needs Contents read
 and write on the window's `manifest_repo` (a `repository_dispatch` is a
-contents write there). A repo the token cannot see shrinks the
+contents write there); following the release there needs Actions read on
+it (the run's jobs and steps). A repo the token cannot see shrinks the
 section and puts the reason on the warn line; a repo whose read fails keeps
 its last good rows with a warning.

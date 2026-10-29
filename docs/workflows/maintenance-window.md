@@ -68,7 +68,9 @@ an issue.
 **Labels** on a queued pull request: `queued_label` (default
 `window:queued`) when queued; `scheduled_label` (`window:scheduled`) once
 the freeze gave it a slot; `rolled_label` (`window:rolled`) when it rolled
-to a later night.
+to a later night; on a release the conductor ran, `applied_label`
+(`window:applied`) when it verified and `failed_label` (`window:failed`)
+when it did not (the release workflow's live progress reads them).
 
 **The queue notice**, a comment by `conductor_bot` on the PR when it is
 queued:

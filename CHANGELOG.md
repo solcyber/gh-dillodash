@@ -4,6 +4,25 @@
 
 ### Added
 
+- **Live release progress.** A release sent on its way (`/release-now`, or
+  the night's manifest) is followed to its outcome: the manifest repo's
+  apply run step by step, the PR's outcome comment and labels, the window
+  item's status and the app repo's deploy runs. The row shows a **rail**
+  that fills phase by phase with the clock (`deploying 3/9 · 2m`), the
+  detail a mission-control card (T+ clock, the rail with Amos on it, one
+  row per phase with its clock and technical tail, the outcome, the run),
+  and one message says how it ended, with the launch when it landed.
+  Polling runs only while something is in flight, at most a few small
+  calls per release every `progress_poll_secs`; the whole-dashboard
+  refresh is untouched. New keys under `[workflows.release_pr]`:
+  `apply_workflow`, `apply_run_match`, `progress_poll_secs`,
+  `progress_timeout_secs`; under `[workflows.maintenance_window]`:
+  `applied_label`, `failed_label`. `--demo` carries a release in flight.
+- For workflow authors: `workflow.Poller` (a light poll between
+  refreshes), `RowKind.Live` (a row that keeps the frame clock running),
+  `ManifestItemProvider` and `ScheduledProvider`; `ghapi.Client` gained
+  `WorkflowFileRuns` and `RunJobs`. The deploy watch still rides the full
+  refresh; moving it onto the poller is a follow-up.
 - `config check` prints the token's role in every review repo (`write:
   yes (ADMIN)`, `write: NO (READ)`), read from the list query at no extra
   cost, and fails when every review repo is read-only, so a wrong `gh`
