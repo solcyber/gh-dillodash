@@ -403,7 +403,11 @@ func prRef(pr *model.PR, cfg *config.MaintenanceWindowConfig) ref {
 // WindowItem is (night, item) for the newest manifest listing the PR;
 // nil when none does.
 func WindowItem(pr *model.PR, manifests map[string]*Manifest, cfg *config.MaintenanceWindowConfig) (string, *Item) {
-	want := prRef(pr, cfg)
+	return newestItem(manifests, prRef(pr, cfg))
+}
+
+// newestItem is (night, item) for the newest manifest listing want.
+func newestItem(manifests map[string]*Manifest, want ref) (string, *Item) {
 	nights := make([]string, 0, len(manifests))
 	for n := range manifests {
 		nights = append(nights, n)
@@ -428,28 +432,16 @@ func (s *State) ManifestItem(repo string, number int) (workflow.ManifestItem, bo
 	if s == nil || len(s.Manifests) == 0 {
 		return workflow.ManifestItem{}, false
 	}
-	want := ref{repo, number}
-	nights := make([]string, 0, len(s.Manifests))
-	for n := range s.Manifests {
-		nights = append(nights, n)
+	n, it := newestItem(s.Manifests, ref{repo, number})
+	if it == nil {
+		return workflow.ManifestItem{}, false
 	}
-	sort.Strings(nights)
-	var out workflow.ManifestItem
-	found := false
-	for _, n := range nights {
-		m := s.Manifests[n]
-		for k := range m.Items {
-			if itemRef(m.Items[k]) == want {
-				it := m.Items[k]
-				out = workflow.ManifestItem{ID: it.ID, Status: it.Status, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue}
-				if out.Night == "" {
-					out.Night = n
-				}
-				found = true
-			}
-		}
+	m := s.Manifests[n]
+	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue}
+	if out.Night == "" {
+		out.Night = n
 	}
-	return out, found
+	return out, true
 }
 
 // Placement is where a queued PR sits in the section.

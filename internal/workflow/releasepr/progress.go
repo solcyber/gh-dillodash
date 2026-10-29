@@ -308,16 +308,10 @@ func (w *Workflow) candidate(pr *model.PR, now time.Time) bool {
 	return false
 }
 
+// hasApproval reports an approved release by its decision or any
+// approving review, however old: it may carry the command.
 func hasApproval(pr *model.PR) bool {
-	if pr.ReviewDecision == "APPROVED" {
-		return true
-	}
-	for _, r := range pr.Opinions.Nodes {
-		if r.State == "APPROVED" {
-			return true
-		}
-	}
-	return false
+	return pr.ReviewDecision == "APPROVED" || approvedWithin(pr, time.Time{}, 0)
 }
 
 // ---- the poll (its own goroutine) ----

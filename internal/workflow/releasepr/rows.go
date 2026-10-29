@@ -114,11 +114,7 @@ func (w *Workflow) queued(pr *model.PR) bool {
 	if w.win == nil {
 		return false
 	}
-	kind := w.Kind(pr)
-	if i := InfoOf(pr); i != nil && i.Kind != "" {
-		kind = i.Kind
-	}
-	return queuedFor(pr, kind, w.win.QueuedLabel, w.cfg.ApprovalQueuesForWindow, clock.Now()) && !w.inFlight(pr)
+	return queuedFor(pr, w.kindOf(pr), w.win.QueuedLabel, w.cfg.ApprovalQueuesForWindow, clock.Now()) && !w.inFlight(pr)
 }
 
 func matches(parts []string, terms []string) bool {

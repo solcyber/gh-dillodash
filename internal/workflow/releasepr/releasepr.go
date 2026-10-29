@@ -148,11 +148,7 @@ func (s *State) QueuedForWindow() []*model.PR {
 	now := clock.Now()
 	var out []*model.PR
 	for _, p := range s.Releases {
-		kind := ""
-		if i := InfoOf(p); i != nil {
-			kind = i.Kind
-		}
-		if queuedFor(p, kind, s.queuedLabel, s.queuesByApproval, now) && !s.w.inFlight(p) {
+		if queuedFor(p, s.w.kindOf(p), s.queuedLabel, s.queuesByApproval, now) && !s.w.inFlight(p) {
 			out = append(out, p)
 		}
 	}
@@ -172,6 +168,17 @@ func (w *Workflow) inFlight(pr *model.PR) bool {
 	return ok && !p.Terminal && p.Phase != PhaseScheduled && p.Phase != PhaseWaitingSlot
 }
 
+// kindOf is the release's kind: the refresh's reading, else its branch.
+func (w *Workflow) kindOf(pr *model.PR) string {
+	if i := InfoOf(pr); i != nil && i.Kind != "" {
+		return i.Kind
+	}
+	if w == nil {
+		return ""
+	}
+	return w.Kind(pr)
+}
+
 // approvalQueueAge is how long an approving review keeps a release
 // queued: the conductor's three nights; older, it asks for a fresh one.
 const approvalQueueAge = 72 * time.Hour
@@ -187,8 +194,14 @@ func queuedFor(pr *model.PR, kind, queuedLabel string, byApproval bool, now time
 	if !byApproval || pr.IsDraft || kind != KindRelease || (pr.State != "" && pr.State != "OPEN") {
 		return false
 	}
+	return approvedWithin(pr, now, approvalQueueAge)
+}
+
+// approvedWithin reports an APPROVED review submitted within age of now
+// (age 0: at any time); a review with no submittedAt counts.
+func approvedWithin(pr *model.PR, now time.Time, age time.Duration) bool {
 	for _, r := range pr.Opinions.Nodes {
-		if r.State == "APPROVED" && (r.SubmittedAt.IsZero() || now.Sub(r.SubmittedAt) <= approvalQueueAge) {
+		if r.State == "APPROVED" && (age == 0 || r.SubmittedAt.IsZero() || now.Sub(r.SubmittedAt) <= age) {
 			return true
 		}
 	}
