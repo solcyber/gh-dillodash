@@ -22,6 +22,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
+	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
@@ -118,12 +119,10 @@ type Progress struct {
 	Detail   string    // the step name, the manifest status, the outcome detail, the refusal reason
 	SlotAt   time.Time // the window slot, when known
 
-	RunID         int64
-	RunAttempt    int
-	RunURL        string
-	RunStatus     string
-	RunConclusion string
-	Steps         []Step
+	RunID      int64
+	RunAttempt int
+	RunURL     string
+	Steps      []Step
 
 	Outcome   string // verified | refused | apply_failed | deploy_failed | unverifiable | revert_failed | not_run
 	FailPhase string // the run phase a failed run died in, when known
@@ -134,7 +133,7 @@ type Progress struct {
 	DeployDone, DeployTotal int // the app repo's runs on the merge, from the deploy state
 
 	Source    string // comment | label | run | manifest | command | deploy
-	PollErr   string // the last poll's failure, shown in the card
+	PollErr   string // the last poll's failure and what happens next, shown in the card
 	UpdatedAt time.Time
 }
 
@@ -164,9 +163,32 @@ type track struct {
 	infraOff bool // the manifest repo's runs are unreadable this session
 	item     *workflow.ManifestItem
 	pollErr  string
+	notTold  bool // this session posted the command but the dispatch to the manifest repo failed
 
 	cur        Progress
 	shownPhase string // the phase the row last drew: a change starts its effects
+	sawLive    bool   // in flight at some point this session: its outcome is news
+}
+
+// set swaps in a fresh derive. A release seen in flight this session
+// earns an announcement when it ends; one already finished when the
+// tracker first saw it does not.
+func (t *track) set(p Progress) {
+	t.cur = p
+	if p.Phase != "" && !p.Terminal {
+		t.sawLive = true
+	}
+}
+
+// show starts the row's effects when the phase moved since it was last
+// drawn; the first phase drawn starts none.
+func (t *track) show(f *fx.Fx, pr *model.PR) {
+	if t.cur.Phase != t.shownPhase {
+		if t.shownPhase != "" {
+			notePhaseChange(f, pr, t.shownPhase, t.cur.Phase)
+		}
+		t.shownPhase = t.cur.Phase
+	}
 }
 
 // pollPatch is what one poll cycle learned about one release.
@@ -204,13 +226,15 @@ func (w *Workflow) trackFor(pr *model.PR, mk bool, now time.Time) *track {
 }
 
 // notePosted records that this session posted the release-now command
-// on the PR just now: the release is in flight from here.
-func (w *Workflow) notePosted(pr *model.PR, now time.Time) {
+// on the PR just now: the release is in flight from here. told is false
+// when the dispatch to the manifest repo failed, so the card says
+// nothing will pick it up on its own.
+func (w *Workflow) notePosted(pr *model.PR, now time.Time, told bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	t := w.trackFor(pr, true, now)
-	t.nowPostedAt = now
-	t.cur = w.derive(pr, t, now)
+	t.nowPostedAt, t.notTold = now, !told
+	t.set(w.derive(pr, t, now))
 }
 
 // ---- refresh goroutine ----
@@ -228,24 +252,24 @@ func (w *Workflow) noteTracks(ctx context.Context, gh ghapi.Client, st *State, n
 		cand := w.candidate(pr, now)
 		w.mu.Lock()
 		t := w.trackFor(pr, cand, now)
+		var stale, inRun bool
+		if t != nil {
+			stale = t.commentsAt.IsZero() || pr.UpdatedAt.After(t.commentsAt)
+			inRun = t.run != nil && !t.runDone
+		}
 		w.mu.Unlock()
 		if t == nil {
 			continue
 		}
 		keep[pr.Ident()] = true
-		w.mu.Lock()
-		stale := t.commentsAt.IsZero() || pr.UpdatedAt.After(t.commentsAt)
-		inRun := t.run != nil && !t.runDone
-		w.mu.Unlock()
 		// a run in progress owns the story; the comment lands at its end
 		if stale && !inRun {
 			cs, err := gh.PRComments(ctx, pr.Repo, pr.Number)
 			if err != nil {
+				warns = append(warns, fmt.Sprintf("%s comments: %s", where(pr), err))
 				if ghapi.IsRateLimit(err) {
-					warns = append(warns, fmt.Sprintf("%s comments: %s", where(pr), err))
 					return warns
 				}
-				warns = append(warns, fmt.Sprintf("%s comments: %s", where(pr), err))
 			} else {
 				w.mu.Lock()
 				t.comments, t.commentsAt = cs, pr.UpdatedAt
@@ -253,7 +277,7 @@ func (w *Workflow) noteTracks(ctx context.Context, gh ghapi.Client, st *State, n
 			}
 		}
 		w.mu.Lock()
-		t.cur = w.derive(pr, t, now) // Phase "" when nothing is in flight: the record only remembers the comments read
+		t.set(w.derive(pr, t, now)) // Phase "" when nothing is in flight: the record only remembers the comments read
 		w.mu.Unlock()
 	}
 	w.mu.Lock()
@@ -340,7 +364,7 @@ func liveProgress(p Progress, now time.Time) bool {
 // release with no run in progress. It reads a snapshot of the records
 // and returns new values; nothing it holds is written here.
 func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
-	now := clock.Now()
+	now := clock.Now() // no app on this goroutine; app.Now reads the same clock
 	type job struct {
 		id model.Ident
 		t  track // a copy
@@ -357,15 +381,12 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 		return nil, nil
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].id.String() < jobs[j].id.String() })
+	// every live release gets a patch, if only to clear the last cycle's error
 	patches := map[model.Ident]*pollPatch{}
-	patch := func(id model.Ident) *pollPatch {
-		p, ok := patches[id]
-		if !ok {
-			p = &pollPatch{}
-			patches[id] = p
-		}
-		return p
+	for _, j := range jobs {
+		patches[j.id] = &pollPatch{}
 	}
+	patch := func(id model.Ident) *pollPatch { return patches[id] }
 	// (a) the runs listing, once, when someone needs a run
 	w.mu.Lock()
 	target := w.manifestTarget
@@ -397,7 +418,7 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 					for _, k := range jobs {
 						p := patch(k.id)
 						p.err = "runs: " + err.Error()
-						if isPermission(err) {
+						if ghapi.IsPermission(err) {
 							p.infraOff = true
 						}
 					}
@@ -413,10 +434,10 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 	// (b) the jobs of each run in progress (the fresh one included)
 	for _, j := range jobs {
 		run := j.t.run
-		if p := patches[j.id]; p != nil && p.run != nil {
+		if p := patches[j.id]; p.run != nil {
 			run = p.run
 		}
-		if run == nil || j.t.infraOff || (j.t.runDone && (patches[j.id] == nil || patches[j.id].run == nil)) {
+		if run == nil || j.t.infraOff || (j.t.runDone && patches[j.id].run == nil) {
 			continue
 		}
 		js, err := gh.RunJobs(ctx, target, run.ID)
@@ -434,7 +455,7 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 	// (c) comments while no run is in progress: the outcome lands there
 	for _, j := range jobs {
 		run := j.t.run
-		if p := patches[j.id]; p != nil && p.run != nil {
+		if p := patches[j.id]; p.run != nil {
 			run = p.run
 		}
 		inProgress := run != nil && run.Status != "completed" && !j.t.runDone
@@ -451,17 +472,7 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 		}
 		patch(j.id).comments = cs
 	}
-	if len(patches) == 0 {
-		return nil, nil
-	}
 	return patches, nil
-}
-
-// isPermission reports a refusal that will not change until the token
-// does: the manifest repo's half is then off for the session.
-func isPermission(err error) bool {
-	e, ok := ghapi.AsError(err)
-	return ok && (e.Status == 401 || e.Status == 403 || e.Status == 404)
 }
 
 // matchRun is the newest run whose title names the release, created at
@@ -579,13 +590,10 @@ func (w *Workflow) ApplyPoll(app workflow.App, patch any) {
 			pr = st.Find(id)
 		}
 		if pr == nil {
-			pr = &model.PR{Repo: t.repo, Number: t.number}
+			continue // not applied yet: the next AfterApply derives it from the real PR
 		}
-		t.cur = w.derive(pr, t, now)
-		if t.cur.Phase != t.shownPhase {
-			notePhaseChange(app.Fx(), pr, t.shownPhase, t.cur.Phase)
-			t.shownPhase = t.cur.Phase
-		}
+		t.set(w.derive(pr, t, now))
+		t.show(app.Fx(), pr)
 		changed = append(changed, pr)
 	}
 	w.mu.Unlock()
@@ -625,15 +633,17 @@ func (w *Workflow) noteInfraOff(app workflow.App) {
 
 // ---- announcing ----
 
-// announce says once per (release, terminal phase) how it ended.
+// announce says how a release ended, once per flight seen this session:
+// a re-dispatch that ends the same way is announced again, and an
+// outcome that predates the session is not news.
 func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 	w.mu.Lock()
 	t, ok := w.progress[pr.Ident()]
-	if !ok || !t.cur.Terminal || w.seenOutcome[pr.Ident()] == t.cur.Phase {
+	if !ok || !t.cur.Terminal || !t.sawLive {
 		w.mu.Unlock()
 		return
 	}
-	w.seenOutcome[pr.Ident()] = t.cur.Phase
+	t.sawLive = false
 	p := t.cur
 	w.mu.Unlock()
 	wh := where(pr)
@@ -699,13 +709,14 @@ var (
 	approverRE    = regexp.MustCompile(`(?m)^Approver: @?(\S+)`)
 )
 
-// outcomeOf reads the outcome comment: the terminal phase, the outcome
-// id, the detail, the merge sha, the run url, the approver.
+// outcome is what an outcome comment says.
 type outcome struct {
 	phase, id, detail, sha, url, approver string
 	at                                    time.Time
 }
 
+// outcomeOf reads the outcome comment: the terminal phase, the outcome
+// id, the detail, the merge sha, the run url, the approver.
 func outcomeOf(c model.Comment) (outcome, bool) {
 	m := outcomeHeadRE.FindStringSubmatch(c.Body)
 	if m == nil {
@@ -739,9 +750,8 @@ func outcomeOf(c model.Comment) (outcome, bool) {
 	return o, true
 }
 
-// refusedRE is the dispatcher's refusal of the command.
-func (w *Workflow) refusedRE() *regexp.Regexp {
-	cmd := w.cfg.ReleaseNowCommand
+// refusedREFor is the dispatcher's refusal of the command.
+func refusedREFor(cmd string) *regexp.Regexp {
 	if cmd == "" {
 		cmd = "/release-now"
 	}
@@ -749,15 +759,24 @@ func (w *Workflow) refusedRE() *regexp.Regexp {
 }
 
 // derive turns everything known about a release into its progress.
-// The newest signal wins: an outcome comment, unless a run started after
-// it (a re-dispatch); the run, by its steps; the labels; the manifest
-// item; the command. w.mu is held by the caller.
+// The newest signal wins: an outcome comment, unless a command or a run
+// came after it (a re-dispatch); the run, by its steps; the labels; the
+// manifest item; the command. A finished release's UpdatedAt is when it
+// finished, so its clocks stop. w.mu is held by the caller.
 func (w *Workflow) derive(pr *model.PR, t *track, now time.Time) Progress {
+	p := w.deriveAt(pr, t, now)
+	if p.Terminal && !p.Since.IsZero() {
+		p.UpdatedAt = p.Since
+	}
+	return p
+}
+
+func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 	p := Progress{UpdatedAt: now}
 	var cmdAt, refusedAt time.Time
 	var refusedWhy string
 	var out *outcome
-	refRE := w.refusedRE()
+	refRE := w.refusedRE
 	for _, c := range t.comments {
 		if o, ok := outcomeOf(c); ok && (out == nil || o.at.After(out.at)) {
 			oc := o
@@ -772,6 +791,11 @@ func (w *Workflow) derive(pr *model.PR, t *track, now time.Time) Progress {
 	}
 	if !t.nowPostedAt.IsZero() && t.nowPostedAt.After(cmdAt) {
 		cmdAt = t.nowPostedAt
+	}
+	// a command posted after the outcome asks for another flight: the old
+	// outcome is history
+	if out != nil && cmdAt.After(out.at) {
+		out = nil
 	}
 	// when the release was sent on its way
 	if !cmdAt.IsZero() {
@@ -794,7 +818,6 @@ func (w *Workflow) derive(pr *model.PR, t *track, now time.Time) Progress {
 	}
 	if run != nil {
 		p.RunID, p.RunAttempt, p.RunURL = run.ID, run.RunAttempt, run.HTMLURL
-		p.RunStatus, p.RunConclusion = run.Status, run.Conclusion
 		if t.job != nil {
 			p.RunAttempt = t.job.RunAttempt
 			for _, s := range t.job.Steps {
@@ -811,7 +834,12 @@ func (w *Workflow) derive(pr *model.PR, t *track, now time.Time) Progress {
 			}
 		}
 	}
-	p.PollErr = t.pollErr
+	if t.pollErr != "" {
+		p.PollErr = t.pollErr + " — retrying"
+		if t.infraOff {
+			p.PollErr = t.pollErr + " — following the PR's labels and comments only"
+		}
+	}
 
 	runNewer := run != nil && (out == nil || run.CreatedAt.After(out.at))
 	switch {
@@ -828,7 +856,6 @@ func (w *Workflow) derive(pr *model.PR, t *track, now time.Time) Progress {
 		if p.Started.IsZero() {
 			p.Started = out.at
 		}
-		p.UpdatedAt = out.at
 		return p
 	case run != nil:
 		w.fromRun(&p, run, t.job)
@@ -898,6 +925,9 @@ func (w *Workflow) derive(pr *model.PR, t *track, now time.Time) Progress {
 	}
 	if !cmdAt.IsZero() {
 		p.Phase, p.Source, p.Since = PhaseDispatched, "command", cmdAt
+		if t.notTold && cmdAt.Equal(t.nowPostedAt) {
+			p.Detail = "the manifest repo was not told — M merges it by hand"
+		}
 		return w.timeout(p, now)
 	}
 	return Progress{} // nothing in flight
@@ -943,13 +973,15 @@ func (w *Workflow) fromRun(p *Progress, run *model.WorkflowRun, job *model.Workf
 		}
 	}
 	if cur == nil {
-		p.Phase, p.Detail, p.Since = PhaseSetup, "run "+orWord(run.Status, "queued"), run.CreatedAt
+		p.Phase, p.Detail, p.Since = PhaseSetup, "run "+statusWords(run.Status, "queued"), run.CreatedAt
 		return
 	}
 	p.Phase, p.Detail, p.Since = cur.Phase, cur.Name, cur.StartedAt
 }
 
-func orWord(s, def string) string {
+// statusWords is an API status in words (in_progress → in progress), or
+// def when empty.
+func statusWords(s, def string) string {
 	if s == "" {
 		return def
 	}
@@ -990,6 +1022,8 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 			p.Started = p.SlotAt
 		}
 		p.Since = p.SlotAt
+	case strings.HasPrefix(ls, "run cancelled"):
+		p.Phase, p.Terminal = PhaseCancelled, true
 	case strings.HasPrefix(ls, "run "):
 		p.Phase, p.Terminal = PhaseFailed, true // "run <conclusion> — …"
 	case strings.HasPrefix(ls, "waiting"):
@@ -1012,11 +1046,14 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 	return p.Phase, true
 }
 
-// timeout turns a release that has been in flight too long into lost.
+// timeout turns a release that has been in flight too long into lost,
+// as of the moment the timeout ran out.
 func (w *Workflow) timeout(p Progress, now time.Time) Progress {
-	if !p.Started.IsZero() && now.Sub(p.Started) > w.progressTimeout() {
+	limit := w.progressTimeout()
+	if !p.Started.IsZero() && now.Sub(p.Started) > limit {
 		p.Phase, p.Terminal = PhaseLost, true
-		p.Detail = "no outcome after " + deploys.FmtSecs(now.Sub(p.Started))
+		p.Detail = "no outcome after " + deploys.FmtSecs(limit)
+		p.Since = p.Started.Add(limit)
 	}
 	return p
 }
@@ -1043,11 +1080,8 @@ func (w *Workflow) noteItems(app workflow.App, st *State) {
 				t.item = &cp
 			}
 		}
-		t.cur = w.derive(pr, t, now)
-		if t.cur.Phase != t.shownPhase {
-			notePhaseChange(app.Fx(), pr, t.shownPhase, t.cur.Phase)
-			t.shownPhase = t.cur.Phase
-		}
+		t.set(w.derive(pr, t, now))
+		t.show(app.Fx(), pr)
 	}
 }
 

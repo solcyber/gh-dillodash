@@ -505,7 +505,7 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 		out = append(out, scenes.CardLines([]text.Seg{text.S("  run  ", "faint"), text.S(p.RunURL, "md.link")}, width, inner)...)
 	}
 	if p.PollErr != "" {
-		out = append(out, scenes.CardLines([]text.Seg{text.S("  last poll failed: "+p.PollErr+" — retrying", "faint")}, width, inner)...)
+		out = append(out, scenes.CardLines([]text.Seg{text.S("  last poll failed: "+p.PollErr, "faint")}, width, inner)...)
 	}
 	return out
 }

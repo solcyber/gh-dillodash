@@ -229,12 +229,13 @@ type seenKey struct {
 // Workflow is the release workflow.
 type Workflow struct {
 	workflow.Base
-	cfg    *config.ReleasePRConfig
-	win    *config.MaintenanceWindowConfig // nil: no window, M merges whenever GitHub allows
-	window workflow.Workflow               // the window workflow when enabled
-	org    string
-	nowRE  *regexp.Regexp
-	deploy deploys.Cache
+	cfg       *config.ReleasePRConfig
+	win       *config.MaintenanceWindowConfig // nil: no window, M merges whenever GitHub allows
+	window    workflow.Workflow               // the window workflow when enabled
+	org       string
+	nowRE     *regexp.Regexp
+	refusedRE *regexp.Regexp // the dispatcher's refusal of the command
+	deploy    deploys.Cache
 
 	// worker goroutine only
 	repoCache  []model.Repo
@@ -245,10 +246,9 @@ type Workflow struct {
 	mu   sync.Mutex
 	cur  *State           // the last applied state (UI goroutine reads)
 	seen map[seenKey]bool // deploy notices already given
-	// the releases in flight (progress.go), the outcomes announced, and
-	// whether the manifest repo's unreadable Actions were mentioned
+	// the releases in flight (progress.go), and whether the manifest
+	// repo's unreadable Actions were mentioned
 	progress       map[model.Ident]*track
-	seenOutcome    map[model.Ident]string
 	infraOffSaid   bool
 	manifestTarget model.Repo // where the apply runs are, as AfterApply last resolved it
 }
@@ -269,13 +269,13 @@ func init() {
 func New(ctx *workflow.Context) *Workflow {
 	cfg := ctx.Config.ReleasePR
 	w := &Workflow{
-		cfg:         cfg,
-		org:         cfg.Org,
-		last:        map[model.Repo]lastGood{},
-		stageCache:  map[model.Repo]stageCached{},
-		seen:        map[seenKey]bool{},
-		progress:    map[model.Ident]*track{},
-		seenOutcome: map[model.Ident]string{},
+		cfg:        cfg,
+		org:        cfg.Org,
+		last:       map[model.Repo]lastGood{},
+		stageCache: map[model.Repo]stageCached{},
+		seen:       map[seenKey]bool{},
+		progress:   map[model.Ident]*track{},
+		refusedRE:  refusedREFor(cfg.ReleaseNowCommand),
 	}
 	if w.org == "" {
 		if len(ctx.Repos) > 0 {
@@ -545,7 +545,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 			w.seen[key] = true
 			w.mu.Unlock()
 			if !seen {
-				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval - press D on its row", pr.Repo.Name, pr.Number, wt.EnvName))
+				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval — press D on its row", pr.Repo.Name, pr.Number, wt.EnvName))
 			}
 		}
 	}

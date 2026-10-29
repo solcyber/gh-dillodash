@@ -144,7 +144,7 @@ func (f *CIFallback) Lookup(ctx context.Context, now time.Time, pr *model.PR, fe
 		if IsRateLimit(err) {
 			return model.CICluster{}, "", err
 		}
-		if isPermission(err) {
+		if IsPermission(err) {
 			// the token cannot read Actions here: don't hammer it every
 			// refresh; off until Reset (the manual refresh)
 			why := fmt.Sprintf("CI via Actions API failed on %s: %s — token needs Actions: read", pr.Repo.Name, err)
@@ -230,10 +230,10 @@ func (f *CIFallback) Prune(live map[string]bool) {
 	}
 }
 
-// isPermission reports whether err is GitHub refusing the request for
+// IsPermission reports whether err is GitHub refusing the request for
 // this token (401, 403 or 404, which is what a private repo the token
 // cannot see answers) rather than failing to answer it.
-func isPermission(err error) bool {
+func IsPermission(err error) bool {
 	e, ok := AsError(err)
 	if !ok {
 		return false

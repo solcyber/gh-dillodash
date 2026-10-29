@@ -113,7 +113,7 @@ Without the window workflow, an approving review is just an approval, and
   approval carries `deploy_approval_comment`.
 - While a deploy waits or runs dillodash refreshes every
   `deploy_refresh_secs` and says once per environment when one starts
-  waiting for you (`web-portal#143: prod now waits for your approval -
+  waiting for you (`web-portal#143: prod now waits for your approval —
   press D on its row`). Approve `stg`, wait for the message, press `D`
   again for `prod`.
 
