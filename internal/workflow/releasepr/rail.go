@@ -183,7 +183,7 @@ func joinCells(cells []text.Seg) []text.Seg {
 // progressChipSegs is the kind chip of a release in flight: the caps, the
 // rail, a spinner or a state glyph, the phase and its clock. pos -1
 // measures: the clock is its widest, so the column holds still as it
-// grows. compact drops the rail, for a narrow list.
+// grows. compact drops the rail and the clock, for a narrow list.
 func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, pos int, compact bool) []text.Seg {
 	now := app.Now()
 	style := progressStyle(p)
@@ -194,11 +194,14 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 		el = widestClock
 	}
 	segs := []text.Seg{text.S(glyphs.G("capl"), "cap:"+style)}
-	if !compact {
+	label := w.progressChipText(p, el)
+	if compact {
+		label = strings.TrimRight(strings.TrimSuffix(strings.TrimSpace(w.progressChipText(p, "")), "·"), " ")
+	} else {
 		segs = append(segs, railSegs(p, now, app.Fx(), ident, railCells, live)...)
 		segs = append(segs, text.S(" ", style))
 	}
-	segs = append(segs, text.S(w.progressChipText(p, el), style))
+	segs = append(segs, text.S(label, style))
 	if live && fx.Ambient && fx.Motion == "full" {
 		switch p.Phase {
 		case PhaseDispatched, PhaseWaitingSlot:

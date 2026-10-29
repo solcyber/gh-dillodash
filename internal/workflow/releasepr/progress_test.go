@@ -589,8 +589,8 @@ func TestProgressDrivesTheRow(t *testing.T) {
 	if got := chip[len(chip)-1].Style; got != "cap:chip.queued" {
 		t.Errorf("style %q", got)
 	}
-	if got := text.SegsText(w.kindChip(app, listed, 0, true)); strings.Contains(got, glyphs.G("trough")) || !strings.Contains(got, "dispatched 1m") {
-		t.Errorf("the compact chip is the phase without the rail: %q", got)
+	if got := text.SegsText(w.kindChip(app, listed, 0, true)); strings.Contains(got, glyphs.G("trough")) || !strings.Contains(got, "dispatched") || strings.Contains(got, "1m") {
+		t.Errorf("the compact chip is the phase without the rail or the clock: %q", got)
 	}
 	row := workflow.Row{Kind: RowRelease, Item: listed}
 	if !w.RowKinds()[RowRelease].Live(app, row) {
