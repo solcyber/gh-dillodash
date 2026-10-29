@@ -169,6 +169,9 @@ func TestProgressCardTimeline(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, card)
 		}
 	}
+	if strings.Count(card, "skipped") != 1 {
+		t.Errorf("only the approving phase is skipped; queued phases are pending:\n%s", card)
+	}
 	if strings.Count(card, "setup") != 1 {
 		t.Errorf("the setup steps fold into one row:\n%s", card)
 	}

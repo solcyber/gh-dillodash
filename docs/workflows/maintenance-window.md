@@ -23,6 +23,8 @@ time on screen is formatted in the configured zone with its abbreviation
 
 ## What you see
 
+![A PR queued for the maintenance window, opened: its plan card, the night it waits for](../docs/shots/window-card.png)
+
 - **The section** `queued for the maintenance window` sits below the pull
   requests. It is grouped by the night each item will run in, the next
   window first. Each row shows the status (`queued`, `scheduled 23:04 EDT`

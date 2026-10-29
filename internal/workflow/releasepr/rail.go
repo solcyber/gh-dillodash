@@ -252,6 +252,7 @@ type phaseRow struct {
 	phase    string
 	state    string // done | running | pending | failed | skipped
 	elapsed  time.Duration
+	timed    bool // a step gave the clock (an inferred phase has none)
 	tail     []text.Seg
 	stepName string
 }
@@ -268,15 +269,17 @@ func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phase
 				continue
 			}
 			seen = true
+			r.timed = true
+			if s.Conclusion != "skipped" {
+				allSkipped = false
+			}
 			switch {
 			case s.Status == "in_progress":
 				r.state, r.stepName = "running", s.Name
 				r.elapsed += now.Sub(s.StartedAt)
-				allSkipped = false
 			case s.Status == "completed" && (s.Conclusion == "failure" || s.Conclusion == "timed_out"):
 				r.state = "failed"
 				r.elapsed += s.CompletedAt.Sub(s.StartedAt)
-				allSkipped = false
 			case s.Status == "completed" && s.Conclusion == "skipped":
 				// a step not needed this time
 			case s.Status == "completed":
@@ -286,7 +289,6 @@ func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phase
 				if !s.CompletedAt.IsZero() {
 					r.elapsed += s.CompletedAt.Sub(s.StartedAt)
 				}
-				allSkipped = false
 			}
 		}
 		if seen && allSkipped {
@@ -296,7 +298,7 @@ func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phase
 			r.state = "done" // a phase the job ran without a named step
 		}
 		if !seen && p.Phase == ph && !p.Terminal {
-			r.state, r.elapsed = "running", p.Elapsed(now)
+			r.state, r.elapsed, r.timed = "running", p.Elapsed(now), true
 		}
 		if p.Phase == PhaseReleased && r.state == "pending" {
 			r.state = "done"
@@ -429,7 +431,7 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 		if live && fx.Ambient && fx.Motion == "full" {
 			cstyle = fx.Ramp("hdr.logo.", 3, fx.Tri(fx.Wave(3.0, 0)))
 		}
-		if gap := inner - text.SegsWidth(head) - text.Width(clock) - 1; gap > 1 {
+		if gap := inner - 4 - text.SegsWidth(head) - text.Width(clock); gap > 1 {
 			head = append(head, text.S(strings.Repeat(" ", gap), "text"))
 		} else {
 			head = append(head, text.S("  ", "text"))
@@ -469,7 +471,7 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 			name = "approving"
 		}
 		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(name, 12), map[bool]string{true: "text", false: "faint"}[r.state != "pending"])}
-		if r.state != "pending" && r.state != "skipped" {
+		if r.timed && r.state != "pending" && r.state != "skipped" {
 			line = append(line, text.S(text.Pad(fmtClock(r.elapsed), 6), "muted"))
 		} else {
 			line = append(line, text.S(strings.Repeat(" ", 6), "text"))

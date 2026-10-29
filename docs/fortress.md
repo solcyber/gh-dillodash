@@ -1,5 +1,7 @@
 # Fortress mode (`d`)
 
+![Fortress mode: every repo as a lane of branches and pull requests, the oldest work furthest out](../docs/shots/fortress.png)
+
 `d` in the list draws everything open as a Dwarf Fortress map over
 **Manhattan** or **Chicago** (a coin flip on each `d`; `c` swaps). It is a
 joke with a fixed encoding, so you can read it:

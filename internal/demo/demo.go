@@ -232,7 +232,7 @@ func Client() *fake.Client {
 	flight.Opinions.Nodes = []model.Review{{Author: actor("alice"), State: "APPROVED"}}
 	mergedAt := at(6 * time.Minute)
 	flight.MergedAt = &mergedAt
-	flight.MergeCommit = &model.MergeCommit{Oid: fmt.Sprintf("%040x", 90*104729)}
+	flight.MergeCommit = &model.MergeCommit{Oid: hexID(90)[:40]}
 	flight.Commits = model.Commits{}
 	fd := *flight
 	fd.Body = body

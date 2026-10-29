@@ -1,9 +1,12 @@
-// Command screenshot renders docs/screenshot.png: the dashboard on the
-// demo fixture, drawn offline with the embedded Nerd Font and the theme's
-// exact colors, so the image is the terminal pixel for pixel without a
-// terminal. The list view sits on top, a pull request's detail below.
+// Command screenshot renders the README's picture and the docs' gallery:
+// the dashboard on the demo fixture, drawn offline with the embedded Nerd
+// Font and the theme's exact colors, so every image is the terminal pixel
+// for pixel without a terminal. The hero (docs/screenshot.png) is the
+// list over a pull request's detail; the gallery (docs/shots/<name>.png)
+// is one picture per shot in shots.go.
 //
-//	go run ./cmd/screenshot -out docs/screenshot.png
+//	go run ./cmd/screenshot              # everything
+//	go run ./cmd/screenshot -only release-card,help
 package main
 
 import (
@@ -15,6 +18,7 @@ import (
 	"image/draw"
 	"image/png"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -40,42 +44,88 @@ import (
 )
 
 func main() {
-	out := flag.String("out", "docs/screenshot.png", "where to write the PNG")
-	cols := flag.Int("cols", 128, "terminal columns")
-	rows := flag.Int("rows", 24, "terminal rows per frame")
+	out := flag.String("out", "docs/screenshot.png", "where to write the hero PNG (the list over a pull request's detail)")
+	outDir := flag.String("out-dir", "docs/shots", "where the gallery's PNGs go, one per shot")
+	only := flag.String("only", "", "render only these shots (comma-separated names); \"hero\" is the README picture")
 	size := flag.Float64("size", 26, "font size in pixels")
 	flag.Parse()
+	want := map[string]bool{}
+	for _, n := range strings.Split(*only, ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			want[n] = true
+		}
+	}
+	pick := func(name string) bool { return len(want) == 0 || want[name] }
+	regular, bold := faces(*size)
+	if pick("hero") {
+		setGlyphs("nerd")
+		frames, err := render(shot{Name: "hero"}, [][]string{
+			{"j"},                    // the list, cursor on the second row
+			{"j", "j", "j", "enter"}, // a pull request's detail
+		})
+		if err != nil {
+			die(err)
+		}
+		write(*out, frames, 128, 24, regular, bold)
+	}
+	if err := os.MkdirAll(*outDir, 0o755); err != nil {
+		die(err)
+	}
+	for _, s := range shots {
+		if !pick(s.Name) {
+			continue
+		}
+		setGlyphs(s.glyphSet())
+		frames, err := render(s, [][]string{s.Steps})
+		if err != nil {
+			die(fmt.Errorf("%s: %w", s.Name, err))
+		}
+		cols, rows := s.size()
+		write(filepath.Join(*outDir, s.Name+".png"), frames, cols, rows, regular, bold)
+	}
+}
 
-	glyphs.Use(glyphs.Nerd)
-	markdown.Glyphs = markdown.NerdGlyphs
+// setGlyphs picks the glyph set and the theme for a shot.
+func setGlyphs(set string) {
+	switch set {
+	case "ascii":
+		glyphs.Use(glyphs.ASCII)
+		markdown.Glyphs = markdown.ASCIIGlyphs
+	case "unicode":
+		glyphs.Use(glyphs.Unicode)
+		markdown.Glyphs = markdown.ASCIIGlyphs
+	default:
+		glyphs.Use(glyphs.Nerd)
+		markdown.Glyphs = markdown.NerdGlyphs
+	}
 	theme.Setup(colorprofile.TrueColor, false)
 	fx.Motion = "off"
+}
 
+// render drives the demo fixture through the shot's scripts.
+func render(s shot, scripts [][]string) ([]*canvas.Canvas, error) {
 	cfg := demo.Config()
 	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
 	if err != nil {
-		die(err)
+		return nil, err
 	}
-	frames, err := ui.Snapshots(context.Background(), ui.Options{
+	cols, rows := s.size()
+	return ui.SnapshotsWith(context.Background(), ui.Options{
 		Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: "v1.0.0",
-	}, *cols, *rows, [][]string{
-		{"j"},                    // the list, cursor on the second row
-		{"j", "j", "j", "enter"}, // a pull request's detail
-	})
-	if err != nil {
-		die(err)
-	}
+	}, s.Opts, cols, rows, scripts)
+}
 
-	regular, bold := faces(*size)
+// write paints the frames, stacked with a rule between them, into a PNG.
+func write(path string, frames []*canvas.Canvas, cols, rows int, regular, bold font.Face) {
 	cw, ch, ascent := metrics(regular)
 	pad := 18
 	gap := 12
-	W := *cols*cw + 2*pad
-	H := len(frames)*(*rows*ch) + (len(frames)-1)*gap + 2*pad
+	W := cols*cw + 2*pad
+	H := len(frames)*(rows*ch) + (len(frames)-1)*gap + 2*pad
 	img := image.NewRGBA(image.Rect(0, 0, W, H))
 	draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{0, 0, 0, 255}), image.Point{}, draw.Src)
 	for i, c := range frames {
-		top := pad + i*(*rows*ch+gap)
+		top := pad + i*(rows*ch+gap)
 		paint(img, c, pad, top, cw, ch, ascent, regular, bold)
 		if i > 0 { // a faint rule between the frames
 			y := top - gap/2
@@ -84,7 +134,7 @@ func main() {
 			}
 		}
 	}
-	f, err := os.Create(*out)
+	f, err := os.Create(path)
 	if err != nil {
 		die(err)
 	}
@@ -92,7 +142,7 @@ func main() {
 	if err := png.Encode(f, img); err != nil {
 		die(err)
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s (%dx%d)\n", *out, W, H)
+	fmt.Fprintf(os.Stderr, "wrote %s (%dx%d)\n", path, W, H)
 }
 
 func faces(size float64) (regular, bold font.Face) {

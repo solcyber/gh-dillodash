@@ -62,6 +62,10 @@ the day after it is enrolled, or at once after the cache file is deleted.
 
 ## `a` on a release
 
+![a on a release: queue it for tonight's window, or release NOW with a reason](../docs/shots/approve-menu.png)
+
+![The release-now prompt: the reason, its length meter, and the exact comment that will be posted](../docs/shots/release-now-prompt.png)
+
 Open it with `enter` first. `a` refuses drafts, your own PRs, merged ones
 and a PR that is not a release, then offers:
 
@@ -108,6 +112,12 @@ Without the window workflow, an approving review is just an approval, and
   again for `prod`.
 
 ## Live progress
+
+![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](../docs/shots/release-rail.png)
+
+![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](../docs/shots/release-card.png)
+
+![When a release lands: the rocket, the fireworks and RELEASED! across the screen](../docs/shots/release-launch.png)
 
 From the moment a release is sent on its way, dillodash follows it to its
 outcome and shows where it stands, in near real time, without waiting for

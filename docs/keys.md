@@ -55,3 +55,43 @@
 
 Esc never quits the list: Alt+key and some terminals' Ctrl+arrow sequences
 begin with an escape, so a stray one must never quit.
+
+## The screens
+
+Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
+
+**The list**
+
+![The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases; the night's queue; the issues](shots/list.png)
+
+**`/` filters as you type**
+
+![The filter, live as you type: the rows narrow to the words](shots/filter.png)
+
+**`:` goes to a number**
+
+![Go to a number: #N, or repo#N when the repos share numbers](shots/goto.png)
+
+**A pull request's detail**
+
+![A pull request's detail: the header, the cards, the description, the comments and reviews](shots/pr-detail.png)
+
+**An issue's detail**
+
+![An issue's detail: labels, assignees, the body and the comments](shots/issue-detail.png)
+
+**`f`: the changed files**
+
+![The changed files of a pull request, with their status and diffstat](shots/pr-files.png)
+
+**enter on a file: its diff**
+
+![One file's diff in-app, hunks colored](shots/pr-diff.png)
+
+**`?`: the help overlay**
+
+![The help overlay: every key of the current view by group, the workflows' keys, and the legend of chips](shots/help.png)
+
+**`d`: fortress mode**
+
+![Fortress mode: every repo as a lane of branches and pull requests](shots/fortress.png)
