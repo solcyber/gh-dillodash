@@ -54,14 +54,15 @@ run-name: deploy ${{ inputs.service }} ${{ inputs.version }} to ${{ inputs.envir
 
 ## Runs that belong to a listed PR
 
-A run whose head commit is the head or the merge commit of a PR the
-dashboard already lists is left out: a review PR's, or a merged release's
-in the `release_pr` section. Those show under their PR, and `D` on that PR
+A run whose head commit is the merge commit of a merged PR the dashboard
+already lists is left out: a merged review PR's, or a merged release's in
+the `release_pr` section. Those show under their PR, and `D` on that PR
 approves them through its merge commit, so a release's deploy is never
 listed twice. The review PRs' runs are dropped at refresh (their
 environments are not even read); the releases are matched when the list is
-drawn. Note that this also leaves out a run waiting on an open PR's head,
-which `D` on that PR does not approve (it approves merged PRs only).
+drawn. A run waiting on an open PR's head is listed: `D` on an open PR
+does not approve it (it approves merged PRs only), so this row is where it
+can be.
 
 ## `D`
 
@@ -71,6 +72,10 @@ approved one since the refresh), then:
 - when none is yours, says which environments wait and who can approve
   them, as GitHub names the reviewers: `infra deploy run 4242 waits on
   prod, but alice is not a reviewer (prod: bob, team deployers)`;
+- when you dispatched the run yourself and the environment has
+  "prevent self-review" on, says so instead (`… but alice dispatched it
+  and the environment forbids self-review (prod: alice, bob)`): another
+  reviewer approves it, or the run is re-dispatched by another account;
 - otherwise asks `approve 1 deployment of infra deploy run 4242 as
   alice?` with one line per environment of yours (and the ones that are
   not), approves each with `approval_comment`, says what it approved, and

@@ -188,20 +188,21 @@ func TestRunsOnListedPRsAreDropped(t *testing.T) {
 	for _, it := range st.Items {
 		got = append(got, it.Run.ID)
 	}
-	if !reflect.DeepEqual(got, []int64{1005, 1004, 1003}) {
+	// 1001 (an open PR's head) stays: D on an open PR does not approve it
+	if !reflect.DeepEqual(got, []int64{1005, 1004, 1003, 1001}) {
 		t.Fatalf("refresh kept %v", got)
 	}
-	if app.Fake.Reads["pending"] != 3 {
+	if app.Fake.Reads["pending"] != 4 {
 		t.Errorf("a dropped run's environments are not read: %v", app.Fake.Reads)
 	}
 	// at Sections time: the listed PRs as the app holds them now, and the
 	// releases (the release workflow's state, through CIProvider)
-	app.PRs = []*model.PR{{Repo: infra, Number: 3560, HeadRefOid: "laterlisted"}}
+	app.PRs = []*model.PR{{Repo: infra, Number: 3560, State: "MERGED", HeadRefOid: "tip", MergeCommit: &model.MergeCommit{Oid: "laterlisted"}}}
 	app.SetState(releaseName, releases{{Repo: etl, Number: 42, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "relsha"}}})
-	if got := ids(w.Sections(app, nil, "alice")); !reflect.DeepEqual(got, []int64{1004}) {
+	if got := ids(w.Sections(app, nil, "alice")); !reflect.DeepEqual(got, []int64{1004, 1001}) {
 		t.Errorf("sections kept %v", got)
 	}
-	if s := text.SegsText(w.SummarySegs(app)); !strings.Contains(s, "1 run waiting") {
+	if s := text.SegsText(w.SummarySegs(app)); !strings.Contains(s, "2 runs waiting") {
 		t.Errorf("the summary counts what is shown: %q", s)
 	}
 }
@@ -490,6 +491,14 @@ func TestDeployRefusesWhenNoneIsMine(t *testing.T) {
 	if len(app.Questions) != 0 || len(app.Fake.DeployApprovals) != 0 {
 		t.Errorf("asked %v, approved %v", app.Questions, app.Fake.DeployApprovals)
 	}
+	// alice dispatched it and is a reviewer: GitHub's self-review rule
+	row.Item.(*Item).Run.Actor = model.Actor{Login: "alice"}
+	app.Fake.Pending[4242] = []model.PendingDeployment{pending("prod", 55, false, "alice", "bob")}
+	w.DeployRow(app, row)
+	if want := "notice: infra deploy run 4242 waits on prod, but alice dispatched it and the environment forbids self-review (prod: alice, bob)"; app.Last() != want {
+		t.Errorf("status:\n got %q\nwant %q", app.Last(), want)
+	}
+	row.Item.(*Item).Run.Actor = model.Actor{}
 	// reviewers GitHub didn't name: just the environments
 	app.Fake.Pending[4242] = []model.PendingDeployment{pending("prod", 55, false)}
 	w.DeployRow(app, row)

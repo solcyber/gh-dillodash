@@ -211,7 +211,10 @@ func tokenHint(err error, perm string, repo model.Repo) string {
 	return ""
 }
 
-// listedSHAs is the head and merge commits of the PRs.
+// listedSHAs is the merge commits of the merged PRs: D on such a PR
+// approves the runs on its merge commit, so they are not listed again. A
+// run on an open PR's head stays: D on an open PR refuses (not merged),
+// and this row is then the only place the run can be approved.
 func listedSHAs(prs []*model.PR) map[string]bool {
 	out := map[string]bool{}
 	addSHAs(out, prs)
@@ -223,10 +226,7 @@ func addSHAs(set map[string]bool, prs []*model.PR) {
 		if p == nil {
 			continue
 		}
-		if p.HeadRefOid != "" {
-			set[p.HeadRefOid] = true
-		}
-		if p.MergeCommit != nil && p.MergeCommit.Oid != "" {
+		if p.State == "MERGED" && p.MergeCommit != nil && p.MergeCommit.Oid != "" {
 			set[p.MergeCommit.Oid] = true
 		}
 	}
@@ -549,6 +549,13 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	me := app.Me()
 	mine := cur.Mine()
 	if len(mine) == 0 {
+		if selfReview(it.Run, pend, me) {
+			// GitHub's prevent_self_review: the dispatcher is a reviewer but
+			// may not approve their own run; someone else has to, or the run
+			// is re-dispatched by another account.
+			app.Notice(fmt.Sprintf("%s waits on %s, but %s dispatched it and the environment forbids self-review%s", where, strings.Join(cur.Envs(), ", "), me, reviewersNote(pend)))
+			return true
+		}
 		app.Notice(fmt.Sprintf("%s waits on %s, but %s is not a reviewer%s", where, strings.Join(cur.Envs(), ", "), me, reviewersNote(pend)))
 		return true
 	}
@@ -585,6 +592,23 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	}
 	app.Refresh(true)
 	return true
+}
+
+// selfReview reports a run me dispatched that waits on an environment
+// naming me as a reviewer (so the refusal is GitHub's self-review rule,
+// not a missing reviewer).
+func selfReview(run model.WorkflowRun, pend []model.PendingDeployment, me string) bool {
+	if me == "" || !strings.EqualFold(run.Actor.Login, me) {
+		return false
+	}
+	for _, p := range pend {
+		for _, r := range p.Reviewers {
+			if strings.EqualFold(r.Reviewer.Login, me) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // reviewersNote is " (prod: bob, team deployers)": who can approve each
