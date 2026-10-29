@@ -734,6 +734,7 @@ type stubPoller struct {
 	workflow.Base
 	live    bool
 	err     error
+	panics  bool
 	polls   int
 	applied int
 }
@@ -744,6 +745,9 @@ func (p *stubPoller) Live(workflow.App) bool      { return p.live }
 func (p *stubPoller) ApplyPoll(workflow.App, any) { p.applied++ }
 func (p *stubPoller) Poll(context.Context, ghapi.Client) (any, error) {
 	p.polls++
+	if p.panics {
+		panic("nil map")
+	}
 	return "patch", p.err
 }
 
@@ -862,6 +866,52 @@ func TestPollFailureRetriesLater(t *testing.T) {
 	h.pump()
 	if h.m.nextPollAt != *now+60 || h.m.backoff.RateLimitWait(time.Now()) > 0 || h.m.errText != "" {
 		t.Errorf("next=%v (now %v) wall=%v err=%q", h.m.nextPollAt, *now, h.m.backoff.RateLimitWait(time.Now()), h.m.errText)
+	}
+	if !strings.HasPrefix(h.m.warn, "live progress: ") || !strings.Contains(h.m.warn, "Bad Gateway") {
+		t.Errorf("the failure is on the warn line: %q", h.m.warn)
+	}
+	*now += 61
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if strings.Count(h.m.warn, "Bad Gateway") != 1 {
+		t.Errorf("said once: %q", h.m.warn)
+	}
+}
+
+// TestPollPanicIsSaid: a poller that panics does not freeze the rail in
+// silence.
+func TestPollPanicIsSaid(t *testing.T) {
+	h, p, now := pollHarness(t, true)
+	p.panics = true
+	*now += 31
+	h.m.Update(tickMsg{gen: h.m.tickGen})
+	h.pump()
+	if !strings.Contains(h.m.warn, "poll failed: nil map") || h.m.nextPollAt != *now+60 {
+		t.Errorf("warn %q next %v (now %v)", h.m.warn, h.m.nextPollAt, *now)
+	}
+}
+
+// TestPollOlderThanTheRefreshIsDropped: a poll that started before a
+// refresh landed carries older news; its patch is dropped, the next poll
+// is still armed.
+func TestPollOlderThanTheRefreshIsDropped(t *testing.T) {
+	h, p, now := pollHarness(t, true)
+	h.m.mu.Lock()
+	seq := h.m.refreshSeq // a poll starts here
+	h.m.mu.Unlock()
+	h.key('r') // and a refresh lands before it
+	h.m.mu.Lock()
+	defer h.m.mu.Unlock()
+	if h.m.refreshSeq != seq+1 {
+		t.Fatalf("the refresh counts: %d -> %d", seq, h.m.refreshSeq)
+	}
+	h.m.applyPoll(&pollResult{patches: map[string]any{"poller": "patch"}, seq: seq})
+	if p.applied != 0 || h.m.polling || h.m.nextPollAt != *now+30 {
+		t.Errorf("stale patch: applied=%d polling=%v next=%v", p.applied, h.m.polling, h.m.nextPollAt)
+	}
+	h.m.applyPoll(&pollResult{patches: map[string]any{"poller": "patch"}, seq: h.m.refreshSeq})
+	if p.applied != 1 {
+		t.Errorf("a current patch lands: %d", p.applied)
 	}
 }
 

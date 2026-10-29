@@ -34,7 +34,6 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fonts"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
-	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/ui"
@@ -89,14 +88,11 @@ func main() {
 func setGlyphs(set string) {
 	switch set {
 	case "ascii":
-		glyphs.Use(glyphs.ASCII)
-		markdown.Glyphs = markdown.ASCIIGlyphs
+		ui.UseGlyphs(glyphs.ASCII)
 	case "unicode":
-		glyphs.Use(glyphs.Unicode)
-		markdown.Glyphs = markdown.ASCIIGlyphs
+		ui.UseGlyphs(glyphs.Unicode)
 	default:
-		glyphs.Use(glyphs.Nerd)
-		markdown.Glyphs = markdown.NerdGlyphs
+		ui.UseGlyphs(glyphs.Nerd)
 	}
 	theme.Setup(colorprofile.TrueColor, false)
 	fx.Motion = "off"
@@ -111,7 +107,7 @@ func render(s shot, scripts [][]string) ([]*canvas.Canvas, error) {
 	}
 	cols, rows := s.size()
 	return ui.SnapshotsWith(context.Background(), ui.Options{
-		Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: "v1.0.0",
+		Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: "dev",
 	}, s.Opts, cols, rows, scripts)
 }
 

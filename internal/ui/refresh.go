@@ -219,6 +219,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.issues = out.issues
 		m.ciClusters = out.ci
 		m.wf.ApplyAll(m, out.wfStates)
+		m.refreshSeq++
 		m.schedulePoll() // the refresh re-derived everything a poll watches
 		if out.hasFortress && m.fortress != nil {
 			m.fortress.data = out.fortress

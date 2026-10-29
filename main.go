@@ -28,7 +28,6 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
-	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/theme"
@@ -313,18 +312,7 @@ func loadConfig(f flags) (*config.Config, error) {
 
 // setupDisplay applies the glyph set, the color tier and the motion mode.
 func setupDisplay(cfg *config.Config) {
-	set := glyphs.Set(cfg.Display.Icons)
-	glyphs.Use(set)
-	switch set {
-	case glyphs.ASCII:
-		markdown.Glyphs = markdown.ASCIIGlyphs
-	case glyphs.Unicode:
-		g := markdown.NerdGlyphs
-		g.Shield, g.Window, g.Warn = glyphs.G("shield"), glyphs.G("window"), glyphs.G("warn")
-		markdown.Glyphs = g
-	default:
-		markdown.Glyphs = markdown.NerdGlyphs
-	}
+	ui.UseGlyphs(glyphs.Set(cfg.Display.Icons))
 	mono := cfg.Display.Theme == "mono" || os.Getenv("NO_COLOR") != ""
 	theme.Setup(colorprofile.Detect(os.Stdout, os.Environ()), mono)
 	fx.Motion = cfg.Display.Motion
