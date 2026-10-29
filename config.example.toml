@@ -116,3 +116,13 @@ enabled = false
 # deploy_stuck_secs = 2700                  # flag a deploy still running after this long
 # deploy_refresh_secs = 30                  # poll a running deploy this often
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
+
+# ============================================================================
+# Workflow: waiting runs
+# Actions runs that wait on an environment approval and hang off no listed PR
+# (a hand-dispatched deploy, an ops workflow run from main); D approves them
+# ============================================================================
+[workflows.waiting_runs]
+enabled = false
+# repos = []                                # default: every [reviews] repo
+# approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
