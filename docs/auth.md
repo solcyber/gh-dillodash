@@ -48,6 +48,16 @@ Merging and approving deployments need more, on the repos where you use
 Without them GitHub answers `403 Resource not accessible by personal access
 token`, and `M`/`D` name the permission to add.
 
+`gh dillodash config check` prints the token's role in each review repo
+(`write: yes (ADMIN)`, `write: NO (READ)`), which GitHub reports with the
+list query at no extra cost, and fails when every review repo is
+read-only: a wrong `gh` account or a read-only collaborator shows up
+there instead of as a 403 on your first `a`. It cannot see further than
+the role: a fine-grained token reports no role at all (`write: not
+reported`), a token with push but without Pull requests: write still
+403s on approve, deployment approval needs Actions write, and branch
+protection or a ruleset can still refuse a merge.
+
 ## Why "Actions" and not "Checks"
 
 GitHub offers no Checks permission for fine-grained tokens (only GitHub

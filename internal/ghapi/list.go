@@ -19,7 +19,8 @@ const listWorkers = 6
 
 // listRepoNode is one alias of the list query.
 type listRepoNode struct {
-	Issues struct {
+	ViewerPermission string `json:"viewerPermission"`
+	Issues           struct {
 		TotalCount int            `json:"totalCount"`
 		Nodes      []*model.Issue `json:"nodes"`
 	} `json:"issues"`
@@ -98,7 +99,7 @@ func (c *GitHub) listChunk(ctx context.Context, repos []model.Repo) (map[model.R
 			out[r] = ListResult{Err: err}
 			continue
 		}
-		lr := ListResult{}
+		lr := ListResult{Permission: node.ViewerPermission}
 		for _, e := range errs {
 			if e.pathIs(alias, "issues") {
 				msg := e.Message

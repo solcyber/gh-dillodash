@@ -31,12 +31,27 @@ const defaultTimeout = 10 * time.Second
 type ListResult struct {
 	PRs    []*model.PR
 	Issues []*model.Issue
+	// Permission is the token's repository permission as GraphQL's
+	// viewerPermission reports it (READ, TRIAGE, WRITE, MAINTAIN,
+	// ADMIN), "" when it did not say (fine-grained tokens report the
+	// grant, not a role, and some say nothing). config check reads it.
+	Permission string
 	// Notes are warnings for the warn line: issues hidden by the token's
 	// permissions, or more open than one page shows.
 	Notes []string
 	// Err is set when the repo itself was not visible (a typo, or a
 	// fine-grained PAT still pending org approval).
 	Err error
+}
+
+// CanWrite says whether a viewerPermission role can review, comment and
+// merge: WRITE and above. TRIAGE can label and assign but not approve.
+func CanWrite(permission string) bool {
+	switch permission {
+	case "WRITE", "MAINTAIN", "ADMIN":
+		return true
+	}
+	return false
 }
 
 // MergeResult is PUT /pulls/N/merge's answer.

@@ -64,8 +64,9 @@ func BotHint(source string) string {
 }
 
 // Report prints everything after the client exists: the token and the
-// login, the source check, every repo's reach, the budget and the
-// workflows. A login listed in [bots] fails the report: the dashboard
+// login, the source check, every repo's reach and the token's role in
+// it, the budget and the workflows. Every review repo read-only fails
+// the report: the dashboard would be watch-only in a way nobody chose. A login listed in [bots] fails the report: the dashboard
 // would post reviews, comments and merges as the bot, and the audit
 // trail of who approved is only meaningful when it is the human who
 // decided.
@@ -100,6 +101,7 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		}
 	}
 	failed := false
+	listed, readOnly := 0, 0
 	for _, repo := range cfg.Reviews.Repos {
 		fmt.Fprintf(w, "repo %s:\n", repo)
 		res, err := gh.ListOpen(ctx, []model.Repo{repo})
@@ -115,6 +117,16 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 			continue
 		}
 		fmt.Fprintf(w, "  pull requests: %d open, issues: %d open\n", len(r.PRs), len(r.Issues))
+		listed++
+		switch {
+		case r.Permission == "":
+			fmt.Fprintln(w, "  write: not reported — fine-grained tokens report grants, not a role; a 403 names a missing one when it happens")
+		case ghapi.CanWrite(r.Permission):
+			fmt.Fprintf(w, "  write: yes (%s)\n", r.Permission)
+		default:
+			readOnly++
+			fmt.Fprintf(w, "  write: NO (%s) — approve, comment, merge and deployment approval will 403\n", r.Permission)
+		}
 		for _, n := range r.Notes {
 			fmt.Fprintf(w, "  note: %s\n", n)
 		}
@@ -150,7 +162,11 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 	} else {
 		on("release_pr", false, "")
 	}
-	fmt.Fprintln(w, "write permissions (reviews, comments, merges, deployments) are not probed: a 403 names the missing one when it happens")
+	if listed > 0 && readOnly == listed {
+		failed = true
+		fmt.Fprintln(w, "write: FAILED: every review repo is read-only to this token, so the dashboard could only watch — gh auth switch to an account with push, or ask for it")
+	}
+	fmt.Fprintln(w, "probed: the repository permission; not probed: fine-grained token grants (push without Pull requests: write still 403s on approve), Actions write for deployment approval, branch protection and rulesets — a 403 names the missing one when it happens")
 	if botErr != nil || failed {
 		return ErrFailed
 	}

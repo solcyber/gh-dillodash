@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `config check` prints the token's role in every review repo (`write:
+  yes (ADMIN)`, `write: NO (READ)`), read from the list query at no extra
+  cost, and fails when every review repo is read-only, so a wrong `gh`
+  account or a read-only collaborator is caught before the first `a` hits
+  a 403. The closing line now says what was probed and what was not
+  (fine-grained grants, Actions write, protection rules). (#8)
 ## [1.3.0]
 
 ### Added

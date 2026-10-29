@@ -9,10 +9,12 @@ import (
 // meter.
 const rateLimitField = "rateLimit { limit remaining resetAt }"
 
-// listRepoFragment carries the list query's fields: open issues and open
-// PRs with their head commit's check rollup.
+// listRepoFragment carries the list query's fields: the viewer's
+// repository permission (for config check), open issues and open PRs
+// with their head commit's check rollup.
 const listRepoFragment = `
 fragment ListRepo on Repository {
+  viewerPermission
   issues(states: OPEN, first: 100,
          orderBy: {field: UPDATED_AT, direction: DESC}) {
     totalCount
