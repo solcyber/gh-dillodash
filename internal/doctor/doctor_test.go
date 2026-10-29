@@ -19,7 +19,12 @@ func report(t *testing.T, user, source string, cfg *config.Config) (string, erro
 	t.Helper()
 	gh := fake.New(user)
 	gh.Source = source
-	gh.Open = map[model.Repo]ghapi.ListResult{infra: {PRs: []*model.PR{{Number: 1}}}}
+	gh.Open = map[model.Repo]ghapi.ListResult{infra: {PRs: []*model.PR{{Number: 1}}, Permission: "ADMIN"}}
+	return reportWith(t, gh, cfg)
+}
+
+func reportWith(t *testing.T, gh *fake.Client, cfg *config.Config) (string, error) {
+	t.Helper()
 	var out bytes.Buffer
 	err := Report(context.Background(), &out, cfg, gh, config.Source{}, false)
 	return out.String(), err
@@ -36,7 +41,7 @@ func TestReportHuman(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err %v\n%s", err, out)
 	}
-	for _, want := range []string{"token: from keyring", "login: alice", "repo acme/infra:", "pull requests: 1 open", "actions: readable", "workflows:"} {
+	for _, want := range []string{"token: from keyring", "login: alice", "repo acme/infra:", "pull requests: 1 open", "write: yes (ADMIN)", "actions: readable", "workflows:", "probed: the repository permission"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
@@ -95,5 +100,51 @@ func TestBotHint(t *testing.T) {
 	}
 	if h := BotHint("keyring"); !strings.Contains(h, "gh auth switch") {
 		t.Errorf("keyring: %q", h)
+	}
+}
+
+// TestReportWritePermission: the viewer's role is printed per repo; a
+// token that is read-only everywhere fails the check, read-only in one
+// repo of several only says so there, and a token that reports no role
+// (fine-grained) is neither.
+func TestReportWritePermission(t *testing.T) {
+	portal := model.Repo{Owner: "acme", Name: "web-portal"}
+	open := func(perms ...string) map[model.Repo]ghapi.ListResult {
+		out := map[model.Repo]ghapi.ListResult{infra: {Permission: perms[0]}}
+		if len(perms) > 1 {
+			out[portal] = ghapi.ListResult{Permission: perms[1]}
+		}
+		return out
+	}
+	cases := []struct {
+		name  string
+		open  map[model.Repo]ghapi.ListResult
+		repos []model.Repo
+		fails bool
+		want  []string
+	}{
+		{"read-only everywhere", open("READ"), []model.Repo{infra}, true,
+			[]string{"write: NO (READ) — approve, comment, merge and deployment approval will 403", "write: FAILED: every review repo is read-only"}},
+		{"triage cannot approve either", open("TRIAGE", "TRIAGE"), []model.Repo{infra, portal}, true, []string{"write: NO (TRIAGE)", "write: FAILED"}},
+		{"read-only in one of two", open("WRITE", "READ"), []model.Repo{infra, portal}, false, []string{"write: yes (WRITE)", "write: NO (READ)"}},
+		{"not reported", open(""), []model.Repo{infra}, false, []string{"write: not reported — fine-grained tokens report grants"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			gh := fake.New("alice")
+			gh.Open = c.open
+			out, err := reportWith(t, gh, cfgWith(c.repos...))
+			if (err != nil) != c.fails {
+				t.Fatalf("err %v, want failure %v:\n%s", err, c.fails, out)
+			}
+			for _, w := range c.want {
+				if !strings.Contains(out, w) {
+					t.Errorf("missing %q in:\n%s", w, out)
+				}
+			}
+			if !c.fails && strings.Contains(out, "write: FAILED") {
+				t.Errorf("no summary failure wanted:\n%s", out)
+			}
+		})
 	}
 }

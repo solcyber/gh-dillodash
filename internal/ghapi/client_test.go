@@ -408,7 +408,7 @@ func TestListOpenAliased(t *testing.T) {
 			return
 		}
 		io.WriteString(w, `{"data":{`+rateLimitJSON()+`,
-			"r0":{"issues":{"totalCount":1,"nodes":[{"number":3530,"title":"an issue","updatedAt":"2026-10-20T10:00:00Z","createdAt":"2026-10-19T10:00:00Z",
+			"r0":{"viewerPermission":"ADMIN","issues":{"totalCount":1,"nodes":[{"number":3530,"title":"an issue","updatedAt":"2026-10-20T10:00:00Z","createdAt":"2026-10-19T10:00:00Z",
 				"author":{"login":"infra-bot"},"labels":{"nodes":[{"name":"window-manifest"}]},"assignees":{"nodes":[{"login":"carol"}]},"comments":{"totalCount":12}}]},
 				"pullRequests":{"totalCount":2,"nodes":[`+listPR(3543, "canary")+`,`+listPR(3550, "widen the role")+`]}},
 			"r1":{"issues":null,"pullRequests":{"totalCount":150,"nodes":[`+listPR(1042, "Release 2026-10-27")+`]}},
@@ -446,7 +446,7 @@ func TestListOpenAliased(t *testing.T) {
 	}
 
 	r := out[infra]
-	if r.Err != nil || len(r.PRs) != 2 || len(r.Issues) != 1 || len(r.Notes) != 0 {
+	if r.Err != nil || len(r.PRs) != 2 || len(r.Issues) != 1 || len(r.Notes) != 0 || r.Permission != "ADMIN" {
 		t.Fatalf("infra: %+v", r)
 	}
 	if r.PRs[0].Repo != infra || r.PRs[0].Number != 3543 || r.PRs[0].Labels.Names()[0] != "window:queued" ||
@@ -462,7 +462,7 @@ func TestListOpenAliased(t *testing.T) {
 	}
 
 	r = out[portal]
-	if r.Err != nil || len(r.PRs) != 1 || len(r.Issues) != 0 {
+	if r.Err != nil || len(r.PRs) != 1 || len(r.Issues) != 0 || r.Permission != "" {
 		t.Fatalf("web-portal: %+v", r)
 	}
 	if len(r.Notes) != 2 || r.Notes[0] != "issues hidden — token needs Issues: read (Resource not accessible by personal access token)" ||
