@@ -91,10 +91,10 @@ func splash(c *canvas.Canvas, f *fx.Fx, h, w int, info SplashInfo, tier theme.Ti
 	} else if el < 0.6 {
 		p := fx.EaseOut(el / 0.6)
 		bx := int(p * float64(ax+mw/2))
-		ball := runeAt(glyphs.G("ball"), int(el*16))
+		ball := RuneAt(glyphs.G("ball"), int(el*16))
 		trail := ""
 		for i := 0; i < min(4, bx); i++ {
-			trail += runeAt(glyphs.G("spark"), 0)
+			trail += RuneAt(glyphs.G("spark"), 0)
 		}
 		c.PutSegs(y+mh-2, max(0, bx-4), []text.Seg{text.S(trail, "fx.k2"), text.S(ball, "fx.b6")}, 0, false, false)
 	} else {

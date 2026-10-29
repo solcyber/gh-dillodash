@@ -11,7 +11,9 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 	"github.com/solcyber/gh-dillodash/internal/workflow/wftest"
 )
@@ -580,11 +582,15 @@ func TestProgressChipAndStyle(t *testing.T) {
 func TestProgressDrivesTheRow(t *testing.T) {
 	w, app, pr := pollFixture(t)
 	listed := w.Current().Find(pr.Ident())
-	if got := w.kindChipText(listed, app.Now()); got != "dispatched 1m" {
+	chip := w.kindChip(app, listed, 0, false)
+	if got := text.SegsText(chip); !strings.Contains(got, "dispatched 1m") {
 		t.Errorf("chip %q", got)
 	}
-	if got := w.kindChipStyle(listed, "dispatched 1m"); got != "chip.queued" {
+	if got := chip[len(chip)-1].Style; got != "cap:chip.queued" {
 		t.Errorf("style %q", got)
+	}
+	if got := text.SegsText(w.kindChip(app, listed, 0, true)); strings.Contains(got, glyphs.G("trough")) || !strings.Contains(got, "dispatched 1m") {
+		t.Errorf("the compact chip is the phase without the rail: %q", got)
 	}
 	row := workflow.Row{Kind: RowRelease, Item: listed}
 	if !w.RowKinds()[RowRelease].Live(app, row) {

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -81,11 +82,11 @@ func railSegs(p Progress, now time.Time, f *fx.Fx, ident string, width int, live
 		return hazardSegs(p, width)
 	}
 	frac := railFrac(p, now)
-	fill, track := "fx.b5", "meter.track"
+	fill := "fx.b5"
 	if p.Phase == PhaseReleased {
 		fill = "meter.ok"
 	}
-	segs := fx.MeterSegs(frac, width, fill, track)
+	segs := fx.MeterSegs(frac, width, fill, "meter.track")
 	ambient := live && fx.Ambient && fx.Motion == "full"
 	if !ambient {
 		if p.Phase == PhaseReleased {
@@ -136,19 +137,17 @@ func sweep(segs []text.Seg, width int, t float64) []text.Seg {
 	return joinCells(cells)
 }
 
-// hazardSegs is the rail of a failed or refused release: stripes.
+// hazardSegs is the rail of a release that did not land: warning
+// stripes for a failure, a refusal or a roll-back (the chip's red), grey
+// ones for the rest.
 func hazardSegs(p Progress, width int) []text.Seg {
-	stripe := glyphs.G("hazard")
-	if stripe == "" {
-		stripe = "/\\"
-	}
 	var b strings.Builder
-	rs := []rune(stripe)
+	rs := []rune(glyphs.G("hazard"))
 	for i := 0; i < width; i++ {
 		b.WriteRune(rs[i%len(rs)])
 	}
 	style := "hazard"
-	if p.Phase == PhaseCancelled || p.Phase == PhaseNotRun || p.Phase == PhaseLost || p.Phase == PhaseRolled {
+	if p.Phase == PhaseCancelled || p.Phase == PhaseNotRun || p.Phase == PhaseLost {
 		style = "meter.track"
 	}
 	return []text.Seg{text.S(b.String(), style)}
@@ -182,23 +181,28 @@ func joinCells(cells []text.Seg) []text.Seg {
 // ---- the row chip ----
 
 // progressChipSegs is the kind chip of a release in flight: the caps, the
-// rail, a spinner or a state glyph, the phase and its clock.
-func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, pos int) []text.Seg {
+// rail, a spinner or a state glyph, the phase and its clock. pos -1
+// measures: the clock is its widest, so the column holds still as it
+// grows. compact drops the rail, for a narrow list.
+func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, pos int, compact bool) []text.Seg {
 	now := app.Now()
 	style := progressStyle(p)
 	live := liveProgress(p, now) && pos >= 0
 	ident := fmt.Sprintf("%s#%d", pr.Repo.Name, pr.Number)
-	var f *fx.Fx
-	if app != nil {
-		f = app.Fx()
+	el := deploys.FmtSecs(p.Elapsed(now))
+	if pos < 0 && text.Width(el) < len(widestClock) {
+		el = widestClock
 	}
 	segs := []text.Seg{text.S(glyphs.G("capl"), "cap:"+style)}
-	segs = append(segs, railSegs(p, now, f, ident, railCells, live)...)
-	segs = append(segs, text.S(" "+w.progressChip(p, now), style))
+	if !compact {
+		segs = append(segs, railSegs(p, now, app.Fx(), ident, railCells, live)...)
+		segs = append(segs, text.S(" ", style))
+	}
+	segs = append(segs, text.S(w.progressChipText(p, el), style))
 	if live && fx.Ambient && fx.Motion == "full" {
 		switch p.Phase {
 		case PhaseDispatched, PhaseWaitingSlot:
-			segs = append(segs, text.S(" "+runeAt(glyphs.G("ball"), int(fx.Now()*4)), style))
+			segs = append(segs, text.S(" "+scenes.RuneAt(glyphs.G("ball"), int(fx.Now()*4)), style))
 		default:
 			segs = append(segs, text.S(" "+glyphs.SpinnerFrame(), style))
 		}
@@ -207,30 +211,23 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 	return segs
 }
 
-// runeAt is the i'th rune of s, cycling; "?" when s is empty.
-func runeAt(s string, i int) string {
-	rs := []rune(s)
-	if len(rs) == 0 {
-		return "?"
-	}
-	if i < 0 {
-		i = -i
-	}
-	return string(rs[i%len(rs)])
-}
+// widestClock is the widest clock a chip is measured with (deploys.FmtSecs
+// up to 99h59m).
+const widestClock = "00h00m"
 
 // kindChip is the kind chip's segments for a release row (pos -1 for a
-// width measurement: no live glyphs).
-func (w *Workflow) kindChip(app workflow.App, pr *model.PR, pos int) []text.Seg {
+// width measurement: no live glyphs). compact drops a release in
+// flight's rail.
+func (w *Workflow) kindChip(app workflow.App, pr *model.PR, pos int, compact bool) []text.Seg {
 	if p, ok := w.progressOf(pr); ok {
-		segs := w.progressChipSegs(app, pr, p, pos)
+		segs := w.progressChipSegs(app, pr, p, pos, compact)
 		if pos < 0 {
 			// the measured width leaves room for the live glyph
 			segs = append(segs, text.S("  ", "text"))
 		}
 		return segs
 	}
-	ktext := w.kindChipText(pr, app.Now())
+	ktext := w.kindChipText(pr)
 	return scenes.Chip(ktext, w.kindChipStyle(pr, ktext))
 }
 
@@ -258,7 +255,7 @@ type phaseRow struct {
 }
 
 // timelineRows folds the steps into one row per run phase.
-func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phaseRow {
+func (w *Workflow) timelineRows(p Progress, now time.Time) []phaseRow {
 	var rows []phaseRow
 	for _, ph := range runPhases {
 		r := phaseRow{phase: ph, state: "pending"}
@@ -276,19 +273,17 @@ func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phase
 			switch {
 			case s.Status == "in_progress":
 				r.state, r.stepName = "running", s.Name
-				r.elapsed += now.Sub(s.StartedAt)
+				r.elapsed += span(s.StartedAt, now)
 			case s.Status == "completed" && (s.Conclusion == "failure" || s.Conclusion == "timed_out"):
 				r.state = "failed"
-				r.elapsed += s.CompletedAt.Sub(s.StartedAt)
+				r.elapsed += span(s.StartedAt, s.CompletedAt)
 			case s.Status == "completed" && s.Conclusion == "skipped":
 				// a step not needed this time
 			case s.Status == "completed":
 				if r.state == "pending" {
 					r.state = "done"
 				}
-				if !s.CompletedAt.IsZero() {
-					r.elapsed += s.CompletedAt.Sub(s.StartedAt)
-				}
+				r.elapsed += span(s.StartedAt, s.CompletedAt)
 			}
 		}
 		if seen && allSkipped {
@@ -302,9 +297,6 @@ func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phase
 		}
 		if p.Phase == PhaseReleased && r.state == "pending" {
 			r.state = "done"
-		}
-		if p.Terminal && p.Phase != PhaseReleased && r.state == "pending" {
-			r.state = "pending"
 		}
 		// the technical tail
 		switch ph {
@@ -340,6 +332,15 @@ func (w *Workflow) timelineRows(pr *model.PR, p Progress, now time.Time) []phase
 	return rows
 }
 
+// span is b-a, or 0 when either end is unknown (a step not started, or
+// one GitHub has not stamped yet).
+func span(a, b time.Time) time.Duration {
+	if a.IsZero() || b.IsZero() || b.Before(a) {
+		return 0
+	}
+	return b.Sub(a)
+}
+
 // settleSegs is the verify step's settle countdown: a shaded meter that
 // drains, then the alarms read.
 func settleSegs(el time.Duration) []text.Seg {
@@ -350,9 +351,6 @@ func settleSegs(el time.Duration) []text.Seg {
 	width := 12
 	frac := 1 - float64(left)/float64(settleSecs*time.Second)
 	shade := []rune(glyphs.G("shade"))
-	if len(shade) == 0 {
-		shade = []rune(":|#")
-	}
 	var b strings.Builder
 	filled := int(math.Round(frac * float64(width)))
 	for i := 0; i < width; i++ {
@@ -391,6 +389,10 @@ func stateGlyph(state string) (string, string) {
 	}
 	return glyphs.G("wait"), "ci.wait"
 }
+
+// nameCol is the card's phase-name column: the longest phase name
+// ("waiting for slot") and a gap.
+const nameCol = 17
 
 // progressCard is the mission-control block of the detail card: the
 // header with the T+ clock, the rail (Amos on it), the timeline, the
@@ -441,11 +443,8 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	out = append(out, scenes.CardLines(head, width, inner)...)
 	// Amos walks the rail (two rows above it)
 	ident := fmt.Sprintf("%s#%d", pr.Repo.Name, pr.Number)
-	railW := max(10, inner-4)
-	var f *fx.Fx
-	if app != nil {
-		f = app.Fx()
-	}
+	railW := max(1, inner-4)
+	f := app.Fx()
 	if inner >= 60 && scenes.Mascot != "none" {
 		for _, ln := range amosOnRail(p, railFrac(p, now), railW, live) {
 			out = append(out, scenes.CardLines(ln, width, inner)...)
@@ -457,20 +456,20 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	// before the run: where it stands
 	if PhaseIndex(p.Phase) < 0 && !p.Terminal {
 		g, st := stateGlyph("running")
-		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(p.Phase, 15), "text"), text.S(fmtClock(p.Elapsed(now)), "muted")}
+		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(p.Phase, nameCol), "text"), text.S(fmtClock(p.Elapsed(now)), "muted")}
 		if p.Detail != "" {
 			line = append(line, text.S("  "+p.Detail, "faint"))
 		}
 		out = append(out, scenes.CardLines(line, width, inner)...)
 	}
 	// the timeline
-	for _, r := range w.timelineRows(pr, p, now) {
+	for _, r := range w.timelineRows(p, now) {
 		g, st := stateGlyph(r.state)
-		name := r.phase
-		if r.phase == PhaseApproving {
-			name = "approving"
+		nst := "text"
+		if r.state == "pending" {
+			nst = "faint"
 		}
-		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(name, 12), map[bool]string{true: "text", false: "faint"}[r.state != "pending"])}
+		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(r.phase, nameCol), nst)}
 		if r.timed && r.state != "pending" && r.state != "skipped" {
 			line = append(line, text.S(text.Pad(fmtClock(r.elapsed), 6), "muted"))
 		} else {
@@ -535,9 +534,9 @@ func amosOnRail(p Progress, frac float64, railW int, live bool) [][]text.Seg {
 	x := 2 + int(math.Round(frac*float64(max(0, railW-aw))))
 	rows := make([][]text.Seg, 0, 3)
 	if p.Phase == PhaseReleased {
-		spark := runeAt(glyphs.G("spark"), 3+int(fx.Now())%2)
+		spark := scenes.RuneAt(glyphs.G("spark"), 3+int(fx.Now())%2)
 		if fx.Motion != "full" {
-			spark = runeAt(glyphs.G("spark"), 3)
+			spark = scenes.RuneAt(glyphs.G("spark"), 3)
 		}
 		rows = append(rows, []text.Seg{text.S(strings.Repeat(" ", x+aw-3)+spark, "fx.g3")})
 	}

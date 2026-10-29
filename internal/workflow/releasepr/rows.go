@@ -107,7 +107,6 @@ func (w *Workflow) SearchText(row workflow.Row) string {
 
 // ---- the list ----
 
-// queued reports a release the window workflow lists under its night.
 // queued reports a release queued for the window: by the conductor's
 // queued label, or, with approval_queues_for_window, by its approving
 // review (what the conductor's freeze picks up).
@@ -253,17 +252,21 @@ func maxw(items []workflow.Row, f func(workflow.Row) string, limit int) int {
 	return min(limit, n)
 }
 
+// titleRoom is what the columns leave the title.
+func titleRoom(cols workflow.Layout, w, numW int) int {
+	n := 4 + numW + 1 // gutter 2 + icon 2 + "#num "
+	for name, v := range cols {
+		if name != "num" {
+			n += v + 1 // the column and its gap
+		}
+	}
+	return w - n
+}
+
 // fit drops columns in order until the title keeps 24 cells.
 func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout {
-	fixed := func() int { // gutter 2 + icon 2 + "#num " + each column + its gap
-		n := 4 + numW + 1
-		for _, v := range cols {
-			n += v + 1
-		}
-		return n
-	}
 	for _, name := range dropOrder {
-		if w-fixed() >= 24 {
+		if titleRoom(cols, w, numW) >= 24 {
 			break
 		}
 		delete(cols, name)
@@ -290,14 +293,14 @@ func repoWidth(items []workflow.Row) int {
 }
 
 // maxSegs is the widest rendering among the rows, capped.
-func maxSegs(items []workflow.Row, f func(workflow.Row) []text.Seg, cap int) int {
+func maxSegs(items []workflow.Row, f func(workflow.Row) []text.Seg, limit int) int {
 	n := 0
 	for _, r := range items {
 		if wdt := text.SegsWidth(f(r)); wdt > n {
 			n = wdt
 		}
 	}
-	return min(cap, n)
+	return min(limit, n)
 }
 
 func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, numW, repoW int) workflow.Layout {
@@ -311,7 +314,7 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 			pr := r.Item.(*model.PR)
 			return w.Label(pr, me, app.LocalApproved(pr))
 		}, 99) + 2,
-		"kind": maxSegs(items, func(r workflow.Row) []text.Seg { return w.kindChip(app, r.Item.(*model.PR), -1) }, 99),
+		"kind": maxSegs(items, func(r workflow.Row) []text.Seg { return w.kindChip(app, r.Item.(*model.PR), -1, false) }, 99),
 		"ci": maxw(items, func(r workflow.Row) string {
 			c, _ := r.Item.(*model.PR).Get(ExtCI).(model.CICluster)
 			return text.SegsText(ciSegs(c.Glyphs))
@@ -319,8 +322,13 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 		"author": maxw(items, func(r workflow.Row) string { return text.OrQ(r.Item.(*model.PR).Author.Login) }, 14),
 		"age":    3,
 	}
-	// narrow: the repo goes last; the chip (needs approval) never
-	return fit(cols, width, numW, "age", "author", "ci", "kind", "repo")
+	// narrow: the repo goes last; the chip (needs approval) never. A
+	// release in flight sheds its rail before its phase goes.
+	cols = fit(cols, width, numW, "age", "author", "ci")
+	if titleRoom(cols, width, numW) < 24 {
+		cols["kind"] = maxSegs(items, func(r workflow.Row) []text.Seg { return w.kindChip(app, r.Item.(*model.PR), -1, true) }, 99)
+	}
+	return fit(cols, width, numW, "kind", "repo")
 }
 
 func (w *Workflow) stageLayout(_ workflow.App, items []workflow.Row, _, numW, repoW int) workflow.Layout {
@@ -333,10 +341,7 @@ func (w *Workflow) stageLayout(_ workflow.App, items []workflow.Row, _, numW, re
 // kindChipText is the kind chip of a release row; a queued one shows
 // its window status instead (the night sub-header already says where),
 // a merged one its deploy.
-func (w *Workflow) kindChipText(pr *model.PR, now time.Time) string {
-	if p, ok := w.progressOf(pr); ok {
-		return w.progressChip(p, now)
-	}
+func (w *Workflow) kindChipText(pr *model.PR) string {
 	if w.queued(pr) {
 		return "queued"
 	}
@@ -356,9 +361,6 @@ func (w *Workflow) kindChipText(pr *model.PR, now time.Time) string {
 }
 
 func (w *Workflow) kindChipStyle(pr *model.PR, ktext string) string {
-	if p, ok := w.progressOf(pr); ok {
-		return progressStyle(p)
-	}
 	if pr.State == "MERGED" {
 		if d, ok := deployOf(pr, nil); ok {
 			if s, ok := deploys.Chip[d.Phase]; ok {
@@ -457,7 +459,11 @@ func (w *Workflow) releaseSegs(app workflow.App, row workflow.Row, L workflow.La
 	segs = append(segs, text.PadSegs(scenes.GlintChip(label, LabelStyle(label), pos, fx.Ambient, mono), L["chip"])...)
 	segs = append(segs, text.S(" ", "text"))
 	if kw, ok := L["kind"]; ok {
-		segs = append(segs, text.PadSegs(w.kindChip(app, pr, pos), kw)...)
+		kc := w.kindChip(app, pr, pos, false)
+		if text.SegsWidth(kc) > kw {
+			kc = w.kindChip(app, pr, pos, true) // the narrow list's chip
+		}
+		segs = append(segs, text.PadSegs(kc, kw)...)
 		segs = append(segs, text.S(" ", "text"))
 	}
 	c, _ := pr.Get(ExtCI).(model.CICluster)
@@ -586,8 +592,11 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	row = append(row, scenes.Chip("approve: prod", "chip.await")...)
 	row = append(row, text.S(" a deploy waits on you (D)", "muted"))
 	rail := []text.Seg{text.S(text.Pad("", 10), "section")}
-	rail = append(rail, scenes.Chip(strings.Repeat(glyphs.G("block"), 3)+strings.Repeat(glyphs.G("trough"), 4)+" deploying 3/9 · 2m", "chip.queued")...)
-	rail = append(rail, text.S(" a release in flight: its rail fills from validating to verifying", "muted"))
+	deploying := Progress{Phase: PhaseDeploying, DeployDone: 3, DeployTotal: 9}
+	rail = append(rail, text.S(glyphs.G("capl"), "cap:chip.queued"))
+	rail = append(rail, railSegs(deploying, time.Time{}, nil, "", railCells, false)...)
+	rail = append(rail, text.S(" deploying 3/9 · 2m", "chip.queued"), text.S(glyphs.G("capr"), "cap:chip.queued"))
+	rail = append(rail, text.S(" a release in flight: its rail fills from setup to finishing", "muted"))
 	rail = append(rail, sp)
 	rail = append(rail, scenes.Chip("released", "chip.approved")...)
 	rail = append(rail, sp)

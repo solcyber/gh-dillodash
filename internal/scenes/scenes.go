@@ -44,8 +44,8 @@ func run(segs []text.Seg, ch, st string) []text.Seg {
 	return append(segs, text.S(ch, st))
 }
 
-// runeAt is the i'th rune of s (cycling), or "?" when s is empty.
-func runeAt(s string, i int) string {
+// RuneAt is the i'th rune of s (cycling), or "?" when s is empty.
+func RuneAt(s string, i int) string {
 	r := []rune(s)
 	if len(r) == 0 {
 		return "?"
@@ -184,7 +184,7 @@ func Gutter(f *fx.Fx, ident string, sel bool, breathe string, trailAge float64, 
 	}
 	if t, ok := f.T("new:" + ident); ok {
 		sp := glyphs.G("spark")
-		return []text.Seg{text.S(runeAt(sp, int(t*16)), fx.Ramp("fx.g", 4, fx.Tri(t*3)))}
+		return []text.Seg{text.S(RuneAt(sp, int(t*16)), fx.Ramp("fx.g", 4, fx.Tri(t*3)))}
 	}
 	if hasTrail {
 		i := int(trailAge / 0.3 * 4)

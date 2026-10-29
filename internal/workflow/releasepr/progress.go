@@ -1104,7 +1104,11 @@ func (s *State) ScheduledForWindow() []*model.PR {
 
 // progressChip is the kind chip of a release in flight.
 func (w *Workflow) progressChip(p Progress, now time.Time) string {
-	el := deploys.FmtSecs(p.Elapsed(now))
+	return w.progressChipText(p, deploys.FmtSecs(p.Elapsed(now)))
+}
+
+// progressChipText is the chip with el as the phase's clock.
+func (w *Workflow) progressChipText(p Progress, el string) string {
 	switch p.Phase {
 	case PhaseScheduled:
 		if !p.SlotAt.IsZero() && w.win != nil {
