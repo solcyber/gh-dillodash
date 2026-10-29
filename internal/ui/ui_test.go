@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -52,10 +53,11 @@ func issue(repo model.Repo, n int, title, author string) *model.Issue {
 // harness builds a model on the acme fixture with scripted prompts and a
 // message hook, and drives Update directly.
 type harness struct {
-	t    *testing.T
-	m    *Model
-	gh   *fake.Client
-	msgs chan tea.Msg
+	opened, copied []string // URLs the o and y keys would have started a program with
+	t              *testing.T
+	m              *Model
+	gh             *fake.Client
+	msgs           chan tea.Msg
 }
 
 func newHarness(t *testing.T, repos ...model.Repo) *harness {
@@ -91,7 +93,13 @@ func newHarness(t *testing.T, repos ...model.Repo) *harness {
 	m := New(context.Background(), Options{Config: cfg, GH: gh, Workflows: set, Me: "alice", Host: "github.com", Version: "test"})
 	h := &harness{t: t, m: m, gh: gh, msgs: make(chan tea.Msg, 64)}
 	m.sendFn = func(msg tea.Msg) { h.msgs <- msg }
-	m.tp = &testPrompter{}
+	// o and y must never start the real browser or clipboard tool from a
+	// test (every run used to open the fixture's URLs in Chrome); the
+	// harness records them instead.
+	m.tp = &testPrompter{
+		OpenURL: func(url string) bool { h.opened = append(h.opened, url); return true },
+		Copy:    func(s string) string { h.copied = append(h.copied, s); return "test clipboard" },
+	}
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	return h
 }
@@ -696,5 +704,26 @@ func TestSearchOffsetsSurviveCaseFolding(t *testing.T) {
 	runes := []rune(line)
 	if got := string(runes[hits[0].start:hits[0].end]); got != "İstanbul" {
 		t.Errorf("hit covers %q in %q", got, line)
+	}
+}
+
+// TestOpenAndCopyStayInTheHarness: o and y hand the row's URL to the
+// model's hooks and never start a program; the status line says so.
+// (Before the hooks, every test run opened the fixture's URLs in the
+// developer's browser and overwrote their clipboard.)
+func TestOpenAndCopyStayInTheHarness(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.key('o')
+	h.key('y')
+	want := []string{"https://github.com/acme/infra/pull/101"}
+	if !slices.Equal(h.opened, want) || !slices.Equal(h.copied, want) {
+		t.Fatalf("opened %v copied %v, want %v", h.opened, h.copied, want)
+	}
+	if !strings.Contains(h.screen(), "copied https://github.com/acme/infra/pull/101 to the test clipboard") {
+		t.Errorf("screen:\n%s", h.screen())
+	}
+	if m := New(context.Background(), Options{Config: config.Default(), GH: h.gh, Workflows: h.m.wf, Me: "alice", Host: "github.com"}); m.tp != nil {
+		t.Error("a Model outside the harness must reach the real programs")
 	}
 }

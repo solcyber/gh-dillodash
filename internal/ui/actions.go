@@ -617,7 +617,7 @@ func (m *Model) copyURL() {
 	if url == "" {
 		return
 	}
-	if where := external.CopyToClipboard(url); where != "" {
+	if where := m.copy(url); where != "" {
 		m.ok(fmt.Sprintf("copied %s to the %s", url, where))
 	} else {
 		m.notice("couldn't copy — the URL is " + url)
@@ -629,11 +629,11 @@ func (m *Model) openInBrowser() {
 	if url == "" {
 		return
 	}
-	if external.OpenURL(url) {
+	if m.openURL(url) {
 		m.ok("opened " + url)
 		return
 	}
-	if where := external.CopyToClipboard(url); where != "" {
+	if where := m.copy(url); where != "" {
 		m.ok(fmt.Sprintf("no browser on this host (SSH?) — copied %s to the %s", url, where))
 	} else {
 		m.notice("no browser here — the URL is " + url)

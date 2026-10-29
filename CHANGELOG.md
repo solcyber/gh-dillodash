@@ -63,6 +63,11 @@ over every surface of the app, the command line and the docs.
   its legend and hint on short terminals; file paths lost their base
   name; ages past two years overflowed the column; a search highlight
   shifted on text whose lower-casing changes its length (`İ`).
+- `go test ./...` opened the test fixture's `acme` URLs in the
+  developer's browser and overwrote their clipboard: the UI tests press
+  `o` and `y`, which started the real `open` and `pbcopy`. The model
+  reaches the browser and the clipboard through hooks the test harness
+  scripts, and a test checks they stay scripted.
 
 ### Added
 

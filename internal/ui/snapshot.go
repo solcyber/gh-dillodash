@@ -19,7 +19,10 @@ func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]
 	m := New(ctx, o)
 	msgs := make(chan tea.Msg, 256)
 	m.sendFn = func(msg tea.Msg) { msgs <- msg }
-	m.tp = &testPrompter{}
+	m.tp = &testPrompter{
+		OpenURL: func(string) bool { return true },
+		Copy:    func(string) string { return "test clipboard" },
+	}
 	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	pump := func() error {
 		if err := settle(m, msgs, 10*time.Second); err != nil {

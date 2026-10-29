@@ -43,7 +43,11 @@ the key table in `internal/ui/keys.go` (`go test ./internal/ui -update`).
 
 `go test ./...`. The UI tests drive the model offline on an acme fixture
 through the fake GitHub client (`internal/ghapi/fake`); workflow tests use
-the scripted app in `internal/workflow/wftest`. Any test that posts
+the scripted app in `internal/workflow/wftest`. A test must never start a
+program on the developer's machine: the browser, the clipboard tool and
+`$PAGER`/`$EDITOR` go through the model's `testPrompter` hooks, which
+`newHarness` scripts (a key that reached the real `open` once filled a
+browser with `acme` tabs on every run). Any test that posts
 something asserts the exact body, because the bots on the other side
 validate it.
 
