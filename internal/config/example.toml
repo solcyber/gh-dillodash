@@ -108,7 +108,7 @@ enabled = false
 # release_now_dispatch_event = "release-now"   # its event_type; payload {repo, pr, comment_id}
 # apply_workflow = "apply.yml"              # the manifest repo's workflow whose dispatch runs carry a release; "" = don't look
 # apply_run_match = "rel:{repo}#{number}"   # what names the release in that run's title; placeholders {repo} {number}
-# progress_poll_secs = 30                   # follow a release in flight this often (0 = no live progress)
+# progress_poll_secs = 30                   # follow a release in flight this often (0 = no live progress; floor 10)
 # progress_timeout_secs = 5400              # stop following a release with no outcome after this long
 # approval_queues_for_window = false        # an approving review queues the release for the maintenance window (it shows under its night)
 # merge_method = "merge"                    # merge | squash | rebase

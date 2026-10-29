@@ -225,7 +225,8 @@ type RowDeployer interface {
 // ApplyPoll on the UI goroutine. Poll reads its own state under its own
 // lock and returns new values; it never touches the State the UI holds.
 // err is only ever a rate limit, which pauses polling and refreshing
-// alike. A Poll with nothing to watch returns (nil, nil).
+// alike; any other failure goes in the patch, for the poller's own card
+// to show. A Poll with nothing to watch returns (nil, nil).
 type Poller interface {
 	PollEvery() time.Duration
 	Live(app App) bool

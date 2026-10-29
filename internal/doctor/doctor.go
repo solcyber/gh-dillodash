@@ -66,10 +66,10 @@ func BotHint(source string) string {
 // Report prints everything after the client exists: the token and the
 // login, the source check, every repo's reach and the token's role in
 // it, the budget and the workflows. Every review repo read-only fails
-// the report: the dashboard would be watch-only in a way nobody chose. A login listed in [bots] fails the report: the dashboard
-// would post reviews, comments and merges as the bot, and the audit
-// trail of who approved is only meaningful when it is the human who
-// decided.
+// the report: the dashboard would be watch-only in a way nobody chose.
+// A login listed in [bots] fails the report: the dashboard would post
+// reviews, comments and merges as the bot, and the audit trail of who
+// approved is only meaningful when it is the human who decided.
 func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src config.Source, pulled bool) error {
 	fmt.Fprintf(w, "host: %s\ntoken: from %s\n", gh.Host(), gh.TokenSource())
 	if ghapi.TokenFromEnv(gh.TokenSource()) {
@@ -158,7 +158,8 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		if !r.Auto {
 			repos = joinRepos(r.Repos)
 		}
-		on("release_pr", true, "  repos: "+repos)
+		on("release_pr", true, "  repos: "+repos+releaseReach(cfg))
+		manifestReach(ctx, w, cfg, gh)
 	} else {
 		on("release_pr", false, "")
 	}
@@ -176,6 +177,63 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		return ErrFailed
 	}
 	return nil
+}
+
+// releaseReach is the release_pr line's tail: where /release-now is
+// dispatched and whether a release in flight is followed live. Both go
+// through the window's manifest repo.
+func releaseReach(cfg *config.Config) string {
+	r, m := cfg.ReleasePR, cfg.MaintenanceWindow
+	if m == nil {
+		return "; no dispatch or live progress without maintenance_window"
+	}
+	var s string
+	if r.ReleaseNowDispatch {
+		s += fmt.Sprintf("; %s is dispatched to %s", r.ReleaseNowCommand, m.ManifestRepo)
+	}
+	if r.ApplyWorkflow != "" && r.ProgressPollSecs > 0 {
+		s += fmt.Sprintf("; live progress every %ds from %s's %s", r.ProgressPollSecs, m.ManifestRepo, r.ApplyWorkflow)
+	} else {
+		s += "; live progress off"
+	}
+	return s
+}
+
+// manifestReach probes what release_pr needs of the manifest repo: write
+// to dispatch /release-now there, and its apply workflow's runs readable
+// to follow a release. Neither fails the report: the release still goes
+// through by hand (M) and its PR's labels and comments.
+func manifestReach(ctx context.Context, w io.Writer, cfg *config.Config, gh Client) {
+	r, m := cfg.ReleasePR, cfg.MaintenanceWindow
+	live := r.ApplyWorkflow != "" && r.ProgressPollSecs > 0
+	if m == nil || m.ManifestRepo.IsZero() || (!r.ReleaseNowDispatch && !live) {
+		return
+	}
+	target := m.ManifestRepo
+	if r.ReleaseNowDispatch {
+		res, err := gh.ListOpen(ctx, []model.Repo{target})
+		if err == nil {
+			err = res[target].Err
+		}
+		perm := res[target].Permission
+		switch {
+		case err != nil:
+			fmt.Fprintf(w, "    dispatch to %s: not reachable (%s) — /release-now will need M to merge by hand\n", target, verbose(err))
+		case perm == "":
+			fmt.Fprintf(w, "    dispatch to %s: role not reported — a 403 names the missing grant when it happens\n", target)
+		case ghapi.CanWrite(perm):
+			fmt.Fprintf(w, "    dispatch to %s: yes (%s)\n", target, perm)
+		default:
+			fmt.Fprintf(w, "    dispatch to %s: NO (%s) — /release-now will need M to merge by hand\n", target, perm)
+		}
+	}
+	if live {
+		if _, err := gh.WorkflowFileRuns(ctx, target, r.ApplyWorkflow, "repository_dispatch", clock.Now()); err != nil {
+			fmt.Fprintf(w, "    %s runs in %s: not readable (%s) — a release in flight is followed by its PR's labels and comments only\n", r.ApplyWorkflow, target, verbose(err))
+		} else {
+			fmt.Fprintf(w, "    %s runs in %s: readable\n", r.ApplyWorkflow, target)
+		}
+	}
 }
 
 func joinRepos(repos []model.Repo) string {

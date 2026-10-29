@@ -224,9 +224,13 @@ func TestApproveNowDispatchFailure(t *testing.T) {
 	w, app := newWF(t, true)
 	app.Fake.Fail["dispatch"] = errors.New("HTTP 403")
 	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
-	w.Approve(app, makeRelease(relOpts{}), nil)
+	pr := makeRelease(relOpts{})
+	w.Approve(app, pr, nil)
 	if len(app.Fake.Approvals) != 1 || len(comments(app)) != 1 {
 		t.Errorf("the review and the comment still landed: %v %v", app.Fake.Approvals, comments(app))
+	}
+	if p, ok := w.progressOf(pr); !ok || p.Phase != PhaseDispatched || !strings.Contains(p.Detail, "not told") {
+		t.Errorf("the card says nobody will pick it up: %+v", p)
 	}
 	if !logHas(app, "fail", "was not told") || !strings.Contains(app.Last(), "press M to merge by hand") {
 		t.Errorf("a failed dispatch says so and points at M: %v", app.Log)
@@ -258,6 +262,9 @@ func TestApproveHotfixOffersNowFirst(t *testing.T) {
 	w.Approve(app, makeRelease(relOpts{kind: KindHotfix, number: 43}), nil)
 	if m := app.Menus[0]; !strings.HasPrefix(m[1], "release NOW") || !strings.Contains(m[0], "emergency by definition") {
 		t.Errorf("NOW is the first menu entry: %q", m)
+	}
+	if m := app.Menus[0]; !strings.HasPrefix(m[2], "approve review only") {
+		t.Errorf("a hotfix never queues, so the menu does not offer it: %q", m)
 	}
 	if got := comments(app); len(app.Fake.Approvals) != 1 || app.Fake.Approvals[0] != 43 || len(got) != 1 || got[0] != `/release-now "`+reason+`"` {
 		t.Errorf("pick 0 is the NOW path: %v %q", app.Fake.Approvals, got)
@@ -802,7 +809,7 @@ func TestRefreshAndSections(t *testing.T) {
 	}
 	// AfterApply: the waiting environment is announced once, refresh speeds up
 	w.AfterApply(app)
-	if !logHas(app, "notice", "web-portal#133: prod now waits for your approval - press D on its row") {
+	if !logHas(app, "notice", "web-portal#133: prod now waits for your approval — press D on its row") {
 		t.Errorf("prod waiting is announced with D: %v", app.Log)
 	}
 	if len(app.Soon) != 1 || app.Soon[0] != 30*time.Second {
@@ -818,7 +825,7 @@ func TestRefreshAndSections(t *testing.T) {
 	if app.Bumps != 1 {
 		t.Errorf("an open release's card is rebuilt: %d", app.Bumps)
 	}
-	if got := w.kindChipText(m, app.Now()); got != "approve: prod" {
+	if got := w.kindChipText(m); got != "approve: prod" {
 		t.Errorf("a merged row's kind chip shows the deploy, not merged twice: %q", got)
 	}
 	// claims: a core row for the same PR is ours

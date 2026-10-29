@@ -72,7 +72,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		kind = w.Kind(pr)
 	}
 	cmd := w.cfg.ReleaseNowCommand
-	queues := w.cfg.ApprovalQueuesForWindow && w.win != nil
+	queues := w.cfg.ApprovalQueuesForWindow && w.win != nil && kind != KindHotfix // a hotfix never queues
 	night := w.NightPhrase(app.Now())
 	nowLabel := fmt.Sprintf("release NOW (%s) — real emergencies only", cmd)
 	queueLabel := fmt.Sprintf("queue it for %s window (approve review) — the normal path", night)
@@ -137,9 +137,6 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	app.MarkApproved(pr)
 	if body != "" {
 		id, err := app.GH().PostComment(app.Context(), pr.Repo, pr.Number, body)
-		if err == nil {
-			w.notePosted(pr, app.Now()) // the release is in flight from here
-		}
 		if err != nil {
 			if queues {
 				app.Fail(fmt.Sprintf("approved %s (it is queued for the window), but %s NOT posted: %s", wh, cmd, err))
@@ -156,13 +153,16 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		if target := w.manifestRepo(app); w.cfg.ReleaseNowDispatch && !target.IsZero() {
 			payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
 			if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
+				w.notePosted(pr, app.Now(), false)
 				app.Fail(fmt.Sprintf("approved %s and posted %s, but %s was not told (%s): press M to merge by hand",
 					wh, cmd, target, err))
 				app.Refresh(true)
 				return true
 			}
+			w.notePosted(pr, app.Now(), true) // the release is in flight from here
 			app.OK(fmt.Sprintf("approved %s, posted %s as %s and told %s", wh, cmd, me, target))
 		} else {
+			w.notePosted(pr, app.Now(), true)
 			app.OK(fmt.Sprintf("approved %s and posted %s as %s", wh, cmd, me))
 		}
 		app.Launch()

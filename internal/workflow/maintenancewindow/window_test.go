@@ -603,7 +603,20 @@ func TestReleases(t *testing.T) {
 	check(t, "w on a queued release row acts on its night and PR", n == mn && pr == rel42)
 	w.AfterApply(app)
 	check(t, "a queued release makes the worker fetch the manifests", w.relQueued.Load())
+	app.SetState(ReleaseState, releases{})
+	w.AfterApply(app)
+	check(t, "nothing queued, nothing scheduled: no manifests", !w.relQueued.Load())
+	app.SetState(ReleaseState, scheduledOnly{rel42})
+	w.AfterApply(app)
+	check(t, "a scheduled release alone keeps the manifests read", w.relQueued.Load())
 }
+
+// scheduledOnly is a release state with a release on a manifest and
+// nothing queued.
+type scheduledOnly []*model.PR
+
+func (s scheduledOnly) QueuedForWindow() []*model.PR    { return nil }
+func (s scheduledOnly) ScheduledForWindow() []*model.PR { return s }
 
 // ---- refresh and the w key end to end ----
 
@@ -776,4 +789,25 @@ func TestQueuedRowRendering(t *testing.T) {
 	check(t, "the workflow answers the night phrase and the release span for other workflows",
 		w.QueueNightPhrase(at("2026-10-22T22:00:00Z")) == "tonight's" && w.InReleaseWindow(at("2026-10-22T03:05:00Z")))
 	var _ workflow.Workflow = w
+}
+
+// TestManifestItem: another workflow asks for a release's item by repo
+// and number; the newest night that lists it answers, with the night
+// from the title when the block has none, and final read through.
+func TestManifestItem(t *testing.T) {
+	cfg := testCfg().MaintenanceWindow
+	mans := ParseManifests([]*model.Issue{
+		manifestFor(3600, "2026-10-21", "done", []map[string]any{{"repo": "acme/web-portal", "pr": 42, "status": "rolled — slot passed", "final": true}}, nil),
+		manifestFor(3601, "2026-10-22", "frozen", []map[string]any{{"repo": "acme/web-portal", "pr": 42, "status": "", "start_utc": "2026-10-23T03:05:00Z"}}, nil),
+		manifestIssue(3602, map[string]any{"items": []any{map[string]any{"repo": "acme/api", "pr": 7, "status": "verified", "final": true}}}, "Window 2026-10-20 23:00 ET", "window-manifest"),
+	}, cfg)
+	s := &State{Manifests: mans}
+	it, ok := s.ManifestItem("web-portal", 42)
+	check(t, "the newest night answers", ok && it.Night == "2026-10-22" && it.Phase == "frozen" && it.StartUTC == "2026-10-23T03:05:00Z" && it.Issue == 3601 && it.Final == nil)
+	it, ok = s.ManifestItem("api", 7)
+	check(t, "the night from the title, final read", ok && it.Night == "2026-10-20" && it.Status == "verified" && it.Final != nil && *it.Final)
+	_, ok = s.ManifestItem("web-portal", 4)
+	check(t, "#4 is not #42", !ok)
+	_, ok = (*State)(nil).ManifestItem("web-portal", 42)
+	check(t, "no state, no item", !ok)
 }

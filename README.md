@@ -15,7 +15,7 @@ list is empty.
 
 Needs the GitHub CLI (`gh` 2.x) and a terminal with 256 colors or
 truecolor; the release binaries cover macOS, Linux, FreeBSD and Windows,
-and building from source needs Go 1.27 or newer.
+and building from source needs Go 1.27.3 or newer.
 
 ```sh
 gh extension install solcyber/gh-dillodash
@@ -51,7 +51,7 @@ symptoms.
 
 ## A tour
 
-![A pull request's detail: the header, the cards, the description rendered from markdown, then comments and reviews in order](docs/shots/pr-detail.png)
+![A pull request's detail: the header, the description rendered from markdown, then comments and reviews in order](docs/shots/pr-detail.png)
 
 ![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](docs/shots/release-card.png)
 

@@ -43,9 +43,7 @@ func SnapshotsWith(ctx context.Context, o Options, so SnapshotOptions, w, h int,
 		wasMotion, wasNow := fx.Motion, fx.Now
 		defer func() { fx.Motion, fx.Now = wasMotion, wasNow }()
 		fx.Motion = "full"
-		clockAt := so.Clock
-		fx.Now = func() float64 { return clockAt }
-		defer func() { clockAt = so.Clock }()
+		fx.Now = func() float64 { return so.Clock }
 	}
 	m := New(ctx, o)
 	msgs := make(chan tea.Msg, 256)
@@ -80,6 +78,9 @@ func SnapshotsWith(ctx context.Context, o Options, so SnapshotOptions, w, h int,
 	}
 	var out []*canvas.Canvas
 	for _, script := range scripts {
+		if so.Motion {
+			fx.Now = func() float64 { return so.Clock } // each script's keys at the clock, not the last frame's advance
+		}
 		for _, k := range script {
 			m.Update(keyMsg(k))
 			if err := pump(); err != nil {

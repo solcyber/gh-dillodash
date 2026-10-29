@@ -148,11 +148,7 @@ func (s *State) QueuedForWindow() []*model.PR {
 	now := clock.Now()
 	var out []*model.PR
 	for _, p := range s.Releases {
-		kind := ""
-		if i := InfoOf(p); i != nil {
-			kind = i.Kind
-		}
-		if queuedFor(p, kind, s.queuedLabel, s.queuesByApproval, now) && !s.w.inFlight(p) {
+		if queuedFor(p, s.w.kindOf(p), s.queuedLabel, s.queuesByApproval, now) && !s.w.inFlight(p) {
 			out = append(out, p)
 		}
 	}
@@ -172,6 +168,17 @@ func (w *Workflow) inFlight(pr *model.PR) bool {
 	return ok && !p.Terminal && p.Phase != PhaseScheduled && p.Phase != PhaseWaitingSlot
 }
 
+// kindOf is the release's kind: the refresh's reading, else its branch.
+func (w *Workflow) kindOf(pr *model.PR) string {
+	if i := InfoOf(pr); i != nil && i.Kind != "" {
+		return i.Kind
+	}
+	if w == nil {
+		return ""
+	}
+	return w.Kind(pr)
+}
+
 // approvalQueueAge is how long an approving review keeps a release
 // queued: the conductor's three nights; older, it asks for a fresh one.
 const approvalQueueAge = 72 * time.Hour
@@ -187,8 +194,14 @@ func queuedFor(pr *model.PR, kind, queuedLabel string, byApproval bool, now time
 	if !byApproval || pr.IsDraft || kind != KindRelease || (pr.State != "" && pr.State != "OPEN") {
 		return false
 	}
+	return approvedWithin(pr, now, approvalQueueAge)
+}
+
+// approvedWithin reports an APPROVED review submitted within age of now
+// (age 0: at any time); a review with no submittedAt counts.
+func approvedWithin(pr *model.PR, now time.Time, age time.Duration) bool {
 	for _, r := range pr.Opinions.Nodes {
-		if r.State == "APPROVED" && (r.SubmittedAt.IsZero() || now.Sub(r.SubmittedAt) <= approvalQueueAge) {
+		if r.State == "APPROVED" && (age == 0 || r.SubmittedAt.IsZero() || now.Sub(r.SubmittedAt) <= age) {
 			return true
 		}
 	}
@@ -229,12 +242,13 @@ type seenKey struct {
 // Workflow is the release workflow.
 type Workflow struct {
 	workflow.Base
-	cfg    *config.ReleasePRConfig
-	win    *config.MaintenanceWindowConfig // nil: no window, M merges whenever GitHub allows
-	window workflow.Workflow               // the window workflow when enabled
-	org    string
-	nowRE  *regexp.Regexp
-	deploy deploys.Cache
+	cfg       *config.ReleasePRConfig
+	win       *config.MaintenanceWindowConfig // nil: no window, M merges whenever GitHub allows
+	window    workflow.Workflow               // the window workflow when enabled
+	org       string
+	nowRE     *regexp.Regexp
+	refusedRE *regexp.Regexp // the dispatcher's refusal of the command
+	deploy    deploys.Cache
 
 	// worker goroutine only
 	repoCache  []model.Repo
@@ -245,10 +259,9 @@ type Workflow struct {
 	mu   sync.Mutex
 	cur  *State           // the last applied state (UI goroutine reads)
 	seen map[seenKey]bool // deploy notices already given
-	// the releases in flight (progress.go), the outcomes announced, and
-	// whether the manifest repo's unreadable Actions were mentioned
+	// the releases in flight (progress.go), and whether the manifest
+	// repo's unreadable Actions were mentioned
 	progress       map[model.Ident]*track
-	seenOutcome    map[model.Ident]string
 	infraOffSaid   bool
 	manifestTarget model.Repo // where the apply runs are, as AfterApply last resolved it
 }
@@ -269,13 +282,13 @@ func init() {
 func New(ctx *workflow.Context) *Workflow {
 	cfg := ctx.Config.ReleasePR
 	w := &Workflow{
-		cfg:         cfg,
-		org:         cfg.Org,
-		last:        map[model.Repo]lastGood{},
-		stageCache:  map[model.Repo]stageCached{},
-		seen:        map[seenKey]bool{},
-		progress:    map[model.Ident]*track{},
-		seenOutcome: map[model.Ident]string{},
+		cfg:        cfg,
+		org:        cfg.Org,
+		last:       map[model.Repo]lastGood{},
+		stageCache: map[model.Repo]stageCached{},
+		seen:       map[seenKey]bool{},
+		progress:   map[model.Ident]*track{},
+		refusedRE:  refusedREFor(cfg.ReleaseNowCommand),
 	}
 	if w.org == "" {
 		if len(ctx.Repos) > 0 {
@@ -545,7 +558,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 			w.seen[key] = true
 			w.mu.Unlock()
 			if !seen {
-				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval - press D on its row", pr.Repo.Name, pr.Number, wt.EnvName))
+				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval — press D on its row", pr.Repo.Name, pr.Number, wt.EnvName))
 			}
 		}
 	}

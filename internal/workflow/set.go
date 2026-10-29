@@ -199,8 +199,8 @@ func (s *Set) PollEvery(app App) time.Duration {
 }
 
 // PollAll runs every poller's Poll (worker goroutine); patches keyed by
-// name. The first rate limit stops the loop, the patches gathered so far
-// still come back.
+// name. The first error (by the Poller contract, a rate limit) stops the
+// loop; the patches gathered so far still come back.
 func (s *Set) PollAll(ctx context.Context, gh ghapi.Client) (map[string]any, error) {
 	out := map[string]any{}
 	if s == nil {

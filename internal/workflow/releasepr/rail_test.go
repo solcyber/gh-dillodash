@@ -118,17 +118,17 @@ func TestKindChipWidthMatchesLayout(t *testing.T) {
 	t.Cleanup(func() { fx.Motion, fx.Ambient = wasM, wasA })
 	for _, motion := range []string{"off", "full"} {
 		fx.Motion, fx.Ambient = motion, motion == "full"
-		measured := text.SegsWidth(w.kindChip(app, listed, -1))
-		drawn := text.SegsWidth(w.kindChip(app, listed, 3))
+		measured := text.SegsWidth(w.kindChip(app, listed, -1, false))
+		drawn := text.SegsWidth(w.kindChip(app, listed, 3, false))
 		if drawn > measured || measured == 0 {
 			t.Errorf("%s: drawn %d measured %d", motion, drawn, measured)
 		}
-		if s := text.SegsText(w.kindChip(app, listed, 3)); !strings.Contains(s, "dispatched") {
+		if s := text.SegsText(w.kindChip(app, listed, 3, false)); !strings.Contains(s, "dispatched") {
 			t.Errorf("%s: chip text %q", motion, s)
 		}
 	}
 	plain := makeRelease(relOpts{number: 999})
-	if s := text.SegsText(w.kindChip(app, plain, 0)); !strings.Contains(s, "release") {
+	if s := text.SegsText(w.kindChip(app, plain, 0, false)); !strings.Contains(s, "release") {
 		t.Errorf("a quiet release keeps its kind chip: %q", s)
 	}
 }
@@ -213,5 +213,37 @@ func TestProgressCardTimeline(t *testing.T) {
 	if !strings.Contains(pre, "dispatched") || !strings.Contains(pre, "T+6:00") || strings.Count(pre, "T+6:00") != 1 {
 		t.Errorf("the pre-run row:\n%s", pre)
 	}
-	_ = workflow.Row{}
+}
+
+// TestNarrowListKeepsThePhase: on a narrow list a release in flight
+// sheds its rail before the kind column goes, and the measured width
+// holds still while the clock grows.
+func TestNarrowListKeepsThePhase(t *testing.T) {
+	w, app, pr := pollFixture(t)
+	listed := w.Current().Find(pr.Ident())
+	rows := []workflow.Row{{Kind: RowRelease, Item: listed}}
+	full := text.SegsWidth(w.kindChip(app, listed, -1, false))
+	compact := text.SegsWidth(w.kindChip(app, listed, -1, true))
+	if compact >= full {
+		t.Fatalf("compact %d, full %d", compact, full)
+	}
+	sawCompact := false
+	for width := 40; width <= 160; width++ {
+		cols := w.releaseLayout(app, rows, width, 4, 10)
+		kw, ok := cols["kind"]
+		switch {
+		case !ok:
+		case kw == compact:
+			sawCompact = true
+		case kw != full:
+			t.Errorf("width %d: kind %d is neither %d nor %d", width, kw, full, compact)
+		}
+	}
+	if !sawCompact {
+		t.Error("no width shows the compact chip")
+	}
+	clock.Now = func() time.Time { return utc(4, 0) } // the clock grows from 1m to 1h01m
+	if got := text.SegsWidth(w.kindChip(app, listed, -1, false)); got != full {
+		t.Errorf("the measured width moved with the clock: %d -> %d", full, got)
+	}
 }

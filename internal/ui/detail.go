@@ -55,6 +55,20 @@ type event struct {
 	body string
 }
 
+// renderMD is markdown.Render for the open item, memoized (mdMemo).
+func (m *Model) renderMD(body string, wrap int) []text.Line {
+	k := mdKey{body, wrap, m.raw}
+	if ls, ok := m.mdMemo[k]; ok {
+		return ls
+	}
+	ls := markdown.Render(body, wrap, m.raw, m.hooks())
+	if m.mdMemo == nil {
+		m.mdMemo = map[mdKey][]text.Line{}
+	}
+	m.mdMemo[k] = ls
+	return ls
+}
+
 // buildDetailLines renders the open item.
 func (m *Model) buildDetailLines(width int) {
 	m.detailStamp = detailStamp{m.detailVer, width, m.raw}
@@ -92,7 +106,7 @@ func (m *Model) issueLines(iss *model.Issue, wrap int) []text.Line {
 	lines = append(lines, markdown.Wrap(meta, wrap, nil, nil, false)...)
 	lines = append(lines, text.Line{})
 	lines = append(lines, section("description", wrap, ""))
-	lines = append(lines, markdown.Render(iss.Body, wrap, m.raw, m.hooks())...)
+	lines = append(lines, m.renderMD(iss.Body, wrap)...)
 	var events []event
 	for _, c := range iss.Comments.Nodes {
 		events = append(events, event{c.CreatedAt, text.OrQ(c.Author.Login), "commented", c.Body})
@@ -153,7 +167,7 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	}
 	lines = append(lines, text.Line{})
 	lines = append(lines, section("description", wrap, ""))
-	lines = append(lines, markdown.Render(pr.Body, wrap, m.raw, m.hooks())...)
+	lines = append(lines, m.renderMD(pr.Body, wrap)...)
 
 	// merge issue comments and reviews into one timeline
 	var events []event
@@ -225,7 +239,7 @@ func (m *Model) timeline(events []event, width int) []text.Line {
 		if strings.TrimSpace(e.body) == "" && strings.HasPrefix(e.what, "review: ") {
 			continue // a bare approval has no text to show
 		}
-		for _, ln := range markdown.Render(e.body, width-2, m.raw, m.hooks()) {
+		for _, ln := range m.renderMD(e.body, width-2) {
 			lines = append(lines, text.Line{Segs: append([]text.Seg{bar}, ln.Segs...), Band: ln.Band})
 		}
 	}

@@ -24,9 +24,9 @@ func Wipe(c *canvas.Canvas, f *fx.Fx, h, w int) {
 	edge := int(fx.EaseOut(t) * float64(w+3))
 	shade := glyphs.G("shade")
 	band := []text.Seg{
-		text.S(runeAt(shade, 0), "fx.b2"),
-		text.S(runeAt(shade, 1), "fx.b4"),
-		text.S(runeAt(shade, 2), "fx.b6"),
+		text.S(RuneAt(shade, 0), "fx.b2"),
+		text.S(RuneAt(shade, 1), "fx.b4"),
+		text.S(RuneAt(shade, 2), "fx.b6"),
 	}
 	for y := 2; y < h-2; y++ {
 		var x0 int
@@ -75,10 +75,10 @@ func Confetti(c *canvas.Canvas, f *fx.Fx, h, w int) {
 	}
 	if big {
 		bx := int(fx.EaseInOut(t)*float64(w+6)) - 3
-		spark := runeAt(glyphs.G("spark"), 0)
+		spark := RuneAt(glyphs.G("spark"), 0)
 		segs := []text.Seg{
 			text.S(spark, "fx.k1"), text.S(spark, "fx.k2"), text.S(spark, "fx.k3"),
-			text.S(runeAt(glyphs.G("ball"), int(el*14)), "fx.g3"),
+			text.S(RuneAt(glyphs.G("ball"), int(el*14)), "fx.g3"),
 		}
 		for i, seg := range segs {
 			if cx := bx - 3 + i; 0 <= cx && cx < w-1 {
@@ -112,7 +112,7 @@ func Launch(c *canvas.Canvas, f *fx.Fx, h, w int) {
 	}
 	shade := glyphs.G("shade")
 	block := glyphs.G("block")
-	spark := runeAt(glyphs.G("spark"), 0)
+	spark := RuneAt(glyphs.G("spark"), 0)
 	cycle := fx.LaunchCycle
 
 	// the shockwave: a ring of shade rolling out from the burst
@@ -126,7 +126,7 @@ func Launch(c *canvas.Canvas, f *fx.Fx, h, w int) {
 				d := r - math.Hypot(float64(x-cx), dy)
 				if 0 <= d && d < 3 {
 					k := min(2, int(d))
-					at(y, x, runeAt(shade, k), styles[k])
+					at(y, x, RuneAt(shade, k), styles[k])
 				}
 			}
 		}
@@ -149,7 +149,7 @@ func Launch(c *canvas.Canvas, f *fx.Fx, h, w int) {
 			y, x = bottom-(i-2*(w-1)-rows), 0
 		}
 		k := (i/3 + step) % len(cycle)
-		g := runeAt(shade, 1)
+		g := RuneAt(shade, 1)
 		if k%2 == 1 {
 			g = block
 		}
@@ -241,7 +241,7 @@ func Launch(c *canvas.Canvas, f *fx.Fx, h, w int) {
 		speed := 18 + rnd.Float64()*22
 		lag := rnd.Float64() * 1.8
 		bx := int((el-lag)*speed) - 4
-		ball := runeAt(glyphs.G("ball"), int(el*14+lag*7))
+		ball := RuneAt(glyphs.G("ball"), int(el*14+lag*7))
 		segs := []text.Seg{text.S(spark, "fx.k2"), text.S(spark, "fx.k3"), text.S(ball, "fx.g3")}
 		for j, seg := range segs {
 			if cx := bx + j; 0 <= cx && cx < w-1 && el >= lag {

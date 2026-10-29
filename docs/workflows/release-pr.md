@@ -47,11 +47,14 @@ the day after it is enrolled, or at once after the cache file is deleted.
   among the releases; its manifest item id is `rel:<repo>#<N>`. With
   `approval_queues_for_window = true` the approving review itself queues
   it (an open, non-draft `release/*` PR with an APPROVED review no older
-  than three nights; a hotfix never queues), which is what the conductor's
-  freeze picks up: it labels nothing before then. A release carrying the
-  conductor's queued label is queued either way. Once the release is on
-  its way (released NOW, or its slot came) it is back among the releases
-  with its rail.
+  than three nights, a review with no recorded time counting as fresh; a
+  hotfix never queues, and its `a` menu does not offer it), which is what
+  the conductor's freeze picks up: it labels nothing before then. A
+  release carrying the conductor's queued label is queued either way.
+  Once the release is on its way (released NOW, or its slot came) it is
+  back among the releases with its rail; one that ended without merging
+  (a failure, a refusal) and still holds its approval goes back under its
+  night, as the conductor would take it again.
 - **A release in flight** (released NOW, or on tonight's manifest) shows
   its **rail** in the kind chip: a meter that fills as the release moves
   through the manifest repo's run, with the phase and its clock
@@ -68,9 +71,9 @@ the day after it is enrolled, or at once after the cache file is deleted.
 
 ## `a` on a release
 
-![a on a release: queue it for tonight's window, or release NOW with a reason](../docs/shots/approve-menu.png)
+![a on a release: queue it for tonight's window, or release NOW with a reason](../shots/approve-menu.png)
 
-![The release-now prompt: the reason, its length meter, and the exact comment that will be posted](../docs/shots/release-now-prompt.png)
+![The release-now prompt: the reason, its length meter, and the exact comment that will be posted](../shots/release-now-prompt.png)
 
 Open it with `enter` first. `a` refuses drafts, your own PRs, merged ones
 and a PR that is not a release, then offers:
@@ -113,17 +116,17 @@ Without the window workflow, an approving review is just an approval, and
   approval carries `deploy_approval_comment`.
 - While a deploy waits or runs dillodash refreshes every
   `deploy_refresh_secs` and says once per environment when one starts
-  waiting for you (`web-portal#143: prod now waits for your approval -
+  waiting for you (`web-portal#143: prod now waits for your approval —
   press D on its row`). Approve `stg`, wait for the message, press `D`
   again for `prod`.
 
 ## Live progress
 
-![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](../docs/shots/release-rail.png)
+![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](../shots/release-rail.png)
 
-![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](../docs/shots/release-card.png)
+![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
 
-![When a release lands: the rocket, the fireworks and RELEASED! across the screen](../docs/shots/release-launch.png)
+![When a release lands: the rocket, the fireworks and RELEASED! across the screen](../shots/release-launch.png)
 
 From the moment a release is sent on its way, dillodash follows it to its
 outcome and shows where it stands, in near real time, without waiting for
@@ -133,8 +136,8 @@ the next refresh.
 `manifest_repo` as one run of `apply_workflow` (default `apply.yml`), fired
 by a `repository_dispatch`; its title names the release
 (`apply_run_match`, default `rel:{repo}#{number}`). The run's steps say the
-phase: *validating*, *merging*, *approving envs*, *deploying*, *verifying*
-(the alarms are read after a five-minute settle), *finishing*. On the
+phase: *setup*, *validating*, *merging*, *approving envs*, *deploying*,
+*verifying* (the alarms are read after a five-minute settle), *finishing*. On the
 release PR the job leaves an outcome comment (`## Released`, `## Release
 FAILED: …`, `## Release UNVERIFIABLE`, `## Release NOT RUN`) and the
 conductor's labels (`applied_label`, `failed_label`); on a window night the

@@ -53,6 +53,12 @@ type glideEntry struct {
 	start    float64
 }
 
+type mdKey struct {
+	body string
+	wrap int
+	raw  bool
+}
+
 type detailStamp struct {
 	ver   int
 	width int
@@ -116,8 +122,11 @@ type Model struct {
 	refreshing bool
 	// polling is a workflow poll in flight; nextPollAt is when the next
 	// one is due on the frame clock (0: nothing in flight to watch).
+	// refreshSeq counts the refreshes applied: a poll that started before
+	// the last one carries older news than the refresh did.
 	polling         bool
 	nextPollAt      float64
+	refreshSeq      int
 	refreshAgain    bool
 	ciFlush         bool
 	nextRefreshAt   float64
@@ -130,12 +139,16 @@ type Model struct {
 	approvedByMe map[model.Ident]string // ident -> head SHA at the time
 
 	// detail
-	detail         any // *model.PR | *model.Issue
-	detailKind     string
-	detailListed   *model.PR
-	detailLines    []text.Line
-	detailVer      int
-	detailStamp    detailStamp
+	detail       any // *model.PR | *model.Issue
+	detailKind   string
+	detailListed *model.PR
+	detailLines  []text.Line
+	detailVer    int
+	detailStamp  detailStamp
+	// mdMemo keeps the open item's rendered markdown while only its live
+	// card moves (a release in flight rebuilds the detail every frame);
+	// any other change to the detail clears it.
+	mdMemo         map[mdKey][]text.Line
 	detailLoadedAt float64
 	scroll         int
 	raw            bool

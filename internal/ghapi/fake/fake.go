@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -138,6 +139,11 @@ func (f *Client) fail(op string) error {
 func (f *Client) record(c Call) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.recordLocked(c)
+}
+
+// recordLocked is record with f.mu held.
+func (f *Client) recordLocked(c Call) {
 	f.Calls = append(f.Calls, c)
 	switch c.Op {
 	case "approve":
@@ -322,9 +328,9 @@ func (f *Client) PostComment(ctx context.Context, repo model.Repo, number int, b
 		return 0, err
 	}
 	f.mu.Lock()
-	id := int64(len(f.CommentsPosted) + 1)
-	f.mu.Unlock()
-	f.record(Call{Op: "comment", Repo: repo, Number: number, Body: body, ID: id})
+	defer f.mu.Unlock()
+	id := int64(len(f.CommentsPosted) + 1) // under the same lock as the record: two posts never share an id
+	f.recordLocked(Call{Op: "comment", Repo: repo, Number: number, Body: body, ID: id})
 	return id, nil
 }
 
@@ -406,7 +412,8 @@ func (f *Client) WorkflowRuns(ctx context.Context, repo model.Repo, headSHA stri
 }
 
 // WorkflowFileRuns is FileRuns["owner/name:file"] narrowed to the event
-// and to runs created at or after since.
+// and to runs created at or after since, newest first and at most one
+// page of 50, as the real listing answers.
 func (f *Client) WorkflowFileRuns(ctx context.Context, repo model.Repo, file, event string, since time.Time) ([]model.WorkflowRun, error) {
 	if err := f.fail("file_runs"); err != nil {
 		return nil, err
@@ -422,6 +429,10 @@ func (f *Client) WorkflowFileRuns(ctx context.Context, repo model.Repo, file, ev
 			continue
 		}
 		out = append(out, r)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if len(out) > 50 {
+		out = out[:50]
 	}
 	return out, nil
 }

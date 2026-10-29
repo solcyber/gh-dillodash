@@ -644,12 +644,16 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 
 // drawDetail paints the open item's lines.
 func (m *Model) drawDetail(c *canvas.Canvas, h, w int) {
-	if m.liveDetail() {
-		m.animating = true // the open item's card has live parts
-		m.detailVer++      // and is rebuilt every frame
-	}
-	if m.detailStamp != (detailStamp{m.detailVer, w, m.raw}) {
+	live := m.liveDetail()
+	switch {
+	case m.detailStamp != (detailStamp{m.detailVer, w, m.raw}):
+		m.mdMemo = nil
 		m.buildDetailLines(w) // new data, an approval, raw, resize
+	case live:
+		m.buildDetailLines(w) // the card's live parts; the markdown is memoized
+	}
+	if live {
+		m.animating = true
 	}
 	top := 2
 	visible := max(1, h-4)

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
@@ -22,6 +23,7 @@ type pollResult struct {
 	err     string
 	retryAt time.Time // set when err is a rate limit
 	limited bool
+	seq     int // m.refreshSeq when the poll started
 }
 
 type pollDoneMsg struct{ out *pollResult }
@@ -53,8 +55,9 @@ func (m *Model) poll() {
 	m.polling = true
 	m.nextPollAt = 0 // re-armed by applyPoll
 	gh, wf, ctx := m.gh, m.wf, m.ctx
+	seq := m.refreshSeq
 	go func() {
-		out := &pollResult{}
+		out := &pollResult{seq: seq}
 		defer func() {
 			if r := recover(); r != nil {
 				out.err = fmt.Sprintf("poll failed: %v", r)
@@ -72,27 +75,26 @@ func (m *Model) poll() {
 	}()
 }
 
-// applyPoll lands a poll's patches and arms the next cycle. A rate
-// limit raises the same wall the refresh honours and says so on the warn
-// line; any other failure keeps the last known progress and retries at
-// twice the cadence without touching the refresh's backoff.
+// applyPoll lands a poll's patches and arms the next cycle. Patches
+// read before a refresh that has since landed are dropped: the refresh
+// is newer. A rate limit raises the same wall the refresh honours; any
+// other failure (a poller that panicked) keeps the last known progress
+// and retries at twice the cadence without touching the refresh's
+// backoff. Either is said on the warn line, ahead of the refresh's own
+// warnings, until the next refresh replaces them.
 func (m *Model) applyPoll(out *pollResult) {
 	m.polling = false
-	if len(out.patches) > 0 {
+	if len(out.patches) > 0 && out.seq == m.refreshSeq {
 		m.wf.ApplyPolls(m, out.patches)
 	}
 	switch {
 	case out.limited:
 		m.backoff.RateLimit(out.retryAt)
 		wait := m.backoff.RateLimitWait(clock.Now())
-		note := "rate limited — live progress paused until " + clock.Now().Add(wait).Local().Format("15:04:05")
-		if m.warn == "" {
-			m.warn = note
-		} else if len(m.warn) < 200 {
-			m.warn = note + "; " + m.warn
-		}
+		m.pollWarn("rate limited — live progress paused until " + clock.Now().Add(wait).Local().Format("15:04:05"))
 		m.nextPollAt = fx.Now() + wait.Seconds() + 1
 	case out.err != "":
+		m.pollWarn("live progress: " + out.err)
 		if d := m.wf.PollEvery(m); d > 0 {
 			m.nextPollAt = fx.Now() + 2*d.Seconds()
 		} else {
@@ -103,8 +105,18 @@ func (m *Model) applyPoll(out *pollResult) {
 	}
 }
 
+// pollWarn puts a poll's trouble at the head of the warn line, once.
+func (m *Model) pollWarn(note string) {
+	switch {
+	case m.warn == "":
+		m.warn = note
+	case !strings.HasPrefix(m.warn, note):
+		m.warn = note + "; " + m.warn
+	}
+}
+
 // liveDetail reports whether the open detail's row changes between
-// refreshes: its card is then rebuilt every frame.
+// refreshes: its card is then rebuilt every frame (drawDetail).
 func (m *Model) liveDetail() bool {
 	if m.detail == nil {
 		return false

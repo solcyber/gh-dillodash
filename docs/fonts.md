@@ -74,11 +74,11 @@ to confirm every icon shows and is one cell wide.
 
 ## No font at all: `icons = "unicode"`
 
-![The list with the bundled Nerd Font's icons](../docs/shots/icons-nerd.png)
+![The list with the bundled Nerd Font's icons](shots/icons-nerd.png)
 
-![The same list with icons = "unicode": plain Unicode symbols, no font needed](../docs/shots/icons-unicode.png)
+![The same list with icons = "unicode": plain Unicode symbols, no font needed](shots/icons-unicode.png)
 
-![The same list with icons = "ascii": every glyph from the seven-bit set](../docs/shots/icons-ascii.png)
+![The same list with icons = "ascii": every glyph from the seven-bit set](shots/icons-ascii.png)
 
 If you cannot or do not want to change the terminal font, switch the icon
 set. In the config:

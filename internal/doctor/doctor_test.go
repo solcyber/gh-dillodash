@@ -163,3 +163,37 @@ func TestReportWaitingRuns(t *testing.T) {
 		t.Errorf("waiting_runs on:\n%s", out)
 	}
 }
+
+// TestReportReleaseReach: release_pr says where /release-now goes and
+// whether a release is followed live, and probes the manifest repo for
+// both without failing the report.
+func TestReportReleaseReach(t *testing.T) {
+	cfg := cfgWith(infra)
+	cfg.MaintenanceWindow = config.DefaultMaintenanceWindow()
+	cfg.MaintenanceWindow.ManifestRepo = infra
+	cfg.ReleasePR = config.DefaultReleasePR()
+	gh := fake.New("alice")
+	gh.Open = map[model.Repo]ghapi.ListResult{infra: {Permission: "WRITE"}}
+	out, err := reportWith(t, gh, cfg)
+	if err != nil {
+		t.Fatalf("err %v\n%s", err, out)
+	}
+	for _, want := range []string{"/release-now is dispatched to acme/infra", "live progress every 30s from acme/infra's apply.yml", "dispatch to acme/infra: yes (WRITE)", "apply.yml runs in acme/infra: readable"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	gh.Open[infra] = ghapi.ListResult{Permission: "READ"}
+	gh.Fail["file_runs"] = &ghapi.Error{Status: 403, Message: "Resource not accessible"}
+	cfg.Reviews.Repos = nil // only the manifest probe reads infra now
+	out, _ = reportWith(t, gh, cfg)
+	for _, want := range []string{"dispatch to acme/infra: NO (READ)", "apply.yml runs in acme/infra: not readable"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	cfg.MaintenanceWindow = nil
+	if out, _ = reportWith(t, gh, cfg); !strings.Contains(out, "no dispatch or live progress without maintenance_window") || strings.Contains(out, "dispatch to") {
+		t.Errorf("without the window:\n%s", out)
+	}
+}

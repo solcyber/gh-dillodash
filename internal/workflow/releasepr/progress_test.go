@@ -11,7 +11,9 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 	"github.com/solcyber/gh-dillodash/internal/workflow/wftest"
 )
@@ -279,7 +281,7 @@ func TestDeriveWindowPath(t *testing.T) {
 		"verified — run https://x/1":         PhaseReleased,
 		"FAILED — run https://x/1":           PhaseFailed,
 		"refused (rolled) — run https://x/1": PhaseRefused,
-		"run cancelled — nothing merged":     PhaseFailed,
+		"run cancelled — nothing merged":     PhaseCancelled,
 	} {
 		p = deriveWith(w, pr, func(tr *track) { tr.item = item(status) }, slot.Add(2*time.Minute))
 		if p.Phase != want || p.Source != "manifest" || p.Detail != status {
@@ -319,7 +321,7 @@ func TestDeriveLost(t *testing.T) {
 		t.Errorf("89m: %+v", p)
 	}
 	p = deriveWith(w, pr, func(tr *track) { tr.nowPostedAt = t0 }, t0.Add(91*time.Minute))
-	if p.Phase != PhaseLost || !p.Terminal || !strings.HasPrefix(p.Detail, "no outcome after 1h31m") {
+	if p.Phase != PhaseLost || !p.Terminal || !strings.HasPrefix(p.Detail, "no outcome after 1h30m") {
 		t.Errorf("91m: %+v", p)
 	}
 	// a scheduled release is never lost: its slot is hours away
@@ -580,11 +582,15 @@ func TestProgressChipAndStyle(t *testing.T) {
 func TestProgressDrivesTheRow(t *testing.T) {
 	w, app, pr := pollFixture(t)
 	listed := w.Current().Find(pr.Ident())
-	if got := w.kindChipText(listed, app.Now()); got != "dispatched 1m" {
+	chip := w.kindChip(app, listed, 0, false)
+	if got := text.SegsText(chip); !strings.Contains(got, "dispatched 1m") {
 		t.Errorf("chip %q", got)
 	}
-	if got := w.kindChipStyle(listed, "dispatched 1m"); got != "chip.queued" {
+	if got := chip[len(chip)-1].Style; got != "cap:chip.queued" {
 		t.Errorf("style %q", got)
+	}
+	if got := text.SegsText(w.kindChip(app, listed, 0, true)); strings.Contains(got, glyphs.G("trough")) || !strings.Contains(got, "dispatched") || strings.Contains(got, "1m") {
+		t.Errorf("the compact chip is the phase without the rail or the clock: %q", got)
 	}
 	row := workflow.Row{Kind: RowRelease, Item: listed}
 	if !w.RowKinds()[RowRelease].Live(app, row) {
@@ -615,6 +621,107 @@ func TestAnnounceOnce(t *testing.T) {
 	}
 	if fails != 1 || app.Launched != 0 {
 		t.Errorf("one failure toast, no launch: %d %d\n%v", fails, app.Launched, app.Log)
+	}
+}
+
+// TestRedispatchAfterAnOutcomeComment: a release that failed by its
+// outcome comment and is sent again is followed again, and its second
+// failure is announced like the first.
+func TestRedispatchAfterAnOutcomeComment(t *testing.T) {
+	w, app, pr := pollFixture(t)
+	failed := "## Release FAILED: the deploy did not succeed (release-now)\n\nOutcome: `deploy_failed` — migrate.yml failed\n"
+	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), failed))
+	clock.Now = func() time.Time { return utc(3, 6) }
+	poll(t, w, app)
+	if p, _ := w.progressOf(pr); p.Phase != PhaseFailed || w.Live(app) {
+		t.Fatalf("first flight failed: %+v", p)
+	}
+	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 7), `/release-now "`+reason+` again"`))
+	pr.UpdatedAt = utc(3, 7)
+	clock.Now = func() time.Time { return utc(3, 8) }
+	s, _, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	w.Apply(app, s)
+	w.AfterApply(app)
+	if p, _ := w.progressOf(pr); p.Phase != PhaseDispatched || !w.Live(app) {
+		t.Fatalf("the new command reopens the flight: %+v", p)
+	}
+	newer := *runAt(utcS(3, 7, 20), "in_progress", "")
+	newer.ID = 92
+	app.Fake.FileRuns = map[string][]model.WorkflowRun{"acme/infra:apply.yml": {newer}}
+	app.Fake.Jobs = map[int64][]model.WorkflowJob{92: {*jobAt(2, utcS(3, 7, 30), 1)}}
+	poll(t, w, app)
+	if p, _ := w.progressOf(pr); p.RunID != 92 {
+		t.Fatalf("the new run is followed: %+v", p)
+	}
+	app.Fake.FileRuns["acme/infra:apply.yml"][0].Status = "completed"
+	fj := jobAt(9, utcS(3, 7, 30), 1)
+	fj.Status, fj.Conclusion, fj.CompletedAt = "completed", "failure", utc(3, 12)
+	fj.Steps[9].Status, fj.Steps[9].Conclusion = "completed", "failure"
+	app.Fake.Jobs[92] = []model.WorkflowJob{*fj}
+	clock.Now = func() time.Time { return utc(3, 13) }
+	poll(t, w, app)
+	fails := 0
+	for _, l := range app.Log {
+		if strings.HasPrefix(l, "fail: ") && strings.Contains(l, "release FAILED") {
+			fails++
+		}
+	}
+	if fails != 2 {
+		t.Errorf("each flight's failure is announced: %v", app.Log)
+	}
+}
+
+// TestStartupIsQuiet: what finished, or was lost, before the session
+// began is drawn but not announced.
+func TestStartupIsQuiet(t *testing.T) {
+	patchNow(t, utc(3, 0))
+	w, app := newWF(t, true)
+	done := approved(makeRelease(relOpts{}), "alice")
+	stale := approved(makeRelease(relOpts{number: 43}), "alice")
+	app.Fake.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {PRs: []*model.PR{done, stale}, ProdOid: "m", StageOid: "s"}}
+	app.Fake.Comments = map[model.Ident][]model.Comment{
+		done.Ident():  {comment(utc(2, 40), `/release-now "`+reason+`"`), comment(utc(2, 50), "## Release FAILED: merge refused (release-now)\n\nOutcome: `refused` — stale\n")},
+		stale.Ident(): {comment(utc(3, 0).Add(-48*time.Hour), `/release-now "`+reason+`"`)},
+	}
+	s, _, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Apply(app, s)
+	w.AfterApply(app)
+	if p, _ := w.progressOf(done); p.Phase != PhaseRefused {
+		t.Errorf("the finished one is drawn: %+v", p)
+	}
+	if p, _ := w.progressOf(stale); p.Phase != PhaseLost {
+		t.Errorf("the stale one is drawn lost: %+v", p)
+	}
+	for _, l := range app.Log {
+		if strings.Contains(l, "refused") || strings.Contains(l, "lost track") {
+			t.Errorf("nothing from before the session is announced: %v", app.Log)
+		}
+	}
+	if app.Launched != 0 {
+		t.Errorf("no launch: %d", app.Launched)
+	}
+}
+
+// TestTerminalClocksStop: a finished release's UpdatedAt is when it
+// finished, whenever it is derived; a lost one is frozen at its timeout.
+func TestTerminalClocksStop(t *testing.T) {
+	w, _ := newWF(t, true)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	job := jobAt(13, utcS(3, 0, 30), 1)
+	mut := func(tr *track) { tr.run, tr.job = runAt(utc(3, 0), "completed", "success"), job }
+	a := deriveWith(w, pr, mut, utc(3, 10))
+	b := deriveWith(w, pr, mut, utc(4, 0))
+	if a.Phase != PhaseReleased || !a.UpdatedAt.Equal(job.CompletedAt) || !b.UpdatedAt.Equal(a.UpdatedAt) {
+		t.Errorf("released at the job's end: %v %v (job %v)", a.UpdatedAt, b.UpdatedAt, job.CompletedAt)
+	}
+	posted := func(tr *track) { tr.nowPostedAt = utc(3, 0) }
+	l1 := deriveWith(w, pr, posted, utc(5, 0))
+	l2 := deriveWith(w, pr, posted, utc(9, 0))
+	if l1.Phase != PhaseLost || l1.Detail != l2.Detail || !l1.UpdatedAt.Equal(l2.UpdatedAt) {
+		t.Errorf("lost is frozen: %+v / %+v", l1, l2)
 	}
 }
 
@@ -690,7 +797,7 @@ func TestQueuedByApproval(t *testing.T) {
 		}
 	}
 	// released NOW: in flight, back in the releases section with its rail
-	w.notePosted(st.Find(rel.Ident()), utc(3, 0))
+	w.notePosted(st.Find(rel.Ident()), utc(3, 0), true)
 	if w.queued(st.Find(rel.Ident())) || len(st.QueuedForWindow()) != 0 {
 		t.Error("a release in flight is not queued")
 	}

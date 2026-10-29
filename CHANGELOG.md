@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
 ### Added
 
@@ -24,6 +24,49 @@
   answer `D` before the merged-PR path; `ghapi.Client` gained
   `RepoWaitingRuns`; `model.WorkflowRun` carries `HeadBranch` and `Actor`,
   `model.PendingDeployment` its `Reviewers`.
+
+### Fixed
+
+- `release_pr` live progress:
+  - A `/release-now` posted again after an outcome comment is followed
+    again. Before, the old outcome won and the new run was never looked for.
+  - Each flight's outcome is announced, so a second failure toasts like
+    the first. A release that finished, or was lost, before the dashboard
+    started is drawn but not announced on every launch.
+  - A finished release's T+ clock and "released … after X" stop at the
+    finish. A lost one stops at the timeout.
+  - A failed dispatch to the manifest repo says on the card that nothing
+    will pick the release up on its own.
+  - A manifest "run cancelled" reads *cancelled*, not *failed*.
+  - The poll clears the last cycle's error. The card says what happens
+    next instead of always "retrying".
+  - A hotfix's `a` menu no longer offers a queue it never joins.
+- A poll that read the world before a refresh landed no longer overwrites
+  the refresh's newer data. A poll that fails or panics says so on the
+  warn line instead of freezing the rail in silence.
+- An open release in flight no longer re-renders its whole description and
+  comment thread every frame: the markdown is kept while only the card
+  moves.
+- The release row's kind column is measured with the widest clock, so the
+  columns no longer slide as the clock grows. A narrower list keeps a
+  phase-only chip before it drops the column. The card's phase names line
+  up and fit *waiting for slot*.
+- Eight screenshots in `docs/workflows/` pointed at `docs/docs/shots/`.
+  The gallery test now resolves every image from its doc.
+
+### Changed
+
+- `config check` says where `/release-now` is dispatched and whether
+  releases are followed live, and probes the manifest repo for write and
+  for its apply workflow's runs.
+- Config: `progress_poll_secs` has a floor of 10 and `apply_workflow`
+  must be a file name. Warnings for an `apply_run_match` without
+  `{number}`, and for dispatch or live-progress keys set while the
+  maintenance window is off.
+- Each screenshot's caption lives in one place (`ui.ShotCaptions`), and
+  every doc's alt text must match it. The demo's pull requests have
+  descriptions of their own, and the unicode shot uses the app's own
+  glyph setup.
 
 ## [1.4.1]
 
@@ -68,6 +111,7 @@
   account or a read-only collaborator is caught before the first `a` hits
   a 403. The closing line now says what was probed and what was not
   (fine-grained grants, Actions write, protection rules). (#8)
+
 ## [1.3.0]
 
 ### Added
@@ -83,6 +127,12 @@
   comment landed is reported on the status line with a pointer at `M`.
   The token needs Contents write on the manifest repo for it (#11).
 - `ghapi.Client` gained `PostComment` (the comment's id) and `Dispatch`.
+
+### Fixed
+
+- The release workflow's notes step matched the CHANGELOG heading
+  `[X.Y.Z]` against the tag with its brackets, so it found no notes. It
+  now strips the brackets first.
 
 ## [1.2.0]
 

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
@@ -18,7 +17,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
-var imgRE = regexp.MustCompile(`!\[([^\]]*)\]\(((?:\.\./)*(?:docs/)?shots/([a-z0-9-]+)\.png)\)`)
+var imgRE = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]*shots/([a-z0-9-]+)\.png)\)`)
 
 // docFiles are the markdown files that may embed the gallery.
 func docFiles(t *testing.T) []string {
@@ -36,8 +35,9 @@ func docFiles(t *testing.T) []string {
 }
 
 // TestGalleryMatchesTheDocs: every picture a doc embeds is a shot of the
-// manifest with a committed PNG and non-empty alt text, and every shot is
-// embedded somewhere (no orphans); no two shots share a name.
+// manifest, by a path that resolves from that doc to the committed PNG,
+// with the shot's caption as its alt text; every shot has a caption and
+// is embedded somewhere (no orphans); no two shots share a name.
 func TestGalleryMatchesTheDocs(t *testing.T) {
 	names := map[string]bool{}
 	for _, s := range shots {
@@ -45,8 +45,8 @@ func TestGalleryMatchesTheDocs(t *testing.T) {
 			t.Errorf("shot %q twice", s.Name)
 		}
 		names[s.Name] = true
-		if s.Caption == "" {
-			t.Errorf("shot %q has no caption", s.Name)
+		if ui.ShotCaptions[s.Name] == "" {
+			t.Errorf("shot %q has no caption in ui.ShotCaptions", s.Name)
 		}
 		if _, err := os.Stat(filepath.Join("..", "..", "docs", "shots", s.Name+".png")); err != nil {
 			t.Errorf("shot %q has no PNG: run go run ./cmd/screenshot", s.Name)
@@ -62,8 +62,11 @@ func TestGalleryMatchesTheDocs(t *testing.T) {
 			if !names[m[3]] {
 				t.Errorf("%s embeds %s, which is not a shot", filepath.Base(f), m[2])
 			}
-			if strings.TrimSpace(m[1]) == "" {
-				t.Errorf("%s: %s has no alt text", filepath.Base(f), m[2])
+			if _, err := os.Stat(filepath.Join(filepath.Dir(f), filepath.FromSlash(m[2]))); err != nil {
+				t.Errorf("%s: %s does not resolve from the doc", filepath.Base(f), m[2])
+			}
+			if want := ui.ShotCaptions[m[3]]; m[1] != want {
+				t.Errorf("%s: %s alt text\n got %q\nwant %q (ui.ShotCaptions)", filepath.Base(f), m[2], m[1], want)
 			}
 			used[m[3]] = true
 		}
@@ -71,6 +74,11 @@ func TestGalleryMatchesTheDocs(t *testing.T) {
 	for n := range names {
 		if !used[n] {
 			t.Errorf("shot %q is embedded by no doc", n)
+		}
+	}
+	for n := range ui.ShotCaptions {
+		if !names[n] {
+			t.Errorf("caption %q names no shot", n)
 		}
 	}
 }

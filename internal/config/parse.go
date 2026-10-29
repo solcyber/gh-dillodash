@@ -671,6 +671,9 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.ReleaseNowDispatch = t.boolean("release_now_dispatch", w.ReleaseNowDispatch)
 	w.ReleaseNowDispatchEvent = t.nonEmpty("release_now_dispatch_event", w.ReleaseNowDispatchEvent)
 	w.ApplyWorkflow = strings.TrimSpace(t.str("apply_workflow", w.ApplyWorkflow))
+	if strings.Contains(w.ApplyWorkflow, "/") {
+		t.errf("apply_workflow", "%q must be the workflow's file name (apply.yml), not a path", w.ApplyWorkflow)
+	}
 	w.ApplyRunMatch = t.nonEmpty("apply_run_match", w.ApplyRunMatch)
 	for _, ph := range placeholderRE.FindAllString(w.ApplyRunMatch, -1) {
 		switch ph {
@@ -679,9 +682,16 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 			t.errf("apply_run_match", "unknown placeholder %s (allowed: {repo} {number})", ph)
 		}
 	}
+	if !strings.Contains(w.ApplyRunMatch, "{number}") {
+		t.warnf("apply_run_match", "%q has no {number}: every release of a repo would match the same run", w.ApplyRunMatch)
+	}
 	w.ProgressPollSecs = t.int("progress_poll_secs", w.ProgressPollSecs)
+	if w.ProgressPollSecs > 0 && w.ProgressPollSecs < MinProgressPollSecs {
+		t.warnf("progress_poll_secs", "%d is below the floor of %d, using %d", w.ProgressPollSecs, MinProgressPollSecs, MinProgressPollSecs)
+		w.ProgressPollSecs = MinProgressPollSecs
+	}
 	w.ProgressTimeoutSecs = t.int("progress_timeout_secs", w.ProgressTimeoutSecs)
-	w.ApprovalQueuesForWindow = t.boolean("approval_queues_for_window", false)
+	w.ApprovalQueuesForWindow = t.boolean("approval_queues_for_window", w.ApprovalQueuesForWindow)
 	w.MergeMethod = t.choice("merge_method", w.MergeMethod, MergeChoices)
 	w.MergedKeepSecs = t.int("merged_keep_secs", w.MergedKeepSecs)
 	w.DeployStuckSecs = t.int("deploy_stuck_secs", w.DeployStuckSecs)
@@ -721,6 +731,14 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.Cache = p.expandCache(w.Cache, w.Org)
 	if w.ApprovalQueuesForWindow && cfg.MaintenanceWindow == nil {
 		t.errf("approval_queues_for_window", "true needs [workflows.maintenance_window] enabled = true")
+	}
+	if cfg.MaintenanceWindow == nil {
+		// the manifest repo is where the dispatch goes and the run lives
+		for _, k := range []string{"release_now_dispatch", "apply_workflow", "progress_poll_secs"} {
+			if _, set := t.m[k]; set {
+				t.warnf(k, "has no effect without [workflows.maintenance_window] enabled = true (its manifest_repo runs the release)")
+			}
+		}
 	}
 	cfg.ReleasePR = w
 }
