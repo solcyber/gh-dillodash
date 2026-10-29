@@ -80,3 +80,15 @@ func TestPutRaw(t *testing.T) {
 		t.Errorf("render:\n%q\nwant\n%q", got, want)
 	}
 }
+
+// TestRawSegs: a raw segment (text.Raw) paints its cells like PutRaw.
+func TestRawSegs(t *testing.T) {
+	c := New(4, 1)
+	c.PutStr(0, 0, "abcd", "a")
+	c.Put(0, 1, text.Raw("▀▄", "\x1b[38;2;1;2;3m"))
+	got := c.Render(plain)
+	want := "<a>a</>\x1b[0m\x1b[38;2;1;2;3m▀\x1b[0m\x1b[0m\x1b[38;2;1;2;3m▄\x1b[0m<a>d</>"
+	if got != want {
+		t.Errorf("render:\n%q\nwant\n%q", got, want)
+	}
+}

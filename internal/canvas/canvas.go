@@ -163,6 +163,9 @@ func (c *Canvas) putRun(y, x int, s, style string, extra text.Attr, sel, band bo
 			c.cells[y][x-1] = cell{g: " ", width: 1, style: c.cells[y][x-1].style, sel: c.cells[y][x-1].sel, band: c.cells[y][x-1].band}
 		}
 		c.cells[y][x] = cell{g: gs, width: w, style: style, extra: extra, sel: sel, band: band}
+		if raw, ok := strings.CutPrefix(style, text.RawPrefix); ok && w == 1 {
+			c.cells[y][x] = cell{g: gs, width: 1, raw: raw}
+		}
 		if w == 2 {
 			c.cells[y][x+1] = cell{width: 0, style: style, extra: extra, sel: sel, band: band}
 		}

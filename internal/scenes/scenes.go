@@ -80,6 +80,13 @@ func useAmos(tier theme.Tier, h, w, rows int) bool {
 		w >= amos.Width()+4 && h >= amos.Height()+rows
 }
 
+// MiniAmos says whether the small Amos (amos.Options.Mini) can be drawn:
+// useAmos's terminal and glyph checks, without the room (the caller
+// measures that).
+func MiniAmos(tier theme.Tier) bool {
+	return Mascot == "sprite" && tier >= theme.Color256 && glyphs.Active() != glyphs.ASCII
+}
+
 // paintAmos paints the sprite with its top-left at (y, x), leaving the
 // transparent cells alone.
 func paintAmos(c *canvas.Canvas, y, x int, o amos.Options) {

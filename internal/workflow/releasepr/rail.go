@@ -5,9 +5,10 @@ package releasepr
 // gold head that breathes while the current phase runs and a sweep of
 // light when the phase changes. On the row it sits inside the kind chip;
 // in the detail it stretches across the mission-control card, where the
-// steps are listed with their clocks and Amos walks the rail. Everything
-// here draws from the glyph sets and the theme's ramps, so the ASCII set
-// and motion=off get a plain, honest meter.
+// steps are listed with their clocks and Amos walks the rail (the small
+// sprite, in his own colors, where the terminal can show it). Everything
+// else here draws from the glyph sets and the theme's ramps, so the ASCII
+// set and motion=off get a plain, honest meter.
 
 import (
 	"fmt"
@@ -15,12 +16,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/amos"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
+	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
@@ -444,7 +447,7 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 		head = append(head, text.S(clock, cstyle))
 	}
 	out = append(out, scenes.CardLines(head, width, inner)...)
-	// Amos walks the rail (two rows above it)
+	// Amos walks the rail, just above it
 	ident := fmt.Sprintf("%s#%d", pr.Repo.Name, pr.Number)
 	railW := max(1, inner-4)
 	f := app.Fx()
@@ -512,39 +515,58 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	return out
 }
 
-// Amos, small enough to walk a card: two rows, facing right.
+// Amos in line art, for where the small sprite cannot draw (the ASCII
+// glyphs, mascot = "ascii", 16 colors or none): two rows, facing right.
 var (
 	amosSmall     = []string{`  .-==-.  `, `(__\_\_(o>`}
 	amosSmallStep = []string{`  .-==-.  `, `(_/\_/_(o>`}
 )
 
 // amosOnRail is Amos at the rail's fill, walking while live, with a
-// spark over his head once released and sitting still on a failure.
+// spark over his head once released and sitting still once it ends. The
+// small sprite keeps his colors through a failure (the striped rail says
+// it); the line art goes gold for a release and gray for the rest.
 func amosOnRail(p Progress, frac float64, railW int, live bool) [][]text.Seg {
-	art := amosSmall
-	style := "art"
 	ambient := live && fx.Ambient && fx.Motion == "full"
-	if ambient && int(fx.Now()*4)%2 == 1 {
-		art = amosSmallStep
+	step := ambient && int(fx.Now()*4)%2 == 1
+	var rows [][]text.Seg
+	var aw int
+	if scenes.MiniAmos(theme.Current()) {
+		o := amos.Options{Mini: true}
+		if step {
+			o.Frame = 1
+		}
+		aw, _ = amos.Size(o)
+		rows = amos.Segs(o)
+	} else {
+		art := amosSmall
+		if step {
+			art = amosSmallStep
+		}
+		style := "art"
+		switch {
+		case p.Phase == PhaseReleased:
+			style = "fx.g2"
+		case p.Terminal:
+			style = "fx.k2"
+		}
+		aw = len([]rune(art[0]))
+		for _, ln := range art {
+			rows = append(rows, []text.Seg{text.S(ln, style)})
+		}
 	}
-	switch {
-	case p.Phase == PhaseReleased:
-		style = "fx.g2"
-	case p.Terminal:
-		style = "fx.k2"
-	}
-	aw := len([]rune(art[0]))
 	x := 2 + int(math.Round(frac*float64(max(0, railW-aw))))
-	rows := make([][]text.Seg, 0, 3)
+	pad := text.S(strings.Repeat(" ", x), "text")
+	out := make([][]text.Seg, 0, len(rows)+1)
 	if p.Phase == PhaseReleased {
 		spark := scenes.RuneAt(glyphs.G("spark"), 3+int(fx.Now())%2)
 		if fx.Motion != "full" {
 			spark = scenes.RuneAt(glyphs.G("spark"), 3)
 		}
-		rows = append(rows, []text.Seg{text.S(strings.Repeat(" ", x+aw-3)+spark, "fx.g3")})
+		out = append(out, []text.Seg{text.S(strings.Repeat(" ", x+aw-3)+spark, "fx.g3")})
 	}
-	for _, ln := range art {
-		rows = append(rows, []text.Seg{text.S(strings.Repeat(" ", x)+ln, style)})
+	for _, r := range rows {
+		out = append(out, append([]text.Seg{pad}, r...))
 	}
-	return rows
+	return out
 }

@@ -158,7 +158,7 @@ new run.
 - **The detail's mission control**, in the release card: the state chip,
   the run and attempt (or the night and slot), a `T+` clock since the
   command (`T-` to the slot), the rail across the card with Amos walking
-  it, one row per phase with its glyph and clock and a technical tail
+  it (the splash's Amos, small, in his own colors), one row per phase with its glyph and clock and a technical tail
   (the merge sha, `n/m runs`, the settle countdown, the approver), the
   outcome and the merge once it ends, the run's URL, and the last poll
   error if there was one. It redraws every frame while live.

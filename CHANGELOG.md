@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- The Amos who walks the rail in a release's mission-control card is the
+  splash's Amos, small and in his own colors, where the terminal can show
+  the sprite; the ASCII glyphs, `mascot = "ascii"` and 16 colors keep the
+  line art.
+
 ## [1.5.1]
 
 ### Added

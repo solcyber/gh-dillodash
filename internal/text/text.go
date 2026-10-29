@@ -32,6 +32,14 @@ type Seg struct {
 // S is a one-line constructor for a segment.
 func S(text, style string) Seg { return Seg{Text: text, Style: style} }
 
+// RawPrefix marks a style that is a literal SGR sequence instead of a
+// name: the canvas paints such a segment's cells in exactly those colors
+// (the Amos sprite's own).
+const RawPrefix = "raw:"
+
+// Raw is a segment painted with a literal SGR sequence.
+func Raw(text, sgr string) Seg { return Seg{Text: text, Style: RawPrefix + sgr} }
+
 // Line is one rendered row: its segments, and whether it sits inside a
 // code block (drawn on the band background).
 type Line struct {

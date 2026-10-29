@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/colorprofile"
+
+	"github.com/solcyber/gh-dillodash/internal/amos"
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -12,6 +15,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
+	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
@@ -245,5 +249,39 @@ func TestNarrowListKeepsThePhase(t *testing.T) {
 	clock.Now = func() time.Time { return utc(4, 0) } // the clock grows from 1m to 1h01m
 	if got := text.SegsWidth(w.kindChip(app, listed, -1, false)); got != full {
 		t.Errorf("the measured width moved with the clock: %d -> %d", full, got)
+	}
+}
+
+// TestAmosOnRail: on a color terminal Amos walks the rail as the small
+// sprite in his own colors, at the fill; elsewhere as the line art.
+func TestAmosOnRail(t *testing.T) {
+	t.Cleanup(func() { theme.Setup(0, true); glyphs.Use(glyphs.Nerd) })
+	p := Progress{Phase: PhaseDeploying}
+	theme.Setup(colorprofile.ANSI256, false)
+	glyphs.Use(glyphs.Unicode)
+	rows := amosOnRail(p, 0.5, 60, false)
+	w, h := amos.Size(amos.Options{Mini: true})
+	if len(rows) != h {
+		t.Fatalf("%d rows, want the sprite's %d", len(rows), h)
+	}
+	raw := false
+	for _, r := range rows {
+		if n := text.SegsWidth(r); n > 2+60 {
+			t.Errorf("row is %d wide, past the rail", n)
+		}
+		for _, s := range r {
+			raw = raw || strings.HasPrefix(s.Style, text.RawPrefix)
+		}
+	}
+	if !raw {
+		t.Error("the sprite draws in raw colors")
+	}
+	if x := 2 + (60-w)/2; !strings.HasPrefix(text.SegsText(rows[0]), strings.Repeat(" ", x)) {
+		t.Errorf("Amos should stand at the fill, column %d: %q", x, text.SegsText(rows[0]))
+	}
+	glyphs.Use(glyphs.ASCII)
+	rows = amosOnRail(p, 0.5, 60, false)
+	if len(rows) != len(amosSmall) || !strings.Contains(text.SegsText(rows[1]), "(o>") {
+		t.Errorf("ASCII glyphs get the line art: %q", rows)
 	}
 }

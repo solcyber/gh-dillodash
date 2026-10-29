@@ -22,6 +22,31 @@ type Options struct {
 	// Bg, when set, fills the transparent half of a cell so the sprite
 	// sits on a colored background instead of the terminal default.
 	Bg *RGB
+	// Mini draws the small Amos (the sprite at a third of its size), the
+	// one that walks the release rail.
+	Mini bool
+}
+
+// art is a sprite's pixels: palette indices, 0 transparent.
+type art struct {
+	w, h  int
+	cells [][]uint8
+}
+
+// full is the sprite as generated.
+var full = func() art {
+	a := art{w: spriteW, h: spriteH, cells: make([][]uint8, spriteH)}
+	for r := range a.cells {
+		a.cells[r] = spriteCells[r][:]
+	}
+	return a
+}()
+
+func (o Options) art() art {
+	if o.Mini {
+		return mini
+	}
+	return full
 }
 
 // Width is the sprite's width in terminal cells.
@@ -30,37 +55,44 @@ func Width() int { return spriteW }
 // Height is the sprite's height in terminal rows (two pixels per row).
 func Height() int { return (spriteH + 1) / 2 }
 
+// Size is the rendering's width and height in terminal cells.
+func Size(o Options) (w, h int) {
+	a := o.art()
+	return a.w, (a.h + 1) / 2
+}
+
 // Palette returns the sprite's colors (index 0 is transparent).
 func Palette() []RGB { return append([]RGB(nil), spritePalette...) }
 
 // grid returns the art pixels after the frame transform, as palette
-// indices; 0 is transparent. The returned grid is spriteH+1 rows tall so
-// the one-pixel bob of frame 1 has room.
+// indices; 0 is transparent. The returned grid is one row taller than the
+// art so the one-pixel bob of frame 1 has room.
 func grid(o Options) [][]uint8 {
-	rows := spriteH + 1
+	a := o.art()
+	rows := a.h + 1
 	g := make([][]uint8, rows)
 	for r := range g {
-		g[r] = make([]uint8, spriteW)
+		g[r] = make([]uint8, a.w)
 	}
 	step := o.Frame%2 == 1
 	dy := 0
 	if step {
 		dy = 1
 	}
-	for r := 0; r < spriteH; r++ {
-		for c := 0; c < spriteW; c++ {
-			v := spriteCells[r][c]
+	for r := 0; r < a.h; r++ {
+		for c := 0; c < a.w; c++ {
+			v := a.cells[r][c]
 			if v == 0 {
 				continue
 			}
 			cc := c
 			// mid-step: the legs (the bottom fifth of the art) swing a
 			// pixel forward; everything bobs down one pixel
-			if step && r >= spriteH*4/5 {
+			if step && r >= a.h*4/5 {
 				cc = c + 1
 			}
 			rr := r + dy
-			if cc < 0 || cc >= spriteW || rr >= rows {
+			if cc < 0 || cc >= a.w || rr >= rows {
 				continue
 			}
 			g[rr][cc] = v
@@ -68,7 +100,7 @@ func grid(o Options) [][]uint8 {
 	}
 	if o.Mirror {
 		for r := range g {
-			for i, j := 0, spriteW-1; i < j; i, j = i+1, j-1 {
+			for i, j := 0, a.w-1; i < j; i, j = i+1, j-1 {
 				g[r][i], g[r][j] = g[r][j], g[r][i]
 			}
 		}
@@ -85,16 +117,17 @@ const (
 func fg(c RGB) string { return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B) }
 func bg(c RGB) string { return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B) }
 
-// Lines renders the sprite as Height() lines of ANSI-styled text, each
-// Width() cells wide. Colors are 24-bit SGR sequences; the terminal
+// Lines renders the sprite as lines of ANSI-styled text, Size(o) wide
+// and tall. Colors are 24-bit SGR sequences; the terminal
 // renderer downgrades them where the terminal cannot show them.
 func Lines(o Options) []string {
 	g := grid(o)
-	out := make([]string, 0, Height())
-	for r := 0; r < spriteH; r += 2 {
+	a := o.art()
+	out := make([]string, 0, (a.h+1)/2)
+	for r := 0; r < a.h; r += 2 {
 		var b strings.Builder
 		var cur string
-		for c := 0; c < spriteW; c++ {
+		for c := 0; c < a.w; c++ {
 			top := spritePalette[g[r][c]]
 			topSet := g[r][c] != 0
 			botSet := false
@@ -135,14 +168,15 @@ type Cell struct {
 }
 
 // Cells renders the sprite cell by cell for painting onto a canvas:
-// Height() rows of Width() cells. A transparent cell has an empty SGR
+// Size(o) rows and cells. A transparent cell has an empty SGR
 // and a space glyph (with Bg set it carries the background instead).
 func Cells(o Options) [][]Cell {
 	g := grid(o)
-	out := make([][]Cell, 0, Height())
-	for r := 0; r < spriteH; r += 2 {
-		row := make([]Cell, spriteW)
-		for c := 0; c < spriteW; c++ {
+	a := o.art()
+	out := make([][]Cell, 0, (a.h+1)/2)
+	for r := 0; r < a.h; r += 2 {
+		row := make([]Cell, a.w)
+		for c := 0; c < a.w; c++ {
 			top := spritePalette[g[r][c]]
 			topSet := g[r][c] != 0
 			botSet := false
@@ -180,10 +214,11 @@ func bgOr(c *RGB) string {
 // get the line-art armadillo instead.
 func Plain(o Options) []string {
 	g := grid(o)
-	out := make([]string, 0, Height())
-	for r := 0; r < spriteH; r += 2 {
+	a := o.art()
+	out := make([]string, 0, (a.h+1)/2)
+	for r := 0; r < a.h; r += 2 {
 		var b strings.Builder
-		for c := 0; c < spriteW; c++ {
+		for c := 0; c < a.w; c++ {
 			v := g[r][c]
 			if r+1 < len(g) && v == 0 {
 				v = g[r+1][c]
