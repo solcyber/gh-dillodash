@@ -110,9 +110,11 @@ type State struct {
 	Repos    []model.Repo
 	Warnings []string
 
-	queuedLabel    string
-	scheduledLabel string // the window's scheduled label, for ScheduledForWindow
-	byIdent        map[model.Ident]*model.PR
+	queuedLabel      string
+	scheduledLabel   string    // the window's scheduled label, for ScheduledForWindow
+	queuesByApproval bool      // approval_queues_for_window with the window on: a review queues
+	w                *Workflow // the tracker, for inFlight
+	byIdent          map[model.Ident]*model.PR
 }
 
 var (
@@ -134,19 +136,63 @@ func (s *State) CIPRs() []*model.PR {
 // ProvidesDeploys: merged releases wait on environment approvals.
 func (w *Workflow) ProvidesDeploys() bool { return true }
 
-// QueuedForWindow lists the release PRs carrying the maintenance window's
-// queued label, for the window workflow to list under their night.
+// QueuedForWindow lists the releases queued for the maintenance window,
+// for the window workflow to list under their night: those carrying the
+// window's queued label, and, with approval_queues_for_window, those an
+// approving review queues (the conductor labels nothing before the
+// freeze: the review is the queue signal).
 func (s *State) QueuedForWindow() []*model.PR {
-	if s == nil || s.queuedLabel == "" {
+	if s == nil || (s.queuedLabel == "" && !s.queuesByApproval) {
 		return nil
 	}
+	now := clock.Now()
 	var out []*model.PR
 	for _, p := range s.Releases {
-		if p.Labels.Has(s.queuedLabel) {
+		kind := ""
+		if i := InfoOf(p); i != nil {
+			kind = i.Kind
+		}
+		if queuedFor(p, kind, s.queuedLabel, s.queuesByApproval, now) && !s.w.inFlight(p) {
 			out = append(out, p)
 		}
 	}
 	return out
+}
+
+// inFlight reports a release the tracker is following past its slot
+// (dispatched, or running): it belongs in the releases section with its
+// rail, not under the night. A scheduled one, or one waiting for its
+// slot, still sits under the night; a finished one is queued again by
+// its standing approval, as the conductor would.
+func (w *Workflow) inFlight(pr *model.PR) bool {
+	if w == nil {
+		return false
+	}
+	p, ok := w.progressOf(pr)
+	return ok && !p.Terminal && p.Phase != PhaseScheduled && p.Phase != PhaseWaitingSlot
+}
+
+// approvalQueueAge is how long an approving review keeps a release
+// queued: the conductor's three nights; older, it asks for a fresh one.
+const approvalQueueAge = 72 * time.Hour
+
+// queuedFor reports a release queued for the window: by the queued label,
+// or by an approving review when byApproval is set (an open, non-draft
+// release, never a hotfix, with an APPROVED review no older than three
+// nights; a review with no submittedAt counts).
+func queuedFor(pr *model.PR, kind, queuedLabel string, byApproval bool, now time.Time) bool {
+	if queuedLabel != "" && pr.Labels.Has(queuedLabel) {
+		return true
+	}
+	if !byApproval || pr.IsDraft || kind != KindRelease || (pr.State != "" && pr.State != "OPEN") {
+		return false
+	}
+	for _, r := range pr.Opinions.Nodes {
+		if r.State == "APPROVED" && (r.SubmittedAt.IsZero() || now.Sub(r.SubmittedAt) <= approvalQueueAge) {
+			return true
+		}
+	}
+	return false
 }
 
 // Find returns the listed release PR with that identity, or nil.
@@ -287,10 +333,11 @@ func (w *Workflow) Current() *State {
 // good rows.
 func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo, _ []*model.PR, _ []*model.Issue) (workflow.State, []string, error) {
 	now := clock.Now()
-	st := &State{}
+	st := &State{w: w}
 	if w.win != nil {
 		st.queuedLabel = w.win.QueuedLabel
 		st.scheduledLabel = w.win.ScheduledLabel
+		st.queuesByApproval = w.cfg.ApprovalQueuesForWindow
 	}
 	var warns []string
 	names, warn := w.repoNames(ctx, gh, now)

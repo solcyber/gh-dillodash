@@ -205,7 +205,7 @@ fragment RelPR on PullRequest {
   baseRefName additions deletions
   author { login }
   labels(first: 10) { nodes { name } }
-  latestOpinionatedReviews(first: 20) { nodes { author { login } state } }
+  latestOpinionatedReviews(first: 20) { nodes { author { login } state submittedAt } }
   commits(last: 1) { nodes { commit { committedDate statusCheckRollup {
     state contexts(first: 50) { totalCount nodes { __typename
       ... on CheckRun { name status conclusion }

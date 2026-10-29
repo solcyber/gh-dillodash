@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.1]
+
+### Fixed
+
+- With `approval_queues_for_window = true`, an approved release now shows
+  under its night in the window section, the way the conductor sees it:
+  the approving review is the queue signal and nothing is labelled before
+  the freeze, so a release waited for a `window:queued` label that never
+  comes. The rule is the conductor's: an open, non-draft `release/*` PR
+  with an APPROVED review no older than three nights; a hotfix never
+  queues; a release on its way (released NOW, or at its slot) is back
+  among the releases with its rail. The release query now reads each
+  review's `submittedAt` for the age.
+
 ## [1.4.0]
 
 ### Added
@@ -174,6 +188,7 @@ dashboard, as a GitHub CLI extension.
 - Fortress mode, the splash, wipes, confetti, the release launch, and Amos.
 - The bundled Hack Nerd Font Mono and `font install`.
 
+[1.4.1]: https://github.com/solcyber/gh-dillodash/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/solcyber/gh-dillodash/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/solcyber/gh-dillodash/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/solcyber/gh-dillodash/compare/v1.1.0...v1.2.0

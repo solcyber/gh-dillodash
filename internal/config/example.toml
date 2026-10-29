@@ -110,7 +110,7 @@ enabled = false
 # apply_run_match = "rel:{repo}#{number}"   # what names the release in that run's title; placeholders {repo} {number}
 # progress_poll_secs = 30                   # follow a release in flight this often (0 = no live progress)
 # progress_timeout_secs = 5400              # stop following a release with no outcome after this long
-# approval_queues_for_window = false        # approving queues the release for the maintenance window
+# approval_queues_for_window = false        # an approving review queues the release for the maintenance window (it shows under its night)
 # merge_method = "merge"                    # merge | squash | rebase
 # merged_keep_secs = 43200                  # keep a merged release listed this long
 # deploy_stuck_secs = 2700                  # flag a deploy still running after this long

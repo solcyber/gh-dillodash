@@ -594,7 +594,7 @@ func TestReleases(t *testing.T) {
 			w.CancelText(tf42, &tfItem) == "/window-cancel #42")
 	app.PRs = []*model.PR{tf42}
 	app.IssueList = []*model.Issue{m3891}
-	app.SetState(ReleaseState, releases{rel42, {Repo: portal, Number: 44, Title: "open release"}})
+	app.SetState(ReleaseState, releases{rel42}) // the release workflow lists only what it queues
 	app.SetState(Name, &State{Manifests: mans, Nights: map[string]*Night{mn: {Issue: 3891, Phase: "frozen", Items: []Item{tfItem, relItem}}}})
 	rows = w.Sections(app, nil, "alice")
 	check(t, "the queued release sits under its night", eq(rowShape(rows), []string{"header:queued for the maintenance window (2)", "header:window 2026-10-26 23:00 ET, tonight", "issue:3891", "queued:42", "release:42"}))

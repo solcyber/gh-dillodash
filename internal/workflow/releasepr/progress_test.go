@@ -655,3 +655,53 @@ func TestProgressRace(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+// TestQueuedByApproval: with approval_queues_for_window the approving
+// review queues a release (the conductor labels nothing before the
+// freeze); a hotfix, a draft, a stale approval or a release in flight
+// is not queued, and without the window nothing is.
+func TestQueuedByApproval(t *testing.T) {
+	patchNow(t, utc(3, 0))
+	w, app := newWF(t, true)
+	rel := approved(makeRelease(relOpts{}), "carol")
+	rel.Opinions.Nodes[0].SubmittedAt = utc(1, 0)
+	hot := approved(makeRelease(relOpts{kind: KindHotfix, number: 45}), "carol")
+	draft := approved(makeRelease(relOpts{number: 46, draft: true}), "carol")
+	stale := approved(makeRelease(relOpts{number: 47}), "carol")
+	stale.Opinions.Nodes[0].SubmittedAt = utc(3, 0).Add(-4 * 24 * time.Hour)
+	plain := makeRelease(relOpts{number: 48})
+	if !w.queued(rel) || w.queued(hot) || w.queued(draft) || w.queued(stale) || w.queued(plain) {
+		t.Errorf("queued: rel=%v hot=%v draft=%v stale=%v plain=%v", w.queued(rel), w.queued(hot), w.queued(draft), w.queued(stale), w.queued(plain))
+	}
+	app.Fake.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {PRs: []*model.PR{rel, hot, draft, stale, plain}, ProdOid: "m", StageOid: "s"}}
+	s, _, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := s.(*State)
+	w.Apply(app, st)
+	if q := st.QueuedForWindow(); len(q) != 1 || q[0].Number != 42 {
+		t.Errorf("QueuedForWindow lists the approved release only: %v", q)
+	}
+	rows := w.Sections(app, nil, "alice")
+	for _, r := range rows {
+		if p, ok := r.Item.(*model.PR); ok && p.Number == 42 {
+			t.Error("a queued release leaves the releases section for the night's")
+		}
+	}
+	// released NOW: in flight, back in the releases section with its rail
+	w.notePosted(st.Find(rel.Ident()), utc(3, 0))
+	if w.queued(st.Find(rel.Ident())) || len(st.QueuedForWindow()) != 0 {
+		t.Error("a release in flight is not queued")
+	}
+	// the window off: approvals queue nothing
+	w2, _ := newWF(t, false)
+	if w2.queued(rel) {
+		t.Error("no window, no queue")
+	}
+	w3, _ := newWF(t, true)
+	w3.cfg.ApprovalQueuesForWindow = false
+	if w3.queued(rel) {
+		t.Error("approval_queues_for_window = false: the label alone queues")
+	}
+}

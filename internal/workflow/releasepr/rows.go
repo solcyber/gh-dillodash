@@ -108,8 +108,18 @@ func (w *Workflow) SearchText(row workflow.Row) string {
 // ---- the list ----
 
 // queued reports a release the window workflow lists under its night.
+// queued reports a release queued for the window: by the conductor's
+// queued label, or, with approval_queues_for_window, by its approving
+// review (what the conductor's freeze picks up).
 func (w *Workflow) queued(pr *model.PR) bool {
-	return w.win != nil && w.win.QueuedLabel != "" && pr.Labels.Has(w.win.QueuedLabel)
+	if w.win == nil {
+		return false
+	}
+	kind := w.Kind(pr)
+	if i := InfoOf(pr); i != nil && i.Kind != "" {
+		kind = i.Kind
+	}
+	return queuedFor(pr, kind, w.win.QueuedLabel, w.cfg.ApprovalQueuesForWindow, clock.Now()) && !w.inFlight(pr)
 }
 
 func matches(parts []string, terms []string) bool {
