@@ -469,6 +469,20 @@ func (s *Set) DeployTarget(app App) *model.PR {
 	return nil
 }
 
+// DeployRow lets the first workflow that handles the list row approve
+// its deployments (RowDeployer); false lets D go on to DeployTarget.
+func (s *Set) DeployRow(app App, row Row) bool {
+	if s == nil {
+		return false
+	}
+	for _, w := range s.Items {
+		if d, ok := w.(RowDeployer); ok && d.DeployRow(app, row) {
+			return true
+		}
+	}
+	return false
+}
+
 // DeployComment returns the first workflow's deployment comment, or "".
 func (s *Set) DeployComment(pr *model.PR, sha string) string {
 	if s == nil {
