@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
@@ -89,6 +90,9 @@ func (w *Workflow) SearchText(row workflow.Row) string {
 		kind := w.Kind(pr)
 		if i := InfoOf(pr); i != nil && i.Kind != "" {
 			kind = i.Kind
+		}
+		if p, ok := w.progressOf(pr); ok {
+			kind += " " + p.Phase
 		}
 		return pr.Repo.Name + " " + kind
 	case RowStage:
@@ -201,6 +205,7 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 			Icon:   "release",
 			Layout: w.releaseLayout,
 			Segs:   w.releaseSegs,
+			Live:   w.rowLive,
 			Title: func(row workflow.Row) string {
 				if pr, ok := row.Item.(*model.PR); ok {
 					return pr.Title
@@ -285,7 +290,7 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 			pr := r.Item.(*model.PR)
 			return w.Label(pr, me, app.LocalApproved(pr))
 		}, 99) + 2,
-		"kind": maxw(items, func(r workflow.Row) string { return w.kindChipText(r.Item.(*model.PR)) }, 99) + 2,
+		"kind": maxw(items, func(r workflow.Row) string { return w.kindChipText(r.Item.(*model.PR), app.Now()) }, 99) + 2,
 		"ci": maxw(items, func(r workflow.Row) string {
 			c, _ := r.Item.(*model.PR).Get(ExtCI).(model.CICluster)
 			return text.SegsText(ciSegs(c.Glyphs))
@@ -307,7 +312,10 @@ func (w *Workflow) stageLayout(_ workflow.App, items []workflow.Row, _, numW, re
 // kindChipText is the kind chip of a release row; a queued one shows
 // its window status instead (the night sub-header already says where),
 // a merged one its deploy.
-func (w *Workflow) kindChipText(pr *model.PR) string {
+func (w *Workflow) kindChipText(pr *model.PR, now time.Time) string {
+	if p, ok := w.progressOf(pr); ok {
+		return w.progressChip(p, now)
+	}
 	if w.queued(pr) {
 		return "queued"
 	}
@@ -327,6 +335,9 @@ func (w *Workflow) kindChipText(pr *model.PR) string {
 }
 
 func (w *Workflow) kindChipStyle(pr *model.PR, ktext string) string {
+	if p, ok := w.progressOf(pr); ok {
+		return progressStyle(p)
+	}
 	if pr.State == "MERGED" {
 		if d, ok := deployOf(pr, nil); ok {
 			if s, ok := deploys.Chip[d.Phase]; ok {
@@ -425,7 +436,7 @@ func (w *Workflow) releaseSegs(app workflow.App, row workflow.Row, L workflow.La
 	segs = append(segs, text.PadSegs(scenes.GlintChip(label, LabelStyle(label), pos, fx.Ambient, mono), L["chip"])...)
 	segs = append(segs, text.S(" ", "text"))
 	if kw, ok := L["kind"]; ok {
-		ktext := w.kindChipText(pr)
+		ktext := w.kindChipText(pr, app.Now())
 		segs = append(segs, text.PadSegs(scenes.Chip(ktext, w.kindChipStyle(pr, ktext)), kw)...)
 		segs = append(segs, text.S(" ", "text"))
 	}

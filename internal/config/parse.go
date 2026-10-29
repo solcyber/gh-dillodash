@@ -575,6 +575,8 @@ func (p *parser) parseMaintenanceWindow(wt *table, cfg *Config) {
 	w.QueuedLabel = t.nonEmpty("queued_label", w.QueuedLabel)
 	w.ScheduledLabel = t.nonEmpty("scheduled_label", w.ScheduledLabel)
 	w.RolledLabel = t.nonEmpty("rolled_label", w.RolledLabel)
+	w.AppliedLabel = t.nonEmpty("applied_label", w.AppliedLabel)
+	w.FailedLabel = t.nonEmpty("failed_label", w.FailedLabel)
 	w.ManifestLabel = t.nonEmpty("manifest_label", w.ManifestLabel)
 	w.ManifestTitle = t.nonEmpty("manifest_title", w.ManifestTitle)
 	if !strings.Contains(w.ManifestTitle, nightPlaceholder) {
@@ -667,6 +669,17 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.ReleaseNowMinReason = t.int("release_now_min_reason", w.ReleaseNowMinReason)
 	w.ReleaseNowDispatch = t.boolean("release_now_dispatch", w.ReleaseNowDispatch)
 	w.ReleaseNowDispatchEvent = t.nonEmpty("release_now_dispatch_event", w.ReleaseNowDispatchEvent)
+	w.ApplyWorkflow = strings.TrimSpace(t.str("apply_workflow", w.ApplyWorkflow))
+	w.ApplyRunMatch = t.nonEmpty("apply_run_match", w.ApplyRunMatch)
+	for _, ph := range placeholderRE.FindAllString(w.ApplyRunMatch, -1) {
+		switch ph {
+		case "{repo}", "{number}":
+		default:
+			t.errf("apply_run_match", "unknown placeholder %s (allowed: {repo} {number})", ph)
+		}
+	}
+	w.ProgressPollSecs = t.int("progress_poll_secs", w.ProgressPollSecs)
+	w.ProgressTimeoutSecs = t.int("progress_timeout_secs", w.ProgressTimeoutSecs)
 	w.ApprovalQueuesForWindow = t.boolean("approval_queues_for_window", false)
 	w.MergeMethod = t.choice("merge_method", w.MergeMethod, MergeChoices)
 	w.MergedKeepSecs = t.int("merged_keep_secs", w.MergedKeepSecs)

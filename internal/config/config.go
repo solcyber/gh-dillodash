@@ -128,6 +128,8 @@ type MaintenanceWindowConfig struct {
 	QueuedLabel    string
 	ScheduledLabel string
 	RolledLabel    string
+	AppliedLabel   string // the conductor's label on a verified release
+	FailedLabel    string // and on a failed one
 	ManifestLabel  string
 	ManifestTitle  string // contains {night}
 	ConductorBot   string
@@ -192,6 +194,10 @@ type ReleasePRConfig struct {
 	ReleaseNowMinReason     int
 	ReleaseNowDispatch      bool   // fire a repository_dispatch on the manifest repo after posting the command
 	ReleaseNowDispatchEvent string // its event_type
+	ApplyWorkflow           string // the manifest repo's workflow file whose dispatch runs carry a release ("" = don't look)
+	ApplyRunMatch           string // the run title substring naming a release; placeholders {repo} {number}
+	ProgressPollSecs        int    // how often a release in flight is polled (0 = no live progress)
+	ProgressTimeoutSecs     int    // give up following a release after this long
 	ApprovalQueuesForWindow bool
 	MergeMethod             string // merge | squash | rebase
 	MergedKeepSecs          int
@@ -245,6 +251,8 @@ func DefaultMaintenanceWindow() *MaintenanceWindowConfig {
 		QueuedLabel:    "window:queued",
 		ScheduledLabel: "window:scheduled",
 		RolledLabel:    "window:rolled",
+		AppliedLabel:   "window:applied",
+		FailedLabel:    "window:failed",
 		ManifestLabel:  "window-manifest",
 		ManifestTitle:  "Window {night}",
 		ConductorBot:   "github-actions",
@@ -277,6 +285,10 @@ func DefaultReleasePR() *ReleasePRConfig {
 		ReleaseNowMinReason:     20,
 		ReleaseNowDispatch:      true,
 		ReleaseNowDispatchEvent: "release-now",
+		ApplyWorkflow:           "apply.yml",
+		ApplyRunMatch:           "rel:{repo}#{number}",
+		ProgressPollSecs:        30,
+		ProgressTimeoutSecs:     5400,
 		MergeMethod:             "merge",
 		MergedKeepSecs:          43200,
 		DeployStuckSecs:         2700,

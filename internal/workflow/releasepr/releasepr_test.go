@@ -818,7 +818,7 @@ func TestRefreshAndSections(t *testing.T) {
 	if app.Bumps != 1 {
 		t.Errorf("an open release's card is rebuilt: %d", app.Bumps)
 	}
-	if got := w.kindChipText(m); got != "approve: prod" {
+	if got := w.kindChipText(m, app.Now()); got != "approve: prod" {
 		t.Errorf("a merged row's kind chip shows the deploy, not merged twice: %q", got)
 	}
 	// claims: a core row for the same PR is ours

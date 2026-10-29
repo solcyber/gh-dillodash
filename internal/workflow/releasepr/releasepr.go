@@ -110,8 +110,9 @@ type State struct {
 	Repos    []model.Repo
 	Warnings []string
 
-	queuedLabel string
-	byIdent     map[model.Ident]*model.PR
+	queuedLabel    string
+	scheduledLabel string // the window's scheduled label, for ScheduledForWindow
+	byIdent        map[model.Ident]*model.PR
 }
 
 var (
@@ -198,6 +199,12 @@ type Workflow struct {
 	mu   sync.Mutex
 	cur  *State           // the last applied state (UI goroutine reads)
 	seen map[seenKey]bool // deploy notices already given
+	// the releases in flight (progress.go), the outcomes announced, and
+	// whether the manifest repo's unreadable Actions were mentioned
+	progress       map[model.Ident]*track
+	seenOutcome    map[model.Ident]string
+	infraOffSaid   bool
+	manifestTarget model.Repo // where the apply runs are, as AfterApply last resolved it
 }
 
 var _ workflow.Workflow = (*Workflow)(nil)
@@ -216,11 +223,13 @@ func init() {
 func New(ctx *workflow.Context) *Workflow {
 	cfg := ctx.Config.ReleasePR
 	w := &Workflow{
-		cfg:        cfg,
-		org:        cfg.Org,
-		last:       map[model.Repo]lastGood{},
-		stageCache: map[model.Repo]stageCached{},
-		seen:       map[seenKey]bool{},
+		cfg:         cfg,
+		org:         cfg.Org,
+		last:        map[model.Repo]lastGood{},
+		stageCache:  map[model.Repo]stageCached{},
+		seen:        map[seenKey]bool{},
+		progress:    map[model.Ident]*track{},
+		seenOutcome: map[model.Ident]string{},
 	}
 	if w.org == "" {
 		if len(ctx.Repos) > 0 {
@@ -281,6 +290,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	st := &State{}
 	if w.win != nil {
 		st.queuedLabel = w.win.QueuedLabel
+		st.scheduledLabel = w.win.ScheduledLabel
 	}
 	var warns []string
 	names, warn := w.repoNames(ctx, gh, now)
@@ -392,6 +402,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		}
 		pr.Set(ExtDeploy, dep)
 	}
+	warns = append(warns, w.noteTracks(ctx, gh, st, now)...)
 	st.Warnings = warns
 	return st, warns, nil
 }
@@ -493,6 +504,10 @@ func (w *Workflow) AfterApply(app workflow.App) {
 	}
 	if live {
 		app.RefreshSoon(w.refreshEvery())
+	}
+	w.noteItems(app, st)
+	for _, pr := range st.Releases {
+		w.announce(app, pr)
 	}
 	if pr, ok := app.Detail().(*model.PR); ok && pr != nil && w.isRelease(pr, app.DetailListed(), st) {
 		app.BumpDetail()

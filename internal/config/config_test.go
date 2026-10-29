@@ -110,6 +110,8 @@ end = "22:30"
 queued_label = "q"
 scheduled_label = "s"
 rolled_label = "r"
+applied_label = "a"
+failed_label = "f"
 manifest_label = "m"
 manifest_title = "Night {night}"
 conductor_bot = "Infra-Bot"
@@ -136,6 +138,10 @@ release_now_command = "/now"
 release_now_min_reason = 3
 release_now_dispatch = false
 release_now_dispatch_event = "go-now"
+apply_workflow = "ship.yml"
+apply_run_match = "ship {repo}#{number}"
+progress_poll_secs = 7
+progress_timeout_secs = 99
 approval_queues_for_window = true
 merge_method = "squash"
 merged_keep_secs = 1
@@ -187,7 +193,7 @@ deploy_approval_comment = "merged {repo}#{number} {sha}"
 	wantMW := &MaintenanceWindowConfig{
 		ManifestRepo: repo("acme/ops"), Timezone: "Europe/London", TZLabel: "UK",
 		Cutoff: clock.HM{H: 20}, ReleaseFrom: clock.HM{H: 21, M: 59}, Start: clock.HM{H: 22}, End: clock.HM{H: 22, M: 30},
-		QueuedLabel: "q", ScheduledLabel: "s", RolledLabel: "r", ManifestLabel: "m", ManifestTitle: "Night {night}",
+		QueuedLabel: "q", ScheduledLabel: "s", RolledLabel: "r", AppliedLabel: "a", FailedLabel: "f", ManifestLabel: "m", ManifestTitle: "Night {night}",
 		ConductorBot: "infra-bot", Team: "acme/sre", AttendCommand: "/here", ReleaseCommand: "/go", CancelCommand: "/stop",
 	}
 	if !reflect.DeepEqual(mw, wantMW) {
@@ -206,6 +212,7 @@ deploy_approval_comment = "merged {repo}#{number} {sha}"
 		DiscoverTTLSecs: 10, Cache: filepath.FromSlash("/home/alice/rel-acme.json"), ProductionBranch: "prod", StagingBranch: "staging",
 		ReleasePrefix: "rel/", HotfixPrefix: "fix/", GoTagPrefix: "ship/", HoldTagPrefix: "wait/", ListOtherPRs: false,
 		ReleaseNowCommand: "/now", ReleaseNowMinReason: 3, ReleaseNowDispatch: false, ReleaseNowDispatchEvent: "go-now",
+		ApplyWorkflow: "ship.yml", ApplyRunMatch: "ship {repo}#{number}", ProgressPollSecs: 7, ProgressTimeoutSecs: 99,
 		ApprovalQueuesForWindow: true, MergeMethod: "squash",
 		MergedKeepSecs: 1, DeployStuckSecs: 2, DeployRefreshSecs: 3, DeployApprovalComment: "merged {repo}#{number} {sha}",
 	}

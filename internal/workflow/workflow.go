@@ -183,6 +183,13 @@ type QueuedProvider interface {
 	QueuedForWindow() []*model.PR
 }
 
+// ScheduledProvider is implemented by a workflow state that holds items
+// already on a night's manifest (the scheduled label), so the window
+// workflow keeps reading manifests for them after the freeze.
+type ScheduledProvider interface {
+	ScheduledForWindow() []*model.PR
+}
+
 // CIKey is the Ext key under which the core writes the CI cluster of a
 // PR a workflow contributed through CIProvider.
 const CIKey = "ci"
