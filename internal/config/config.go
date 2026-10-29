@@ -1,6 +1,7 @@
 // Package config reads dillodash's TOML config: which repos to review,
-// how to draw the dashboard, which logins are bots, and the three optional
-// workflows (terraform approve, maintenance window, release PRs). Auth is
+// how to draw the dashboard, which logins are bots, and the four optional
+// workflows (terraform approve, maintenance window, release PRs, waiting
+// runs). Auth is
 // the gh CLI's business, so there is no token or user section.
 //
 // Load finds and parses a file; Parse is the pure core the tests drive.
@@ -33,6 +34,7 @@ type Config struct {
 	TerraformApprove  *TerraformApproveConfig
 	MaintenanceWindow *MaintenanceWindowConfig
 	ReleasePR         *ReleasePRConfig
+	WaitingRuns       *WaitingRunsConfig
 }
 
 // GitHubConfig is [github].
@@ -216,9 +218,28 @@ func (r *ReleasePRConfig) DeployComment(repo model.Repo, number int, sha string)
 	return rep.Replace(r.DeployApprovalComment)
 }
 
+// WaitingRunsConfig is [workflows.waiting_runs].
+type WaitingRunsConfig struct {
+	Repos           []model.Repo // the review repos when unset
+	ApprovalComment string       // placeholders {repo} {workflow} {run}
+}
+
+// Comment renders approval_comment for a run: the repo as owner/name,
+// the workflow's name and the run id.
+func (w *WaitingRunsConfig) Comment(repo model.Repo, workflow string, run int64) string {
+	rep := strings.NewReplacer("{repo}", repo.String(), "{workflow}", workflow, "{run}", strconv.FormatInt(run, 10))
+	return rep.Replace(w.ApprovalComment)
+}
+
+// DefaultWaitingRuns is [workflows.waiting_runs] with every default;
+// Repos stays nil (= the review repos).
+func DefaultWaitingRuns() *WaitingRunsConfig {
+	return &WaitingRunsConfig{ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}"}
+}
+
 // Default is a Config with every default and no repos. Workflows are off
-// (nil); their defaults are DefaultTerraformApprove, DefaultMaintenanceWindow
-// and DefaultReleasePR.
+// (nil); their defaults are DefaultTerraformApprove, DefaultMaintenanceWindow,
+// DefaultReleasePR and DefaultWaitingRuns.
 func Default() *Config {
 	return &Config{
 		GitHub:  GitHubConfig{}, // Host "": $GH_HOST, then gh's default host, then github.com

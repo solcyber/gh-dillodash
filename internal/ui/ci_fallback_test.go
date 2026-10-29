@@ -158,7 +158,7 @@ func TestListKeyBarShowsDeploysWithReleasePR(t *testing.T) {
 		t.Errorf("bar lacks D:\n%s", s)
 	}
 	h.key('?')
-	if s := h.screen(); !strings.Contains(s, "D  approve a merged row's deployments") {
+	if s := h.screen(); !strings.Contains(s, "D  approve a merged row's or a waiting run's deployments") {
 		t.Errorf("help lacks the list D row:\n%s", s)
 	}
 }

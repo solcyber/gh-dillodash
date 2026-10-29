@@ -156,3 +156,28 @@ func TestFakeFileRunsAndJobs(t *testing.T) {
 		t.Error("file runs fail")
 	}
 }
+
+// TestFakeRepoWaitingRuns: RepoRuns answers by repo, narrowed to the
+// waiting ones; RepoFail fails one repo, Fail every repo.
+func TestFakeRepoWaitingRuns(t *testing.T) {
+	f := New("alice")
+	f.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {
+		{ID: 1, Status: "waiting"}, {ID: 2, Status: "in_progress"},
+	}}
+	boom := &ghapi.Error{Status: 403, Message: "Resource not accessible by personal access token"}
+	f.RepoFail = map[model.Repo]error{portal: boom}
+	ctx := context.Background()
+	if runs, err := f.RepoWaitingRuns(ctx, infra); err != nil || len(runs) != 1 || runs[0].ID != 1 {
+		t.Errorf("infra: %+v %v", runs, err)
+	}
+	if _, err := f.RepoWaitingRuns(ctx, portal); !errors.Is(err, boom) {
+		t.Errorf("portal fails: %v", err)
+	}
+	f.Fail["repo_waiting_runs"] = boom
+	if _, err := f.RepoWaitingRuns(ctx, infra); !errors.Is(err, boom) {
+		t.Errorf("Fail fails every repo: %v", err)
+	}
+	if f.Reads["repo_waiting_runs"] != 3 {
+		t.Errorf("reads: %v", f.Reads)
+	}
+}

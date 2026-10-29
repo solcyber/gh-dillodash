@@ -149,6 +149,21 @@ func TestReportWritePermission(t *testing.T) {
 	}
 }
 
+func TestReportWaitingRuns(t *testing.T) {
+	cfg := cfgWith(infra)
+	out, _ := report(t, "alice", "keyring", cfg)
+	if !strings.Contains(out, "  waiting_runs         off\n") {
+		t.Errorf("waiting_runs off:\n%s", out)
+	}
+	wr := config.DefaultWaitingRuns()
+	wr.Repos = []model.Repo{infra, {Owner: "acme", Name: "etl-jobs"}}
+	cfg.WaitingRuns = wr
+	out, _ = report(t, "alice", "keyring", cfg)
+	if !strings.Contains(out, "  waiting_runs         on  repos: acme/infra, acme/etl-jobs\n") {
+		t.Errorf("waiting_runs on:\n%s", out)
+	}
+}
+
 // TestReportReleaseReach: release_pr says where /release-now goes and
 // whether a release is followed live, and probes the manifest repo for
 // both without failing the report.

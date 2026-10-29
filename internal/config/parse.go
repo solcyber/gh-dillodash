@@ -387,6 +387,7 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseTerraformApprove(wt, cfg)
 	p.parseMaintenanceWindow(wt, cfg)
 	p.parseReleasePR(wt, cfg)
+	p.parseWaitingRuns(wt, cfg)
 	wt.done()
 
 	top.done()
@@ -740,6 +741,31 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 		}
 	}
 	cfg.ReleasePR = w
+}
+
+func (p *parser) parseWaitingRuns(wt *table, cfg *Config) {
+	t, enabled := p.workflowEnabled(wt, "waiting_runs")
+	w := DefaultWaitingRuns()
+	if repos, ok := t.repos("repos"); ok && len(repos) > 0 {
+		w.Repos = repos
+	}
+	w.ApprovalComment = t.nonEmpty("approval_comment", w.ApprovalComment)
+	for _, ph := range placeholderRE.FindAllString(w.ApprovalComment, -1) {
+		switch ph {
+		case "{repo}", "{workflow}", "{run}":
+		default:
+			t.errf("approval_comment", "unknown placeholder %s (allowed: {repo} {workflow} {run})", ph)
+		}
+	}
+	t.done()
+
+	if !enabled {
+		return
+	}
+	if len(w.Repos) == 0 {
+		w.Repos = append([]model.Repo(nil), cfg.Reviews.Repos...)
+	}
+	cfg.WaitingRuns = w
 }
 
 // expandCache resolves {org}, "~" and, for the default, $XDG_CACHE_HOME.

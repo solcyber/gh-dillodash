@@ -205,6 +205,17 @@ func (c *GitHub) WaitingRuns(ctx context.Context, repo model.Repo, headSHA strin
 	return page.WorkflowRuns, nil
 }
 
+// RepoWaitingRuns is every run in repo waiting on an environment, newest
+// first, one page of 50 (a repo with more waiting runs than that has a
+// bigger problem than a dashboard).
+func (c *GitHub) RepoWaitingRuns(ctx context.Context, repo model.Repo) ([]model.WorkflowRun, error) {
+	var page runsPage
+	if err := c.restJSON(ctx, http.MethodGet, repoPath(repo, "actions/runs?status=waiting&per_page=50"), nil, &page); err != nil {
+		return nil, err
+	}
+	return page.WorkflowRuns, nil
+}
+
 // WorkflowRuns is every run on headSHA (newest first, up to 100).
 func (c *GitHub) WorkflowRuns(ctx context.Context, repo model.Repo, headSHA string) ([]model.WorkflowRun, error) {
 	var page runsPage

@@ -94,9 +94,11 @@ matching workflow on in the config and dillodash drives it:
 | `terraform_approve` | `a` posts `/approve <plan-id>` from the plan digests on the PR, with the destroy count and the maintenance-window choice; plan cards in the detail view; apply outcomes read back | [docs/workflows/terraform-approve.md](docs/workflows/terraform-approve.md) |
 | `maintenance_window` | a section of PRs queued for a nightly window, grouped by night with the countdown; `w` posts `/attend`, `/release` and `/window-cancel` on the night's manifest issue | [docs/workflows/maintenance-window.md](docs/workflows/maintenance-window.md) |
 | `release_pr` | application releases as PRs into production across many repos, with the staging branch's units by tag, approve-to-queue or `/release-now`, `M` at the slot and `D` for the environment approvals | [docs/workflows/release-pr.md](docs/workflows/release-pr.md) |
+| `waiting_runs` | a section of Actions runs waiting on an environment approval with no listed PR behind them (a hand-dispatched deploy, an ops run from `main`); `D` approves the environments you review | [docs/workflows/waiting-runs.md](docs/workflows/waiting-runs.md) |
 
 Each doc specifies the comment formats the bot must emit, so any CI can be
-taught to speak them. With no workflow configured dillodash is a plain,
+taught to speak them (`waiting_runs` needs no bot: it reads GitHub's own
+Actions and deployment APIs). With no workflow configured dillodash is a plain,
 fast reviewer.
 
 ## Keys

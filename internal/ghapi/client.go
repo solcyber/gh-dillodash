@@ -149,6 +149,10 @@ type Client interface {
 
 	// WaitingRuns is the workflow runs on headSHA waiting on an environment.
 	WaitingRuns(ctx context.Context, repo model.Repo, headSHA string) ([]model.WorkflowRun, error)
+	// RepoWaitingRuns is every run in repo waiting on an environment, on
+	// any commit (newest first, one page of 50): how a hand-dispatched
+	// run that hangs off no PR is found.
+	RepoWaitingRuns(ctx context.Context, repo model.Repo) ([]model.WorkflowRun, error)
 	PendingDeployments(ctx context.Context, repo model.Repo, runID int64) ([]model.PendingDeployment, error)
 	ApproveDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error
 	// WorkflowRuns is every run on headSHA, newest first.

@@ -47,7 +47,7 @@ func TestDefaults(t *testing.T) {
 	if len(c.Warnings) != 0 {
 		t.Fatalf("warnings: %v", c.Warnings)
 	}
-	if c.TerraformApprove != nil || c.MaintenanceWindow != nil || c.ReleasePR != nil {
+	if c.TerraformApprove != nil || c.MaintenanceWindow != nil || c.ReleasePR != nil || c.WaitingRuns != nil {
 		t.Fatal("workflows should be off by default")
 	}
 	if c.Reviews.Multi() {
@@ -148,6 +148,11 @@ merged_keep_secs = 1
 deploy_stuck_secs = 2
 deploy_refresh_secs = 3
 deploy_approval_comment = "merged {repo}#{number} {sha}"
+
+[workflows.waiting_runs]
+enabled = true
+repos = ["acme/ops", "acme/infra"]
+approval_comment = "ok {workflow} #{run} ({repo})"
 `
 	c := mustParse(t, src)
 	if len(c.Warnings) != 0 {
@@ -222,6 +227,15 @@ deploy_approval_comment = "merged {repo}#{number} {sha}"
 	if got := rp.DeployComment(repo("acme/app"), 42, "abc123"); got != "merged acme/app#42 abc123" {
 		t.Errorf("DeployComment = %q", got)
 	}
+
+	wr := c.WaitingRuns
+	wantWR := &WaitingRunsConfig{Repos: []model.Repo{repo("acme/ops"), repo("acme/infra")}, ApprovalComment: "ok {workflow} #{run} ({repo})"}
+	if !reflect.DeepEqual(wr, wantWR) {
+		t.Errorf("waiting_runs =\n %+v\nwant\n %+v", wr, wantWR)
+	}
+	if got := wr.Comment(repo("acme/ops"), "deploy", 4242); got != "ok deploy #4242 (acme/ops)" {
+		t.Errorf("waiting_runs Comment = %q", got)
+	}
 }
 
 func TestWorkflowDerivedDefaults(t *testing.T) {
@@ -237,6 +251,9 @@ enabled = true
 
 [workflows.release_pr]
 enabled = true
+
+[workflows.waiting_runs]
+enabled = true
 `
 	c, err := parseEnv([]byte(src), "cfg.toml", Overrides{}, fakeEnv(map[string]string{"HOME": "/home/alice", "XDG_CACHE_HOME": "/xdg/cache"}))
 	if err != nil {
@@ -247,6 +264,12 @@ enabled = true
 	}
 	if c.TerraformApprove.CeremonyWindow != nil {
 		t.Error("ceremony window should be nil when absent")
+	}
+	if !reflect.DeepEqual(c.WaitingRuns, &WaitingRunsConfig{Repos: c.Reviews.Repos, ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}"}) {
+		t.Errorf("waiting_runs defaults = %+v", c.WaitingRuns)
+	}
+	if got := c.WaitingRuns.Comment(repo("acme/app"), "deploy", 4242); got != "dillodash: approved deploy run 4242 in acme/app" {
+		t.Errorf("default approval comment = %q", got)
 	}
 	if c.MaintenanceWindow.ManifestRepo != repo("acme/infra") {
 		t.Errorf("manifest repo = %v", c.MaintenanceWindow.ManifestRepo)
@@ -282,6 +305,9 @@ enabled = true
 	}
 	if d := DefaultTerraformApprove(); d.OutsideWindowMinReason != 20 || len(d.GateDonePrefixes) != 2 {
 		t.Errorf("DefaultTerraformApprove = %+v", d)
+	}
+	if d := DefaultWaitingRuns(); d.Repos != nil || d.ApprovalComment == "" {
+		t.Errorf("DefaultWaitingRuns = %+v", d)
 	}
 }
 
@@ -359,6 +385,10 @@ func TestErrors(t *testing.T) {
 		{"rp prefixes", minimal + "[workflows.release_pr]\nenabled = true\nhotfix_prefix = \"release/\"\n", `[workflows.release_pr] hotfix_prefix: "release/" must differ from release_prefix`},
 		{"rp merge", minimal + "[workflows.release_pr]\nenabled = true\nmerge_method = \"fast-forward\"\n", `[workflows.release_pr] merge_method: "fast-forward" is not one of merge, squash, rebase`},
 		{"rp placeholder", minimal + "[workflows.release_pr]\nenabled = true\ndeploy_approval_comment = \"{repo} by {author}\"\n", `[workflows.release_pr] deploy_approval_comment: unknown placeholder {author} (allowed: {repo} {number} {sha})`},
+		{"wr placeholder", minimal + "[workflows.waiting_runs]\nenabled = true\napproval_comment = \"{workflow} by {actor}\"\n", `[workflows.waiting_runs] approval_comment: unknown placeholder {actor} (allowed: {repo} {workflow} {run})`},
+		{"wr placeholder disabled", minimal + "[workflows.waiting_runs]\nenabled = false\napproval_comment = \"{sha}\"\n", `[workflows.waiting_runs] approval_comment: unknown placeholder {sha} (allowed: {repo} {workflow} {run})`},
+		{"wr comment empty", minimal + "[workflows.waiting_runs]\nenabled = true\napproval_comment = \" \"\n", `[workflows.waiting_runs] approval_comment: must not be empty`},
+		{"wr repos", minimal + "[workflows.waiting_runs]\nenabled = true\nrepos = [\"infra\"]\n", `[workflows.waiting_runs] repos: "infra" is not "owner/name"`},
 		{"rp org", "[reviews]\nrepos = [\"acme/infra\", \"globex/app\"]\n[workflows.release_pr]\nenabled = true\n", `[workflows.release_pr] org: unset and the review repos span several owners (acme, globex); set it`},
 		{"rp queues", minimal + "[workflows.release_pr]\nenabled = true\napproval_queues_for_window = true\n", `[workflows.release_pr] approval_queues_for_window: true needs [workflows.maintenance_window] enabled = true`},
 		{"rp cache empty", minimal + "[workflows.release_pr]\nenabled = true\ncache = \"\"\n", `[workflows.release_pr] cache: must not be empty`},
@@ -445,6 +475,12 @@ func TestWarnings(t *testing.T) {
 			[]string{"[repos]: reserved for a future release, ignored"}},
 		{"enabled missing", minimal + "[workflows.release_pr]\nmerge_method = \"squash\"\n",
 			[]string{"[workflows.release_pr] enabled: missing, the workflow stays off (add enabled = true to turn it on)"}},
+		{"waiting runs enabled missing", minimal + "[workflows.waiting_runs]\nrepos = [\"acme/infra\"]\n",
+			[]string{"[workflows.waiting_runs] enabled: missing, the workflow stays off (add enabled = true to turn it on)"}},
+		{"waiting runs unknown key", minimal + "[workflows.waiting_runs]\nenabled = false\napproval_coment = \"x\"\n",
+			[]string{"[workflows.waiting_runs] approval_coment: unknown key, ignored (did you mean approval_comment?)"}},
+		{"waiting runs table typo", minimal + "[workflows.waiting_run]\nenabled = true\n",
+			[]string{"[workflows] waiting_run: unknown table, ignored (did you mean [workflows.waiting_runs]?)"}},
 		{"progress poll floor", minimal + "[workflows.maintenance_window]\nenabled = true\n[workflows.release_pr]\nenabled = true\nprogress_poll_secs = 3\n",
 			[]string{"[workflows.release_pr] progress_poll_secs: 3 is below the floor of 10, using 10"}},
 		{"apply_run_match without number", minimal + "[workflows.maintenance_window]\nenabled = true\n[workflows.release_pr]\nenabled = true\napply_run_match = \"rel:{repo}\"\n",

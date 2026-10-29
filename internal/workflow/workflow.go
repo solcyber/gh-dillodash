@@ -202,11 +202,20 @@ type CIProvider interface {
 	CIPRs() []*model.PR
 }
 
-// DeployProvider is implemented by a workflow whose rows can be merged
-// PRs with deployments to approve (the release workflow), so the list's
-// key bar shows D while it is enabled.
+// DeployProvider is implemented by a workflow whose rows can carry
+// deployments to approve (the release workflow's merged PRs, the waiting
+// runs), so the list's key bar shows D while it is enabled.
 type DeployProvider interface {
 	ProvidesDeploys() bool
+}
+
+// RowDeployer is implemented by a workflow whose own list rows carry
+// deployments D approves with no merged PR behind them (a waiting run).
+// The core offers it the selected row before DeployTarget and the
+// merged-PR path; handled false lets D go on. It runs on the action
+// goroutine, so it may prompt and call GitHub.
+type RowDeployer interface {
+	DeployRow(app App, row Row) (handled bool)
 }
 
 // Poller is a workflow with items in flight that are cheaper to watch

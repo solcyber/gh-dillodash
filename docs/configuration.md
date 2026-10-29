@@ -58,10 +58,13 @@ example; the docs under [workflows/](workflows/) explain the protocols:
 - [`terraform_approve`](workflows/terraform-approve.md)
 - [`maintenance_window`](workflows/maintenance-window.md)
 - [`release_pr`](workflows/release-pr.md)
+- [`waiting_runs`](workflows/waiting-runs.md)
 
 Cross-checks the loader enforces as errors: `release_pr.apply_run_match`
-accepts only the `{repo}` and `{number}` placeholders; `release_pr.apply_workflow`
-is a file name (`apply.yml`), not a path; `release_pr.approval_queues_for_window`
+accepts only the `{repo}` and `{number}` placeholders, and
+`waiting_runs.approval_comment` only `{repo}`, `{workflow}` and `{run}`;
+`release_pr.apply_workflow` is a file name (`apply.yml`), not a path;
+`release_pr.approval_queues_for_window`
 needs `maintenance_window` enabled; `release_pr.org` is required when the
 review repos span several owners; times are `HH:MM`, zones are IANA
 names, and the window's `cutoff < release_from < start < end` on one day.

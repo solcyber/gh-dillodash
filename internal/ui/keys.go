@@ -70,7 +70,7 @@ var bindings = []binding{
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('A')}, Bar: "A", Label: "approved", Group: "list", Prio: 30,
 		Help: "A  PRs approved by others", Doc: "toggle PRs approved by others (issues are always all shown)", Do: doShowAll},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "deploys", Group: "list", Prio: 30, when: (*Model).providesDeploys,
-		Help: "D  approve a merged row's deployments", Doc: "approve the deployments waiting on the selected merged PR (the bar shows it while `release_pr` is on)", Do: doDeploys},
+		Help: "D  approve a merged row's or a waiting run's deployments", Doc: "approve the deployments waiting on the selected merged PR, or on the selected waiting run (the bar shows it while `release_pr` or `waiting_runs` is on)", Do: doDeploys},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('d')}, Bar: "d", Label: "fortress", Group: "list", Prio: 60, wfBefore: true,
 		Help: "d  fortress mode", Doc: "fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits", Do: doFortress},
 	// detail (and the issue view where it applies)

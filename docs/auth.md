@@ -29,10 +29,10 @@ with one), create it with:
 | Setting | Value |
 |---|---|
 | Resource owner | your organization (not your personal account, or the repos 404) |
-| Repository access | every repo in `[reviews] repos` and, for `release_pr`, every release repo |
+| Repository access | every repo in `[reviews] repos` and, for `release_pr`, every release repo; for `waiting_runs`, every repo in its `repos` |
 | Pull requests | **Read and write**: the dashboard, reviews, approval comments |
 | Issues | **Read and write**: the issues section, issue comments, tagging, and the window and release commands, which are comments. Without it the dashboard shows PRs only and says so on the warn line |
-| Actions | **Read**: the CI column, see below; the deploy state of merged releases |
+| Actions | **Read**: the CI column, see below; the deploy state of merged releases; the waiting runs |
 | Contents | **Read**: commit data and the diff viewers |
 | Metadata | Read (added automatically); `release_pr` discovery reads the org's repos and rulesets with it |
 | Commit statuses | Read, only if some CI posts classic statuses; harmless to include |
@@ -43,7 +43,7 @@ Merging and approving deployments need more, on the repos where you use
 | Setting | Value |
 |---|---|
 | Contents | **Read and write**: `M` merges through GitHub's merge endpoint; the release-now dispatch on the window's manifest repo is a contents write there too |
-| Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge |
+| Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge or on a waiting run |
 
 Without them GitHub answers `403 Resource not accessible by personal access
 token`, and `M`/`D` name the permission to add.
