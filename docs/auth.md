@@ -42,7 +42,7 @@ Merging and approving deployments need more, on the repos where you use
 
 | Setting | Value |
 |---|---|
-| Contents | **Read and write**: `M` merges through GitHub's merge endpoint |
+| Contents | **Read and write**: `M` merges through GitHub's merge endpoint; the release-now dispatch on the window's manifest repo is a contents write there too |
 | Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge |
 
 Without them GitHub answers `403 Resource not accessible by personal access

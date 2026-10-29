@@ -122,6 +122,12 @@ type Client interface {
 
 	Approve(ctx context.Context, repo model.Repo, number int, body string) error
 	Comment(ctx context.Context, repo model.Repo, number int, body string) error
+	// PostComment is Comment that also returns the new comment's id, for
+	// a follow-up that must name it (the release-now dispatch).
+	PostComment(ctx context.Context, repo model.Repo, number int, body string) (int64, error)
+	// Dispatch fires a repository_dispatch event on repo with the payload
+	// (POST /repos/{repo}/dispatches; contents write).
+	Dispatch(ctx context.Context, repo model.Repo, eventType string, payload map[string]any) error
 	// MergePR merges only if the head is still sha (GitHub refuses
 	// otherwise). method is merge, squash or rebase ("" = merge).
 	MergePR(ctx context.Context, repo model.Repo, number int, sha, title, method string) (MergeResult, error)

@@ -146,8 +146,28 @@ func (c *GitHub) Approve(ctx context.Context, repo model.Repo, number int, body 
 
 // Comment posts an issue/PR comment.
 func (c *GitHub) Comment(ctx context.Context, repo model.Repo, number int, body string) error {
-	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("issues/%d/comments", number)),
-		map[string]any{"body": body}, nil)
+	_, err := c.PostComment(ctx, repo, number, body)
+	return err
+}
+
+// PostComment posts an issue/PR comment and returns its id.
+func (c *GitHub) PostComment(ctx context.Context, repo model.Repo, number int, body string) (int64, error) {
+	var res struct {
+		ID int64 `json:"id"`
+	}
+	err := c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("issues/%d/comments", number)),
+		map[string]any{"body": body}, &res)
+	return res.ID, err
+}
+
+// Dispatch fires a repository_dispatch event (the receiving repo's
+// workflows subscribe to eventType). GitHub answers 204.
+func (c *GitHub) Dispatch(ctx context.Context, repo model.Repo, eventType string, payload map[string]any) error {
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, "dispatches"),
+		map[string]any{"event_type": eventType, "client_payload": payload}, nil)
 }
 
 // MergePR merges the PR, only if its head is still sha (GitHub refuses

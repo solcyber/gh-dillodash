@@ -136,7 +136,8 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	}
 	app.MarkApproved(pr)
 	if body != "" {
-		if err := app.GH().Comment(app.Context(), pr.Repo, pr.Number, body); err != nil {
+		id, err := app.GH().PostComment(app.Context(), pr.Repo, pr.Number, body)
+		if err != nil {
 			if queues {
 				app.Fail(fmt.Sprintf("approved %s (it is queued for the window), but %s NOT posted: %s", wh, cmd, err))
 			} else {
@@ -145,7 +146,22 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			app.Refresh(true)
 			return true
 		}
-		app.OK(fmt.Sprintf("approved %s and posted %s as %s", wh, cmd, me))
+		// The comment lives in the release repo, whose events never reach
+		// the manifest repo's workflows, so tell them: a repository_dispatch
+		// naming the comment. The receiving side re-derives everything from
+		// the comment by id; the payload is only a pointer to it.
+		if target := w.manifestRepo(app); w.cfg.ReleaseNowDispatch && !target.IsZero() {
+			payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
+			if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
+				app.Fail(fmt.Sprintf("approved %s and posted %s, but %s was not told (%s): press M to merge by hand",
+					wh, cmd, target, err))
+				app.Refresh(true)
+				return true
+			}
+			app.OK(fmt.Sprintf("approved %s, posted %s as %s and told %s", wh, cmd, me, target))
+		} else {
+			app.OK(fmt.Sprintf("approved %s and posted %s as %s", wh, cmd, me))
+		}
 		app.Launch()
 	} else {
 		if queues {
@@ -157,6 +173,22 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	}
 	app.Refresh(true)
 	return true
+}
+
+// manifestRepo is where the release-now dispatch goes: the window
+// workflow's manifest repo, else the first review repo (the loader's own
+// default), and nothing when there is no window workflow to tell.
+func (w *Workflow) manifestRepo(app workflow.App) model.Repo {
+	if w.win == nil {
+		return model.Repo{}
+	}
+	if !w.win.ManifestRepo.IsZero() {
+		return w.win.ManifestRepo
+	}
+	if repos := app.Repos(); len(repos) > 0 {
+		return repos[0]
+	}
+	return model.Repo{}
 }
 
 // MergeBlock is why M must refuse a release PR, or "" (also "" for a

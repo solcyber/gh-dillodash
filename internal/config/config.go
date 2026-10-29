@@ -190,6 +190,8 @@ type ReleasePRConfig struct {
 	ListOtherPRs            bool
 	ReleaseNowCommand       string
 	ReleaseNowMinReason     int
+	ReleaseNowDispatch      bool   // fire a repository_dispatch on the manifest repo after posting the command
+	ReleaseNowDispatchEvent string // its event_type
 	ApprovalQueuesForWindow bool
 	MergeMethod             string // merge | squash | rebase
 	MergedKeepSecs          int
@@ -260,24 +262,26 @@ const DefaultReleaseCache = "~/.cache/dillodash/release-repos-{org}.json"
 // "" (= the owner shared by the review repos) and Cache unexpanded.
 func DefaultReleasePR() *ReleasePRConfig {
 	return &ReleasePRConfig{
-		Auto:                  true,
-		Ruleset:               "release",
-		DiscoverTTLSecs:       86400,
-		Cache:                 DefaultReleaseCache,
-		ProductionBranch:      "main",
-		StagingBranch:         "stage",
-		ReleasePrefix:         "release/",
-		HotfixPrefix:          "hotfix/",
-		GoTagPrefix:           "go/",
-		HoldTagPrefix:         "hold/",
-		ListOtherPRs:          true,
-		ReleaseNowCommand:     "/release-now",
-		ReleaseNowMinReason:   20,
-		MergeMethod:           "merge",
-		MergedKeepSecs:        43200,
-		DeployStuckSecs:       2700,
-		DeployRefreshSecs:     30,
-		DeployApprovalComment: "dillodash: release {repo}#{number} merged as {sha}",
+		Auto:                    true,
+		Ruleset:                 "release",
+		DiscoverTTLSecs:         86400,
+		Cache:                   DefaultReleaseCache,
+		ProductionBranch:        "main",
+		StagingBranch:           "stage",
+		ReleasePrefix:           "release/",
+		HotfixPrefix:            "hotfix/",
+		GoTagPrefix:             "go/",
+		HoldTagPrefix:           "hold/",
+		ListOtherPRs:            true,
+		ReleaseNowCommand:       "/release-now",
+		ReleaseNowMinReason:     20,
+		ReleaseNowDispatch:      true,
+		ReleaseNowDispatchEvent: "release-now",
+		MergeMethod:             "merge",
+		MergedKeepSecs:          43200,
+		DeployStuckSecs:         2700,
+		DeployRefreshSecs:       30,
+		DeployApprovalComment:   "dillodash: release {repo}#{number} merged as {sha}",
 	}
 }
 

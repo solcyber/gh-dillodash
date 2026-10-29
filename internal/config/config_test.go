@@ -134,6 +134,8 @@ hold_tag_prefix = "wait/"
 list_other_prs = false
 release_now_command = "/now"
 release_now_min_reason = 3
+release_now_dispatch = false
+release_now_dispatch_event = "go-now"
 approval_queues_for_window = true
 merge_method = "squash"
 merged_keep_secs = 1
@@ -203,7 +205,8 @@ deploy_approval_comment = "merged {repo}#{number} {sha}"
 		Auto: false, Repos: []model.Repo{repo("acme/app"), repo("acme/web")}, Org: "acme", Ruleset: "Std",
 		DiscoverTTLSecs: 10, Cache: filepath.FromSlash("/home/alice/rel-acme.json"), ProductionBranch: "prod", StagingBranch: "staging",
 		ReleasePrefix: "rel/", HotfixPrefix: "fix/", GoTagPrefix: "ship/", HoldTagPrefix: "wait/", ListOtherPRs: false,
-		ReleaseNowCommand: "/now", ReleaseNowMinReason: 3, ApprovalQueuesForWindow: true, MergeMethod: "squash",
+		ReleaseNowCommand: "/now", ReleaseNowMinReason: 3, ReleaseNowDispatch: false, ReleaseNowDispatchEvent: "go-now",
+		ApprovalQueuesForWindow: true, MergeMethod: "squash",
 		MergedKeepSecs: 1, DeployStuckSecs: 2, DeployRefreshSecs: 3, DeployApprovalComment: "merged {repo}#{number} {sha}",
 	}
 	if !reflect.DeepEqual(rp, wantRP) {

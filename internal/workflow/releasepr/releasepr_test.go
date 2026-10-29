@@ -2,6 +2,7 @@ package releasepr
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -202,6 +203,52 @@ func TestApproveNowPath(t *testing.T) {
 	}
 	if app.Launched != 1 || !strings.Contains(app.Last(), "posted /release-now") {
 		t.Errorf("a release-now launches: %d %q", app.Launched, app.Last())
+	}
+	// Then the manifest repo is told, naming the comment just posted.
+	d := app.Fake.Dispatches
+	if len(d) != 1 || d[0].Repo != infra || d[0].Event != "release-now" {
+		t.Fatalf("one release-now dispatch on the manifest repo: %+v", d)
+	}
+	if p := d[0].Payload; p["repo"] != portal.Name || p["pr"] != 42 || p["comment_id"] != app.Fake.CommentsPosted[0].ID {
+		t.Errorf("the payload names the release repo, the PR and the comment: %v", p)
+	}
+	if last := app.Fake.Calls[len(app.Fake.Calls)-1]; last.Op != "dispatch" {
+		t.Errorf("the dispatch comes after the comment: %+v", app.Fake.Calls)
+	}
+	if !strings.Contains(app.Last(), "told "+infra.String()) {
+		t.Errorf("the status line says the manifest repo was told: %q", app.Last())
+	}
+}
+
+func TestApproveNowDispatchFailure(t *testing.T) {
+	w, app := newWF(t, true)
+	app.Fake.Fail["dispatch"] = errors.New("HTTP 403")
+	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
+	w.Approve(app, makeRelease(relOpts{}), nil)
+	if len(app.Fake.Approvals) != 1 || len(comments(app)) != 1 {
+		t.Errorf("the review and the comment still landed: %v %v", app.Fake.Approvals, comments(app))
+	}
+	if !logHas(app, "fail", "was not told") || !strings.Contains(app.Last(), "press M to merge by hand") {
+		t.Errorf("a failed dispatch says so and points at M: %v", app.Log)
+	}
+	if app.Launched != 0 || len(app.Refreshes) != 1 {
+		t.Errorf("no launch; a refresh: %d %v", app.Launched, app.Refreshes)
+	}
+}
+
+func TestApproveNowDispatchOff(t *testing.T) {
+	w, app := newWF(t, true)
+	w.cfg.ReleaseNowDispatch = false
+	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
+	w.Approve(app, makeRelease(relOpts{}), nil)
+	if len(app.Fake.Dispatches) != 0 || len(comments(app)) != 1 || app.Launched != 1 {
+		t.Errorf("release_now_dispatch = false posts the comment and nothing else: %+v", app.Fake.Calls)
+	}
+	w, app = newWF(t, false)
+	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
+	w.Approve(app, makeRelease(relOpts{}), nil)
+	if len(app.Fake.Dispatches) != 0 {
+		t.Errorf("without the window workflow there is nobody to tell: %+v", app.Fake.Dispatches)
 	}
 }
 
