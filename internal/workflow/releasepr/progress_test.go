@@ -109,6 +109,7 @@ func TestOutcomeComments(t *testing.T) {
 		{"## Release NOT RUN (window)", PhaseNotRun, "not_run", "", ""},
 		{"## Release FAILED: merge refused (release-now)", PhaseRefused, "refused", "", ""},
 		{"## Release FAILED: the deploy did not succeed (release-now)", PhaseFailed, "deploy_failed", "", ""},
+		{"## Release merged; the deploy is WAITING on an environment approval (window)", PhasePending, "deploy_pending", "migrate.yml waits on prod-migrations", ""},
 		{"## Release UNVERIFIABLE (window)", PhaseUnverifiable, "unverifiable", "", ""},
 		{"## Release FAILED VERIFICATION, NOT reverted (window)", PhaseFailed, "revert_failed", "", ""},
 	}
@@ -282,6 +283,7 @@ func TestDeriveWindowPath(t *testing.T) {
 		"FAILED — run https://x/1":           PhaseFailed,
 		"refused (rolled) — run https://x/1": PhaseRefused,
 		"run cancelled — nothing merged":     PhaseCancelled,
+		"PENDING an environment approval (merged; deploy held) — run https://x/1": PhasePending,
 	} {
 		p = deriveWith(w, pr, func(tr *track) { tr.item = item(status) }, slot.Add(2*time.Minute))
 		if p.Phase != want || p.Source != "manifest" || p.Detail != status {
@@ -309,6 +311,49 @@ func TestDeriveWindowPath(t *testing.T) {
 	done.Labels.Nodes = []model.Label{{Name: "window:rolled"}}
 	if p = deriveWith(w, done, nil, slot); p.Phase != PhaseRolled {
 		t.Errorf("rolled label: %+v", p)
+	}
+	done.Labels.Nodes = []model.Label{{Name: "window:pending"}}
+	if p = deriveWith(w, done, nil, slot); p.Phase != PhasePending || !p.Terminal || p.Outcome != "deploy_pending" {
+		t.Errorf("pending label: %+v", p)
+	}
+}
+
+// TestDeployPending: a release merged with its deploy held at an
+// environment ends its tracking (no "lost track") on the outcome
+// comment, points at D, and follows the labels once someone swaps
+// window:pending by hand.
+func TestDeployPending(t *testing.T) {
+	w, _ := newWF(t, true)
+	t0 := utc(3, 0)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	held := comment(t0.Add(4*time.Minute), "## Release merged; the deploy is WAITING on an environment approval (release-now)\n\n"+
+		"Outcome: `deploy_pending` — migrate.yml waits on prod-migrations\nMerge: "+mergedSHA+"\nRun: https://x/runs/91\n")
+	mut := func(tr *track) { tr.nowPostedAt, tr.comments = t0, []model.Comment{held} }
+	p := deriveWith(w, pr, mut, t0.Add(3*time.Hour))
+	if p.Phase != PhasePending || !p.Terminal || p.Outcome != "deploy_pending" || p.Detail != "migrate.yml waits on prod-migrations" || p.MergeSHA != mergedSHA {
+		t.Fatalf("held: %+v", p)
+	}
+	if got := w.progressChip(p, t0); got != "deploy waiting · D" || progressStyle(p) != "chip.rolled" {
+		t.Errorf("chip %q %s", got, progressStyle(p))
+	}
+	if f := railFrac(p, t0); f <= float64(PhaseIndex(PhaseDeploying))/float64(len(runPhases)) || f >= 1 {
+		t.Errorf("the rail stops at the deploy: %v", f)
+	}
+	if segs := railSegs(p, t0, nil, "x", 20, false); strings.Contains(text.SegsText(segs), glyphs.G("hazard")) {
+		t.Error("a held deploy is not a hazard")
+	}
+	for _, r := range w.timelineRows(p, t0) {
+		if PhaseIndex(r.phase) < PhaseIndex(PhaseDeploying) && r.state != "done" {
+			t.Errorf("%s before the deploy: %s", r.phase, r.state)
+		}
+	}
+	pr.Labels.Nodes = []model.Label{{Name: "window:applied"}}
+	if p = deriveWith(w, pr, mut, t0.Add(3*time.Hour)); p.Phase != PhaseReleased || p.Outcome != "verified" {
+		t.Errorf("swapped to applied by hand: %+v", p)
+	}
+	pr.Labels.Nodes = []model.Label{{Name: "window:failed"}}
+	if p = deriveWith(w, pr, mut, t0.Add(3*time.Hour)); p.Phase != PhaseFailed {
+		t.Errorf("swapped to failed by hand: %+v", p)
 	}
 }
 
@@ -561,6 +606,7 @@ func TestProgressChipAndStyle(t *testing.T) {
 		{Progress{Phase: PhaseVerifying, Since: now.Add(-40 * time.Second)}, "verifying 40s", "chip.queued"},
 		{Progress{Phase: PhaseWaitingSlot}, "waiting for slot", "chip.sched"},
 		{Progress{Phase: PhaseReleased, Terminal: true}, "released", "chip.approved"},
+		{Progress{Phase: PhasePending, Terminal: true}, "deploy waiting · D", "chip.rolled"},
 		{Progress{Phase: PhaseFailed, Terminal: true}, "release FAILED", "chip.rolled"},
 		{Progress{Phase: PhaseRefused, Terminal: true}, "release refused", "chip.rolled"},
 		{Progress{Phase: PhaseRolled, Terminal: true}, "rolled", "chip.rolled"},
@@ -810,5 +856,30 @@ func TestQueuedByApproval(t *testing.T) {
 	w3.cfg.ApprovalQueuesForWindow = false
 	if w3.queued(rel) {
 		t.Error("approval_queues_for_window = false: the label alone queues")
+	}
+}
+
+// TestAnnouncePending: a held deploy is a notice pointing at D, not a
+// failure and not a launch.
+func TestAnnouncePending(t *testing.T) {
+	w, app, pr := pollFixture(t)
+	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), "## Release merged; the deploy is WAITING on an environment approval (release-now)\n\nOutcome: `deploy_pending` — migrate.yml waits on prod-migrations\nMerge: "+mergedSHA+"\nRun: https://x/runs/91\n"))
+	clock.Now = func() time.Time { return utc(3, 6) }
+	poll(t, w, app)
+	poll(t, w, app)
+	notes := 0
+	for _, l := range app.Log {
+		if strings.HasPrefix(l, "fail: ") {
+			t.Errorf("a held deploy is not a failure: %q", l)
+		}
+		if strings.Contains(l, "waits on an environment approval") {
+			notes++
+			if !strings.Contains(l, "prod-migrations") || !strings.Contains(l, "press D") {
+				t.Errorf("the notice names the environment and D: %q", l)
+			}
+		}
+	}
+	if notes != 1 || app.Launched != 0 {
+		t.Errorf("one notice, no launch: %d %d\n%v", notes, app.Launched, app.Log)
 	}
 }

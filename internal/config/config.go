@@ -136,6 +136,7 @@ type MaintenanceWindowConfig struct {
 	RolledLabel    string
 	AppliedLabel   string // the conductor's label on a verified release
 	FailedLabel    string // and on a failed one
+	PendingLabel   string // and on one merged whose deploy waits on an environment approval
 	ManifestLabel  string
 	ManifestTitle  string // contains {night}
 	ConductorBot   string
@@ -278,6 +279,7 @@ func DefaultMaintenanceWindow() *MaintenanceWindowConfig {
 		RolledLabel:    "window:rolled",
 		AppliedLabel:   "window:applied",
 		FailedLabel:    "window:failed",
+		PendingLabel:   "window:pending",
 		ManifestLabel:  "window-manifest",
 		ManifestTitle:  "Window {night}",
 		ConductorBot:   "github-actions",

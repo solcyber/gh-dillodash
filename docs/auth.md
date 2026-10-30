@@ -55,7 +55,7 @@ read-only: a wrong `gh` account or a read-only collaborator shows up
 there instead of as a 403 on your first `a`. It cannot see further than
 the role: a fine-grained token reports no role at all (`write: not
 reported`), a token with push but without Pull requests: write still
-403s on approve, deployment approval needs Actions write, and branch
+403s on approve, deployment approval needs Deployments write, and branch
 protection or a ruleset can still refuse a merge.
 
 ## Why "Actions" and not "Checks"

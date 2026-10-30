@@ -48,6 +48,8 @@ func railFrac(p Progress, now time.Time) float64 {
 	switch {
 	case p.Phase == PhaseReleased:
 		return 1
+	case p.Phase == PhasePending:
+		return (float64(PhaseIndex(PhaseDeploying)) + 0.5) / n
 	case p.Terminal:
 		if i := PhaseIndex(p.FailPhase); i >= 0 {
 			return (float64(i) + 0.5) / n
@@ -81,7 +83,7 @@ func railSegs(p Progress, now time.Time, f *fx.Fx, ident string, width int, live
 	if width <= 0 {
 		return nil
 	}
-	if p.Terminal && p.Phase != PhaseReleased {
+	if p.Terminal && p.Phase != PhaseReleased && p.Phase != PhasePending {
 		return hazardSegs(p, width)
 	}
 	frac := railFrac(p, now)
@@ -304,6 +306,11 @@ func (w *Workflow) timelineRows(p Progress, now time.Time) []phaseRow {
 		if p.Phase == PhaseReleased && r.state == "pending" {
 			r.state = "done"
 		}
+		// merged, the deploy held at an environment: everything before
+		// the deploy happened
+		if p.Phase == PhasePending && r.state == "pending" && PhaseIndex(ph) < PhaseIndex(PhaseDeploying) {
+			r.state = "done"
+		}
 		// the technical tail
 		switch ph {
 		case PhaseMerging:
@@ -502,6 +509,10 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 			line = append(line, text.S(" — "+p.Detail, "muted"))
 		}
 		out = append(out, scenes.CardLines(line, width, inner)...)
+		if p.Phase == PhasePending {
+			hint := fmt.Sprintf("  D approves the waiting environment (if you review it); then swap %s for %s by hand", w.pendingLabel(), w.appliedLabel())
+			out = append(out, scenes.CardLines([]text.Seg{text.S(hint, "sum.attn")}, width, inner)...)
+		}
 		if p.MergeSHA != "" {
 			out = append(out, scenes.CardLines([]text.Seg{text.S("  merge: ", "faint"), text.S(model.ShortSHA(p.MergeSHA), "md.inline")}, width, inner)...)
 		}

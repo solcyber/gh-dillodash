@@ -208,6 +208,43 @@ func (w *Workflow) queuedReleases(app workflow.App) []*model.PR {
 	return out
 }
 
+// queuedRelease is the release workflow's queued release with pr's
+// identity, or nil. A release queued by its approval carries no queued
+// label (the conductor labels it scheduled at the freeze), so IsQueued
+// alone never finds it.
+func (w *Workflow) queuedRelease(app workflow.App, pr *model.PR) *model.PR {
+	for _, p := range w.queuedReleases(app) {
+		if p.Ident() == pr.Ident() {
+			return p
+		}
+	}
+	return nil
+}
+
+// isRelease reports a PR of another repo than the manifest's: a release
+// item (rel:<repo>#<n>), not a terraform one.
+func (w *Workflow) isRelease(pr *model.PR) bool { return prRef(pr, w.cfg).repo != "" }
+
+// check is CommandCheck plus the release rule: a release joins the
+// manifest only at the freeze, and the conductor refuses a cancel for a
+// rel: id the manifest does not list.
+func (w *Workflow) check(cmd string, info *Night, night, me string, now time.Time, item *Item, pr *model.PR) (bool, string) {
+	if cmd == CmdCancel && pr != nil && item == nil && w.isRelease(pr) {
+		return false, w.releaseNotListed(pr, night, now)
+	}
+	return CommandCheck(cmd, info, night, me, now, item, w.cfg)
+}
+
+// releaseNotListed says why a release cannot be cancelled on the
+// night's manifest, and what takes it out instead.
+func (w *Workflow) releaseNotListed(pr *model.PR, night string, now time.Time) string {
+	id := fmt.Sprintf("rel:%s#%d", pr.Repo.Name, pr.Number)
+	if cutoff, err := WallToUTC(night, w.cfg.Cutoff, w.cfg); err == nil && now.Before(cutoff) {
+		return fmt.Sprintf("%s joins the manifest at the %s freeze; until then a Request changes review takes it out", id, w.cfg.Local().T(w.cfg.Cutoff))
+	}
+	return fmt.Sprintf("%s is not an item of the night's manifest", id)
+}
+
 // ---- classification ----
 
 // Claims takes queued PRs and manifest issues out of the core sections.
@@ -495,7 +532,7 @@ func (w *Workflow) Target(app workflow.App) (string, *model.PR) {
 		if row, ok := app.Selected(); ok {
 			switch v := row.Item.(type) {
 			case *model.PR:
-				if row.Kind == RowKind || (row.Kind == "release" && IsQueued(v, w.cfg)) {
+				if row.Kind == RowKind || (row.Kind == "release" && (IsQueued(v, w.cfg) || w.queuedRelease(app, v) != nil)) {
 					pr = v
 				}
 			case *model.Issue:
@@ -505,11 +542,14 @@ func (w *Workflow) Target(app workflow.App) (string, *model.PR) {
 	} else {
 		switch d := app.Detail().(type) {
 		case *model.PR:
-			for _, p := range append(append([]*model.PR{}, app.AllPRs()...), w.queuedReleases(app)...) {
+			for _, p := range app.AllPRs() {
 				if p.Ident() == d.Ident() && IsQueued(p, w.cfg) {
 					pr = p
 					break
 				}
+			}
+			if pr == nil {
+				pr = w.queuedRelease(app, d)
 			}
 		case *model.Issue:
 			for n, info := range st.Nights {
@@ -570,9 +610,12 @@ func (w *Workflow) DoWindow(app workflow.App) {
 		info = st.Nights[night]
 	}
 	if info == nil {
-		if night == "" {
+		switch {
+		case night == "":
 			app.Notice("nothing is queued for a maintenance window")
-		} else {
+		case pr != nil && w.isRelease(pr):
+			app.Notice(fmt.Sprintf("no manifest issue for the night of %s yet: %s", night, w.releaseNotListed(pr, night, app.Now())))
+		default:
 			app.Notice(fmt.Sprintf("no manifest issue for the night of %s yet (r refreshes)", night))
 		}
 		return
@@ -597,7 +640,7 @@ func (w *Workflow) DoWindow(app workflow.App) {
 	}
 	var labels []string
 	for _, c := range cmds {
-		ok, why := CommandCheck(c.name, info, night, me, now, item, w.cfg)
+		ok, why := w.check(c.name, info, night, me, now, item, pr)
 		t := c.text
 		if !ok {
 			t += " (not now)"
@@ -621,7 +664,7 @@ func (w *Workflow) DoWindow(app workflow.App) {
 	}
 	c := cmds[i]
 	// the clock moved while the menu was up: check again
-	if ok, why := CommandCheck(c.name, info, night, me, app.Now(), item, w.cfg); !ok {
+	if ok, why := w.check(c.name, info, night, me, app.Now(), item, pr); !ok {
 		app.Notice(fmt.Sprintf("%s not posted: %s", c.text, why))
 		return
 	}

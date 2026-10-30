@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.5.4]
+
+### Fixed
+
+- `w` offers `/window-cancel rel:<repo>#<n>` on a release. A release
+  queued by its approval never carries the queued label (the conductor
+  labels it scheduled at the freeze), so the cancel entry was missing for
+  every release, from its row under the night and from its detail view.
+  Before the freeze the manifest does not list a release yet, and the
+  conductor refuses a cancel for it, so the entry is marked `(not now)`
+  and says a Request changes review takes it out instead (#20).
+- A release merged with its deploy held at a required-reviewer
+  environment no longer ends as *lost track* after 90 minutes. The
+  outcome heading `## Release merged; the deploy is WAITING on an
+  environment approval`, the label `window:pending` and the manifest
+  status `PENDING …` end it as **`deploy waiting · D`** in gold, with one
+  notice naming the environment and a card line pointing at `D`. When
+  someone swaps `window:pending` for `window:applied` (or
+  `window:failed`) by hand, the row follows the label (#20).
+- Docs: `auth.md` names Deployments write, not Actions write, for `D`;
+  `maintenance-window.md` covers release rows, the release cancel, and
+  that the conductor, not dillodash, checks the team; `release-pr.md`
+  lists the exact outcome headings dillodash reads (#20).
+
+### Added
+
+- `pending_label` under `[workflows.maintenance_window]` (default
+  `window:pending`).
+
 ## [1.5.3]
 
 ### Fixed

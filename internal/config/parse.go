@@ -578,6 +578,7 @@ func (p *parser) parseMaintenanceWindow(wt *table, cfg *Config) {
 	w.RolledLabel = t.nonEmpty("rolled_label", w.RolledLabel)
 	w.AppliedLabel = t.nonEmpty("applied_label", w.AppliedLabel)
 	w.FailedLabel = t.nonEmpty("failed_label", w.FailedLabel)
+	w.PendingLabel = t.nonEmpty("pending_label", w.PendingLabel)
 	w.ManifestLabel = t.nonEmpty("manifest_label", w.ManifestLabel)
 	w.ManifestTitle = t.nonEmpty("manifest_title", w.ManifestTitle)
 	if !strings.Contains(w.ManifestTitle, nightPlaceholder) {

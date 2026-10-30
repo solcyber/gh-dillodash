@@ -811,3 +811,62 @@ func TestManifestItem(t *testing.T) {
 	_, ok = (*State)(nil).ManifestItem("web-portal", 42)
 	check(t, "no state, no item", !ok)
 }
+
+// TestCancelARelease: a release queued by its approval carries no
+// queued label (the conductor labels it scheduled at the freeze), and w
+// still offers /window-cancel rel:<repo>#<n> on it, from its row under
+// the night and from its detail view. Before the freeze the manifest
+// does not list it yet, and the menu says what takes it out instead.
+func TestCancelARelease(t *testing.T) {
+	cfg := testCfg()
+	const mn = "2026-10-26"
+	rel42 := &model.PR{Repo: portal, Number: 42, Title: "Release portal 2026-10-27", HeadRefName: "release/2026-10-27",
+		Author: model.Actor{Login: "bob"}, ReviewDecision: "APPROVED", Labels: labelled("window:scheduled")}
+	relItem := Item{ID: "rel:web-portal#42", Kind: "app", Repo: "web-portal", PR: 42, Flag: "scheduled", StartUTC: "2026-10-27T03:04:00Z", Status: "scheduled", Revertible: boolp(true)}
+	m3891 := &model.Issue{Repo: infra, Number: 3891, Title: "Window " + mn + " 23:00 ET", Labels: labelled("window-manifest")}
+	saved := clock.Now
+	t.Cleanup(func() { clock.Now = saved })
+
+	// frozen, 22:00 ET: the release is an item of the manifest
+	clock.Now = func() time.Time { return at("2026-10-27T02:00:00Z") }
+	app, w := newApp(cfg)
+	app.IssueList = []*model.Issue{m3891}
+	app.SetState(ReleaseState, releases{rel42})
+	frozen := WindowNights([]*model.Issue{manifestFor(3891, mn, "frozen", []map[string]any{{"id": "rel:web-portal#42", "kind": "app", "repo": "web-portal", "pr": 42, "flag": "scheduled", "start_utc": "2026-10-27T03:04:00Z", "status": "scheduled", "revertible": true}}, nil)}, "alice", cfg.MaintenanceWindow)[mn]
+	app.SetState(Name, &State{Manifests: map[string]*Manifest{mn: {Night: mn, Phase: "frozen", Items: []Item{relItem}}}, Nights: map[string]*Night{mn: frozen}})
+	rows := w.Sections(app, nil, "alice")
+	check(t, "the release sits under its night", eq(rowShape(rows), []string{"header:queued for the maintenance window (1)", "header:window 2026-10-26 23:00 ET, tonight", "issue:3891", "release:42"}))
+	app.RowList, app.ViewName, app.Sel = rows, "list", 3
+	n, pr := w.Target(app)
+	check(t, "w on a release row without the queued label still targets it", n == mn && pr == rel42)
+	app.Picks, app.Confirms = []int{2}, []bool{true}
+	w.DoWindow(app)
+	check(t, "w offers and posts /window-cancel rel:<repo>#<n> on the manifest", len(app.Fake.CommentsPosted) == 1 &&
+		app.Fake.CommentsPosted[0].Number == 3891 && app.Fake.CommentsPosted[0].Body == "/window-cancel rel:web-portal#42")
+	app.ViewName, app.DetailItm, app.Kind = "detail", &model.PR{Repo: portal, Number: 42}, "pr"
+	n, pr = w.Target(app)
+	check(t, "w in the release's detail view targets it too", n == mn && pr == rel42)
+
+	// open, 14:00 ET: the freeze has not listed it yet
+	clock.Now = func() time.Time { return at("2026-10-26T18:00:00Z") }
+	app, w = newApp(cfg)
+	app.IssueList = []*model.Issue{m3891}
+	app.SetState(ReleaseState, releases{rel42})
+	open := WindowNights([]*model.Issue{manifestFor(3891, mn, "open", nil, nil)}, "alice", cfg.MaintenanceWindow)[mn]
+	app.SetState(Name, &State{Manifests: map[string]*Manifest{mn: {Night: mn}}, Nights: map[string]*Night{mn: open}})
+	app.RowList, app.ViewName = w.Sections(app, nil, "alice"), "list"
+	app.Sel = len(app.RowList) - 1
+	app.Picks = []int{2}
+	w.DoWindow(app)
+	check(t, "before the freeze the cancel is marked and says what works instead",
+		len(app.Menus) == 1 && strings.Contains(app.Menus[0][3], "(not now)") && strings.Contains(app.Menus[0][3], "Request changes"))
+	check(t, "and nothing is posted", len(app.Fake.CommentsPosted) == 0 && strings.Contains(app.Last(), "joins the manifest at the 21:00"))
+
+	// no manifest issue for the night yet
+	app.SetState(Name, &State{Manifests: map[string]*Manifest{}, Nights: map[string]*Night{}})
+	app.IssueList = nil
+	app.RowList = w.Sections(app, nil, "alice")
+	app.Sel = len(app.RowList) - 1
+	w.DoWindow(app)
+	check(t, "with no manifest the notice says what takes a release out", strings.Contains(app.Last(), "Request changes"))
+}

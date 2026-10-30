@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
+	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
@@ -43,6 +44,7 @@ const (
 	PhaseFinishing   = "finishing"
 
 	PhaseReleased     = "released"
+	PhasePending      = "deploy waiting" // merged; the deploy waits on an environment approval (window:pending)
 	PhaseFailed       = "failed"
 	PhaseRefused      = "refused"
 	PhaseUnverifiable = "unverifiable"
@@ -58,7 +60,7 @@ var runPhases = []string{PhaseSetup, PhaseValidating, PhaseMerging, PhaseApprovi
 
 // terminalPhases end the tracking.
 var terminalPhases = map[string]bool{
-	PhaseReleased: true, PhaseFailed: true, PhaseRefused: true, PhaseUnverifiable: true,
+	PhaseReleased: true, PhasePending: true, PhaseFailed: true, PhaseRefused: true, PhaseUnverifiable: true,
 	PhaseNotRun: true, PhaseRolled: true, PhaseCancelled: true, PhaseLost: true,
 }
 
@@ -124,7 +126,7 @@ type Progress struct {
 	RunURL     string
 	Steps      []Step
 
-	Outcome   string // verified | refused | apply_failed | deploy_failed | unverifiable | revert_failed | not_run
+	Outcome   string // verified | refused | apply_failed | deploy_pending | deploy_failed | unverifiable | revert_failed | not_run
 	FailPhase string // the run phase a failed run died in, when known
 	MergeSHA  string
 	Approver  string // from the outcome comment, when it says
@@ -293,7 +295,7 @@ func (w *Workflow) noteTracks(ctx context.Context, gh ghapi.Client, st *State, n
 // candidate reports a release worth reading comments for.
 func (w *Workflow) candidate(pr *model.PR, now time.Time) bool {
 	if w.win != nil {
-		for _, l := range []string{w.win.ScheduledLabel, w.win.AppliedLabel, w.win.FailedLabel} {
+		for _, l := range []string{w.win.ScheduledLabel, w.win.AppliedLabel, w.win.FailedLabel, w.win.PendingLabel} {
 			if l != "" && pr.Labels.Has(l) {
 				return true
 			}
@@ -652,6 +654,12 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		}
 		app.OK(msg)
 		app.Launch()
+	case PhasePending:
+		msg := fmt.Sprintf("%s merged; its deploy waits on an environment approval", wh)
+		if p.Detail != "" {
+			msg += " (" + p.Detail + ")"
+		}
+		app.Notice(msg + " — press D on its row")
 	case PhaseFailed, PhaseUnverifiable:
 		msg := fmt.Sprintf("%s release FAILED", wh)
 		if p.Phase == PhaseUnverifiable {
@@ -696,7 +704,7 @@ func (w *Workflow) progressTimeout() time.Duration {
 // Comment grammar: the outcome comment the release job leaves, and the
 // refusal the dispatcher posts when the command is not accepted.
 var (
-	outcomeHeadRE = regexp.MustCompile(`(?m)^## (Released|Release NOT RUN|Release FAILED: merge refused|Release FAILED: the deploy did not succeed|Release UNVERIFIABLE|Release FAILED VERIFICATION, NOT reverted)(?: ?\(|\s*$)`)
+	outcomeHeadRE = regexp.MustCompile(`(?m)^## (Released|Release NOT RUN|Release FAILED: merge refused|Release merged; the deploy is WAITING on an environment approval|Release FAILED: the deploy did not succeed|Release UNVERIFIABLE|Release FAILED VERIFICATION, NOT reverted)(?: ?\(|\s*$)`)
 	outcomeLineRE = regexp.MustCompile("(?m)^Outcome: `([a-z_]+)`(?: — (.*))?$")
 	mergeLineRE   = regexp.MustCompile(`(?m)^Merge: ([0-9a-f]{7,40})`)
 	runLineRE     = regexp.MustCompile(`(?m)^Run: (\S+)`)
@@ -724,6 +732,8 @@ func outcomeOf(c model.Comment) (outcome, bool) {
 		o.phase = PhaseNotRun
 	case "Release FAILED: merge refused":
 		o.phase = PhaseRefused
+	case "Release merged; the deploy is WAITING on an environment approval":
+		o.phase = PhasePending
 	case "Release UNVERIFIABLE":
 		o.phase = PhaseUnverifiable
 	default:
@@ -850,6 +860,16 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 		if p.Started.IsZero() {
 			p.Started = out.at
 		}
+		if p.Phase == PhasePending && w.win != nil {
+			// the comment stays; the labels say how it ended once someone
+			// swaps window:pending by hand
+			switch {
+			case w.win.AppliedLabel != "" && pr.Labels.Has(w.win.AppliedLabel):
+				p.Phase, p.Outcome = PhaseReleased, "verified"
+			case w.win.FailedLabel != "" && pr.Labels.Has(w.win.FailedLabel):
+				p.Phase = PhaseFailed
+			}
+		}
 		return p
 	case run != nil:
 		w.fromRun(&p, run, t.job)
@@ -871,6 +891,9 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 			return p
 		case w.win.FailedLabel != "" && pr.Labels.Has(w.win.FailedLabel):
 			p.Phase, p.Terminal, p.Source = PhaseFailed, true, "label"
+			return p
+		case w.win.PendingLabel != "" && pr.Labels.Has(w.win.PendingLabel):
+			p.Phase, p.Terminal, p.Source, p.Outcome = PhasePending, true, "label", "deploy_pending"
 			return p
 		}
 	}
@@ -1002,6 +1025,8 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 		p.Phase, p.Terminal, p.Outcome = PhaseReleased, true, "verified"
 	case strings.HasPrefix(ls, "failed"):
 		p.Phase, p.Terminal = PhaseFailed, true
+	case strings.HasPrefix(ls, "pending"):
+		p.Phase, p.Terminal, p.Outcome = PhasePending, true, "deploy_pending"
 	case strings.HasPrefix(ls, "refused"):
 		p.Phase, p.Terminal = PhaseRefused, true
 	case strings.HasPrefix(ls, "cancelled"):
@@ -1120,6 +1145,8 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 		return "deploying " + el
 	case PhaseReleased:
 		return "released"
+	case PhasePending:
+		return "deploy waiting · D"
 	case PhaseFailed:
 		return "release FAILED"
 	case PhaseRefused:
@@ -1137,7 +1164,7 @@ func progressStyle(p Progress) string {
 	switch p.Phase {
 	case PhaseReleased:
 		return "chip.approved"
-	case PhaseFailed, PhaseRefused, PhaseUnverifiable, PhaseRolled:
+	case PhaseFailed, PhaseRefused, PhaseUnverifiable, PhaseRolled, PhasePending:
 		return "chip.rolled"
 	case PhaseNotRun, PhaseCancelled, PhaseLost:
 		return "chip.state"
@@ -1158,3 +1185,19 @@ func (w *Workflow) rowLive(app workflow.App, row workflow.Row) bool {
 }
 
 var _ workflow.Poller = (*Workflow)(nil)
+
+// pendingLabel and appliedLabel name the window's labels in a hint, the
+// defaults when there is no window config.
+func (w *Workflow) pendingLabel() string {
+	if w.win != nil && w.win.PendingLabel != "" {
+		return w.win.PendingLabel
+	}
+	return config.DefaultMaintenanceWindow().PendingLabel
+}
+
+func (w *Workflow) appliedLabel() string {
+	if w.win != nil && w.win.AppliedLabel != "" {
+		return w.win.AppliedLabel
+	}
+	return config.DefaultMaintenanceWindow().AppliedLabel
+}
