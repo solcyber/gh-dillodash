@@ -162,3 +162,36 @@ func TestListKeyBarShowsDeploysWithReleasePR(t *testing.T) {
 		t.Errorf("help lacks the list D row:\n%s", s)
 	}
 }
+
+// TestApproveReachesTheWorkflowOnAnApprovedRelease: a on a release you
+// approved earlier is no longer refused by the core's "already approved"
+// check; the workflow offers release NOW and posts the command alone.
+func TestApproveReachesTheWorkflowOnAnApprovedRelease(t *testing.T) {
+	h := newHarness(t)
+	p := withReleasePR(t, h)
+	p.ReviewDecision = "APPROVED"
+	p.Opinions.Nodes = []model.Review{{Author: model.Actor{Login: "alice"}, State: "APPROVED"}}
+	h.load()
+	st, _ := h.m.wfState["release_pr"].(*releasepr.State)
+	if st == nil || len(st.Releases) != 1 {
+		t.Fatalf("release state: %+v", st)
+	}
+	rel := st.Releases[0]
+	h.m.mu.Lock()
+	h.m.showDetail(rel, "pr", 0, rel)
+	h.m.mu.Unlock()
+	var menu []string
+	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return 0 }
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "bumped from the window for time", true }
+	h.m.tp.Confirm = func(string) bool { return true }
+	h.key('a')
+	if len(h.gh.Approvals) != 0 {
+		t.Errorf("no second review: %v", h.gh.Approvals)
+	}
+	if len(menu) != 1 || !strings.HasPrefix(menu[0], "release NOW") {
+		t.Errorf("the menu offers NOW alone: %q (status %q)", menu, h.m.status)
+	}
+	if c := h.gh.CommentsPosted; len(c) != 1 || c[0].Body != `/release-now "bumped from the window for time"` {
+		t.Errorf("the release-now comment, exactly: %+v", c)
+	}
+}

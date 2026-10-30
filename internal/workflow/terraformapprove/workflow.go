@@ -271,6 +271,9 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	me := app.Me()
 	where := model.Ref(pr.Repo, pr.Number, app.MultiRepo())
 	cmd := cfg.ApproveCommand
+	// Your review may already stand (a plan queued for a window you now
+	// apply NOW): the command is still offered, the review is not repeated.
+	reviewed := workflow.IApproved(app, pr)
 	// Only live plans are approvable; superseded digests and notices are
 	// never offered. An applied plan is no candidate either: what an
 	// applied, still-open PR wants is the review that lets it merge.
@@ -281,6 +284,10 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		}
 	}
 	if len(cands) == 0 {
+		if reviewed {
+			app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
+			return true
+		}
 		var done, all []string
 		for _, c := range allPlans {
 			if c.State == StateLive && c.Applied {
@@ -473,7 +480,9 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	// the eventual merge needs a code-owner review too; do it in the
 	// same keystroke, but don't fail the approve if it errors
 	reviewNote := " + review approved"
-	if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, ""); err != nil {
+	if reviewed {
+		reviewNote = " (your review approval stands)"
+	} else if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, ""); err != nil {
 		reviewNote = fmt.Sprintf(" (review approval failed: %s)", err)
 	}
 	flagNote := ""

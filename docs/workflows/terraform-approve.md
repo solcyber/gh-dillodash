@@ -37,11 +37,16 @@ flags, the minimum reason length, the ceremony window.
    The prompt counts down and refuses enter until the reason is long
    enough. Advisory ("shadow") verdicts queue nothing and get no question.
 4. Posts the `/approve` comment, then a GitHub approving review (a ruleset
-   usually requires one for the eventual merge), best effort.
+   usually requires one for the eventual merge), best effort. When your
+   review already stands on the PR (a plan you queued that the window
+   bumped, now approved with `--outside-window`), `a` still offers the
+   command and skips the review: since 1.5.3 the core's "already approved"
+   refusal no longer stops it.
 5. With no live plan it falls back to a plain review approval after a
    confirmation that says what it found. An **applied** plan is not live:
    an applied PR that is still open is waiting for the review that lets it
-   merge, so `a` submits only that review.
+   merge, so `a` submits only that review, or, when you already reviewed
+   it, says so and posts nothing.
 
 Drafts are refused, and so is approving your own PR.
 

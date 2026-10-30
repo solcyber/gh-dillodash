@@ -171,6 +171,15 @@ type App interface {
 	Context() context.Context
 }
 
+// IApproved reports a review approval of pr by the viewer that still
+// stands: one posted with a this session (for the current head), or
+// the viewer's review on GitHub. The core's a refuses such a PR unless
+// a workflow takes it first; a workflow that does must not submit a
+// second review.
+func IApproved(app App, pr *model.PR) bool {
+	return app.LocalApproved(pr) || pr.MyReviewState(app.Me()) == "APPROVED"
+}
+
 // Refresh results: a workflow computes State on the worker goroutine and
 // hands it to Apply on the UI goroutine.
 type State any

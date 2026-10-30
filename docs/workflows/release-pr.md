@@ -97,6 +97,14 @@ and a PR that is not a release, then offers:
   manifest repo was not told and points at `M`.
 - A **hotfix** lists NOW first (enter picks it): a hotfix into production
   is an emergency by definition.
+- A release **you already approved for this head** is queued already
+  (where approvals queue), so `a` offers only **release NOW**: the same
+  reason prompt and exact comment, then `/release-now "<reason>"` and the
+  dispatch, with **no second review** (yours stands). This is the path for
+  an approved release the window bumped or rolled. Once the release is on
+  its way, `a` says so and posts nothing. Before 1.5.3 the core refused `a`
+  on any PR you had approved, so an approved release could only be
+  released now by posting the comment and firing the dispatch by hand.
 
 Without the window workflow, an approving review is just an approval, and
 `M` merges whenever GitHub allows.

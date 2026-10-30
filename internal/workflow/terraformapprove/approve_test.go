@@ -231,6 +231,28 @@ func TestApproveWindow(t *testing.T) {
 	check(t, "configured start and a derived zone label", strings.Contains(app.Menus[0][0], "22:30 E"))
 }
 
+// A plan you already review-approved (queued, then bumped from the
+// window) can still be applied NOW: the command is posted, the review is
+// not repeated.
+func TestApproveAlreadyReviewed(t *testing.T) {
+	cfg := testCfg()
+	reviewed := func(pr *model.PR) *model.PR {
+		pr.Opinions.Nodes = []model.Review{{Author: model.Actor{Login: "alice"}, State: "APPROVED"}}
+		return pr
+	}
+	app, handled := approve(t, cfg, reviewed(windowed("disruptive · revertible", 0, false)), script{picks: []int{1}, prompts: []string{reason}, confirms: []bool{true}})
+	check(t, "reviewed, now: handled, --outside-window posted", handled && eq(posted(app), one(3622, fmt.Sprintf(`/approve %s --outside-window="%s"`, idA, reason))))
+	check(t, "reviewed, now: no second review", len(app.Fake.Approvals) == 0 && hasLog(app, "ok:", "your review approval stands"))
+
+	app, _ = approve(t, cfg, windowed("disruptive · revertible", 0, false), script{picks: []int{1}, prompts: []string{reason}, confirms: []bool{true}})
+	check(t, "not reviewed yet: the review follows the command", len(app.Fake.Approvals) == 1 && hasLog(app, "ok:", "+ review approved"))
+
+	nochange := "### plan `prod/07-warehouse` — no changes\n"
+	app, handled = approve(t, cfg, reviewed(makePR([]model.Comment{comment(nochange)}, "sha1")), script{confirms: []bool{true}})
+	check(t, "reviewed, no live plan: refused as the core would, nothing asked", handled && len(app.Questions) == 0 && len(app.Fake.Approvals) == 0 &&
+		hasLog(app, "notice:", "already approved by you"))
+}
+
 func TestApprovePlanSetsAndCeremonies(t *testing.T) {
 	cfg := testCfg()
 	nd := []model.Comment{

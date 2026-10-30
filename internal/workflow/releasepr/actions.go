@@ -36,9 +36,12 @@ func (w *Workflow) EnrichDetail(_ context.Context, _ ghapi.Client, pr, listed *m
 // Approve is the a key on a release PR: an approving review queues it
 // for the maintenance window; the NOW path also posts the release-now
 // command with a reason (an approver's emergency). A hotfix lists NOW
-// first: it is an emergency by definition. Every question shows exactly
-// what will be posted; the review goes first, and a failed comment after
-// it says so. Returns false for anything that is not a release PR.
+// first: it is an emergency by definition. A release you already
+// approved for this head is queued already, so a offers only NOW, and
+// posts the command without a second review (a release bumped from the
+// window, say). Every question shows exactly what will be posted; the
+// review goes first, and a failed comment after it says so. Returns
+// false for anything that is not a release PR.
 func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	st := w.stateOf(app)
 	info := w.infoFor(pr, listed, st)
@@ -75,6 +78,9 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	queues := w.cfg.ApprovalQueuesForWindow && w.win != nil && kind != KindHotfix // a hotfix never queues
 	night := w.NightPhrase(app.Now())
 	nowLabel := fmt.Sprintf("release NOW (%s) — real emergencies only", cmd)
+	if workflow.IApproved(app, pr) {
+		return w.approvedNow(app, pr, wh, me, nowLabel, queues)
+	}
 	queueLabel := fmt.Sprintf("queue it for %s window (approve review) — the normal path", night)
 	if !queues {
 		queueLabel = "approve review only — the release waits for its merge (M)"
@@ -100,24 +106,8 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	path := paths[i]
 	body := ""
 	if path == "now" {
-		minLen := w.cfg.ReleaseNowMinReason
-		reason, ok := app.Prompt(fmt.Sprintf("Why can't this wait for the window? The reason is posted on the PR with the command (at least %d characters, no double quotes); Esc cancels:", minLen),
-			workflow.PromptOpts{MinLen: minLen, Forbid: `"`, Note: "the reason is posted with " + cmd})
-		if !ok {
-			app.Notice("approve cancelled")
-			return true
-		}
-		if len([]rune(reason)) < minLen || strings.Contains(reason, `"`) {
-			app.Fail(fmt.Sprintf("approve cancelled — the reason needs at least %d characters and no double quotes", minLen))
-			return true
-		}
-		body = fmt.Sprintf(`%s "%s"`, cmd, reason)
-		if !w.nowRE.MatchString(body) {
-			app.Fail(fmt.Sprintf("approve cancelled — %q does not match the %s grammar", body, cmd))
-			return true
-		}
-		if !app.Confirm(fmt.Sprintf("%s\napprove %s and post that as %s?", body, wh, me)) {
-			app.Notice("approve cancelled")
+		var ok bool
+		if body, ok = w.nowBody(app, fmt.Sprintf("approve %s and post that as %s?", wh, me)); !ok {
 			return true
 		}
 	} else {
@@ -136,36 +126,11 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	}
 	app.MarkApproved(pr)
 	if body != "" {
-		id, err := app.GH().PostComment(app.Context(), pr.Repo, pr.Number, body)
-		if err != nil {
-			if queues {
-				app.Fail(fmt.Sprintf("approved %s (it is queued for the window), but %s NOT posted: %s", wh, cmd, err))
-			} else {
-				app.Fail(fmt.Sprintf("approved %s, but %s NOT posted: %s", wh, cmd, err))
-			}
-			app.Refresh(true)
-			return true
+		lead := "approved " + wh
+		if queues {
+			lead += " (it is queued for the window)"
 		}
-		// The comment lives in the release repo, whose events never reach
-		// the manifest repo's workflows, so tell them: a repository_dispatch
-		// naming the comment. The receiving side re-derives everything from
-		// the comment by id; the payload is only a pointer to it.
-		if target := w.manifestRepo(app); w.cfg.ReleaseNowDispatch && !target.IsZero() {
-			payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
-			if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
-				w.notePosted(pr, app.Now(), false)
-				app.Fail(fmt.Sprintf("approved %s and posted %s, but %s was not told (%s): press M to merge by hand",
-					wh, cmd, target, err))
-				app.Refresh(true)
-				return true
-			}
-			w.notePosted(pr, app.Now(), true) // the release is in flight from here
-			app.OK(fmt.Sprintf("approved %s, posted %s as %s and told %s", wh, cmd, me, target))
-		} else {
-			w.notePosted(pr, app.Now(), true)
-			app.OK(fmt.Sprintf("approved %s and posted %s as %s", wh, cmd, me))
-		}
-		app.Launch()
+		w.postNow(app, pr, body, lead+", but", "approved "+wh+" and", "approved "+wh+",")
 	} else {
 		if queues {
 			app.OK(fmt.Sprintf("approved %s as %s — queued for %s window", wh, me, night))
@@ -176,6 +141,93 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	}
 	app.Refresh(true)
 	return true
+}
+
+// approvedNow is a on a release you approved for this head: the review
+// stands (and queues it, where approvals queue), so the only thing left
+// to offer is NOW, which posts the command and no second review. A
+// release already on its way has nothing left to post.
+func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel string, queues bool) bool {
+	if w.inFlight(pr) {
+		app.Notice(fmt.Sprintf("%s is approved by you and already on its way — nothing to post.", wh))
+		return true
+	}
+	stands := "your approval of this head stands"
+	if queues {
+		stands += " and queues it"
+	}
+	title := fmt.Sprintf("%s is already approved by you — %s; NOW posts %s without a second review", wh, stands, w.cfg.ReleaseNowCommand)
+	if app.Pick(title, []string{nowLabel}) != 0 {
+		app.Notice("approve cancelled")
+		return true
+	}
+	body, ok := w.nowBody(app, fmt.Sprintf("post that on %s as %s? (no second review: yours stands)", wh, me))
+	if !ok {
+		return true
+	}
+	w.postNow(app, pr, body, wh+":", wh+":", wh+":")
+	app.Refresh(true)
+	return true
+}
+
+// nowBody asks for the release-now reason and confirms the exact
+// comment with question; ok false (and the status line says why) on a
+// cancel or a body the grammar refuses.
+func (w *Workflow) nowBody(app workflow.App, question string) (string, bool) {
+	cmd, minLen := w.cfg.ReleaseNowCommand, w.cfg.ReleaseNowMinReason
+	reason, ok := app.Prompt(fmt.Sprintf("Why can't this wait for the window? The reason is posted on the PR with the command (at least %d characters, no double quotes); Esc cancels:", minLen),
+		workflow.PromptOpts{MinLen: minLen, Forbid: `"`, Note: "the reason is posted with " + cmd})
+	if !ok {
+		app.Notice("approve cancelled")
+		return "", false
+	}
+	if len([]rune(reason)) < minLen || strings.Contains(reason, `"`) {
+		app.Fail(fmt.Sprintf("approve cancelled — the reason needs at least %d characters and no double quotes", minLen))
+		return "", false
+	}
+	body := fmt.Sprintf(`%s "%s"`, cmd, reason)
+	if !w.nowRE.MatchString(body) {
+		app.Fail(fmt.Sprintf("approve cancelled — %q does not match the %s grammar", body, cmd))
+		return "", false
+	}
+	if !app.Confirm(body + "\n" + question) {
+		app.Notice("approve cancelled")
+		return "", false
+	}
+	return body, true
+}
+
+// postNow posts the release-now body on pr and tells the manifest repo.
+// The leads open each status line: failLead before "<cmd> NOT posted",
+// toldLead before "posted <cmd>, but … was not told", okLead before
+// "posted <cmd> as …", so a status line says whether this keystroke
+// also approved the release.
+func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldLead, okLead string) {
+	cmd, me := w.cfg.ReleaseNowCommand, app.Me()
+	id, err := app.GH().PostComment(app.Context(), pr.Repo, pr.Number, body)
+	if err != nil {
+		app.Fail(fmt.Sprintf("%s %s NOT posted: %s", failLead, cmd, err))
+		return
+	}
+	// The comment lives in the release repo, whose events never reach
+	// the manifest repo's workflows, so tell them: a repository_dispatch
+	// naming the comment. The receiving side re-derives everything from
+	// the comment by id; the payload is only a pointer to it.
+	if target := w.manifestRepo(app); w.cfg.ReleaseNowDispatch && !target.IsZero() {
+		payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
+		if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
+			w.notePosted(pr, app.Now(), false)
+			app.Fail(fmt.Sprintf("%s posted %s, but %s was not told (%s): press M to merge by hand",
+				toldLead, cmd, target, err))
+			return
+		}
+		w.notePosted(pr, app.Now(), true) // the release is in flight from here
+		app.OK(fmt.Sprintf("%s posted %s as %s and told %s", okLead, cmd, me, target))
+	} else {
+		w.notePosted(pr, app.Now(), true)
+		app.OK(fmt.Sprintf("%s posted %s as %s", okLead, cmd, me))
+	}
+	app.Launch()
 }
 
 // manifestRepo is where the release-now dispatch goes: the window

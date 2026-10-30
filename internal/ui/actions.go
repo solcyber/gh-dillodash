@@ -97,11 +97,13 @@ func (m *Model) doApprove(app *lockedApp) {
 		app.Notice(fmt.Sprintf("you authored %s — a self-approval counts for nothing", where))
 		return
 	}
-	if app.IApproved(pr) {
-		app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
+	// A workflow goes first even on a PR you approved: its command (a
+	// release-now, an /approve --outside-window) is not a second review.
+	if m.wf.Approve(app, pr, app.DetailListed()) {
 		return
 	}
-	if m.wf.Approve(app, pr, app.DetailListed()) {
+	if app.IApproved(pr) {
+		app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
 		return
 	}
 	if !app.Confirm(fmt.Sprintf("submit a GitHub review approval of %s as %s?", where, m.me)) {

@@ -220,6 +220,95 @@ func TestApproveNowPath(t *testing.T) {
 	}
 }
 
+// A release you approved earlier (queued, then bumped from the window)
+// still needs NOW: a offers only that, and posts the command with no
+// second review.
+func TestApproveAlreadyApprovedOffersNowOnly(t *testing.T) {
+	patchNow(t, utc(14, 0))
+	w, app := newWF(t, true)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	app.Picks, app.Prompts, app.Confirms = []int{0}, []string{reason}, []bool{true}
+	if !w.Approve(app, pr, nil) {
+		t.Fatal("an approved release PR is still handled")
+	}
+	want := `/release-now "` + reason + `"`
+	if m := app.Menus[0]; len(m) != 2 || !strings.HasPrefix(m[1], "release NOW") || !strings.Contains(m[0], "already approved by you") {
+		t.Errorf("the menu offers NOW alone and says why: %q", m)
+	}
+	if len(app.Fake.Approvals) != 0 {
+		t.Errorf("no second review: %v", app.Fake.Approvals)
+	}
+	if got := comments(app); len(got) != 1 || got[0] != want {
+		t.Errorf("exactly the release-now comment: %q", got)
+	}
+	if q := app.Questions[len(app.Questions)-1]; !strings.Contains(q, want) || !strings.Contains(q, "no second review") {
+		t.Errorf("the confirm shows the comment and that no review follows: %q", q)
+	}
+	d := app.Fake.Dispatches
+	if len(d) != 1 || d[0].Payload["comment_id"] != app.Fake.CommentsPosted[0].ID {
+		t.Fatalf("the manifest repo is told about that comment: %+v", d)
+	}
+	if app.Launched != 1 || !strings.Contains(app.Last(), "posted /release-now") || !strings.Contains(app.Last(), "told "+infra.String()) {
+		t.Errorf("a release-now launches and says who was told: %d %q", app.Launched, app.Last())
+	}
+
+	// Pressed again while it is on its way: nothing left to post.
+	app.Picks, app.Prompts, app.Confirms = []int{0}, []string{reason}, []bool{true}
+	w.Approve(app, pr, nil)
+	if len(comments(app)) != 1 || len(app.Menus) != 1 || !strings.Contains(app.Last(), "already on its way") {
+		t.Errorf("an in-flight release posts nothing more: %q menus %d %q", comments(app), len(app.Menus), app.Last())
+	}
+}
+
+func TestApproveAlreadyApprovedThisSession(t *testing.T) {
+	patchNow(t, utc(14, 0))
+	w, app := newWF(t, true)
+	pr := makeRelease(relOpts{})
+	app.Picks, app.Confirms = []int{0}, []bool{true}
+	w.Approve(app, pr, nil) // queue it
+	app.Picks, app.Prompts, app.Confirms = []int{0}, []string{reason}, []bool{true}
+	w.Approve(app, pr, nil) // then NOW, on the same head
+	if len(app.Fake.Approvals) != 1 || len(comments(app)) != 1 {
+		t.Errorf("one review, then the command alone: %v %q", app.Fake.Approvals, comments(app))
+	}
+	if m := app.Menus[1]; len(m) != 2 || !strings.HasPrefix(m[1], "release NOW") {
+		t.Errorf("the second a offers NOW alone: %q", m)
+	}
+
+	// A new head is a new release: the old approval no longer counts.
+	w, app = newWF(t, true)
+	pr = makeRelease(relOpts{})
+	app.Approved[pr.Ident()] = "oldsha"
+	app.Picks, app.Confirms = []int{0}, []bool{true}
+	w.Approve(app, pr, nil)
+	if len(app.Fake.Approvals) != 1 || len(app.Menus[0]) != 3 {
+		t.Errorf("a moved head is approved afresh, with both paths: %v %q", app.Fake.Approvals, app.Menus[0])
+	}
+}
+
+func TestApproveAlreadyApprovedCancelAndFailure(t *testing.T) {
+	w, app := newWF(t, true)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	w.Approve(app, pr, nil) // no pick scripted: Esc
+	if len(comments(app)) != 0 || !strings.Contains(app.Last(), "approve cancelled") {
+		t.Errorf("Esc at the menu posts nothing: %q %q", comments(app), app.Last())
+	}
+	w, app = newWF(t, true)
+	app.Fake.Fail["comment"] = errors.New("HTTP 502")
+	app.Picks, app.Prompts, app.Confirms = []int{0}, []string{reason}, []bool{true}
+	w.Approve(app, pr, nil)
+	if len(app.Fake.Dispatches) != 0 || !logHas(app, "fail", "/release-now NOT posted") {
+		t.Errorf("a failed comment says so and tells nobody: %+v %v", app.Fake.Dispatches, app.Log)
+	}
+	w, app = newWF(t, true)
+	app.Fake.Fail["dispatch"] = errors.New("HTTP 403")
+	app.Picks, app.Prompts, app.Confirms = []int{0}, []string{reason}, []bool{true}
+	w.Approve(app, pr, nil)
+	if !logHas(app, "fail", "was not told") || !strings.Contains(app.Last(), "press M to merge by hand") {
+		t.Errorf("a failed dispatch points at M: %v", app.Log)
+	}
+}
+
 func TestApproveNowDispatchFailure(t *testing.T) {
 	w, app := newWF(t, true)
 	app.Fake.Fail["dispatch"] = errors.New("HTTP 403")
