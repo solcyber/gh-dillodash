@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.5.3]
+
+### Fixed
+
+- `a` on a PR you already approved reaches its workflow instead of
+  stopping at "already approved by you for this head". The core refused
+  first, so a release approved earlier and then bumped from the window
+  could not be released NOW from dillodash, and a queued terraform plan
+  could not be re-approved with `--outside-window`: both had to be posted
+  by hand. Now:
+  - `release_pr`: an approved release offers only **release NOW**, which
+    posts `/release-now "<reason>"` and fires the dispatch with no second
+    review; one already on its way posts nothing.
+  - `terraform_approve`: the `/approve` (with `--outside-window` when
+    asked) is posted and the approving review is skipped, since yours
+    stands; with no live plan, `a` says the PR is approved and posts
+    nothing.
+  - A PR no workflow takes keeps the refusal.
+- For workflow authors: `workflow.IApproved(app, pr)` is the core's rule
+  (approved with `a` this session for the current head, or your review on
+  GitHub). A workflow's `Approve` now runs before that check, so one that
+  submits a review must look it up itself.
+
 ## [1.5.2]
 
 ### Changed
