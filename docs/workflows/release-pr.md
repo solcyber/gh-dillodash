@@ -146,9 +146,13 @@ by a `repository_dispatch`; its title names the release
 (`apply_run_match`, default `rel:{repo}#{number}`). The run's steps say the
 phase: *setup*, *validating*, *merging*, *approving envs*, *deploying*,
 *verifying* (the alarms are read after a five-minute settle), *finishing*. On the
-release PR the job leaves an outcome comment (`## Released`, `## Release
-FAILED: …`, `## Release UNVERIFIABLE`, `## Release NOT RUN`) and the
-conductor's labels (`applied_label`, `failed_label`); on a window night the
+release PR the job leaves an outcome comment and the conductor's labels
+(`applied_label`, `failed_label`, `pending_label`). dillodash reads these
+headings, each followed by ` (<how>)`: `## Released`, `## Release NOT
+RUN`, `## Release FAILED: merge refused`, `## Release merged; the deploy
+is WAITING on an environment approval`, `## Release FAILED: the deploy did
+not succeed`, `## Release UNVERIFIABLE`, and `## Release FAILED
+VERIFICATION, NOT reverted`. Any other heading is not an outcome. On a window night the
 manifest item's status says *scheduled*, *waiting for slot* (terraform
 items first, or `/release`), *dispatched*. The app repo's own deploy runs
 on the merge give the `n/m` while deploying. The newest signal wins, so a
@@ -174,6 +178,14 @@ new run.
   9f8e7d6 after 6m02s`, with the launch; `release FAILED at verifying —
   <detail>; run: <url>`; `release refused — <reason>`; a notice for
   *rolled*, *not run*, *cancelled* and *lost track*.
+- **A deploy held at an environment.** When the merge is done but the
+  deploy run waits on a required-reviewer environment (the `WAITING`
+  heading, or `pending_label`), the release ends as **`deploy waiting ·
+  D`** in gold: the rail stops at *deploying* without stripes, the card
+  says `D` approves the waiting environment (if you review it) and that
+  `window:pending` is swapped for `window:applied` by hand, and one notice
+  names the environment. Once someone swaps the label, the row follows it:
+  `released` for `applied_label`, `release FAILED` for `failed_label`.
 
 **How often.** Every `progress_poll_secs` (30 s) while something is in
 flight: one listing of the apply runs when a release has no run yet, the

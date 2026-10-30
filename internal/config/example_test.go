@@ -49,7 +49,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		"enabled", "digest_bot", "plan_workflow", "gate_context", "gate_done_prefixes", "approve_command",
 		"confirm_destroys_flag", "outside_window_flag", "outside_window_min_reason", "ceremony_window",
 		"manifest_repo", "timezone", "tz_label", "cutoff", "start", "release_from", "end", "queued_label",
-		"scheduled_label", "rolled_label", "applied_label", "failed_label", "manifest_label", "manifest_title", "conductor_bot", "team",
+		"scheduled_label", "rolled_label", "applied_label", "failed_label", "pending_label", "manifest_label", "manifest_title", "conductor_bot", "team",
 		"attend_command", "release_command", "cancel_command",
 		"org", "ruleset", "discover_ttl_secs", "cache", "production_branch", "staging_branch", "release_prefix",
 		"hotfix_prefix", "go_tag_prefix", "hold_tag_prefix", "list_other_prs", "release_now_command",

@@ -112,6 +112,7 @@ scheduled_label = "s"
 rolled_label = "r"
 applied_label = "a"
 failed_label = "f"
+pending_label = "p"
 manifest_label = "m"
 manifest_title = "Night {night}"
 conductor_bot = "Infra-Bot"
@@ -198,7 +199,7 @@ approval_comment = "ok {workflow} #{run} ({repo})"
 	wantMW := &MaintenanceWindowConfig{
 		ManifestRepo: repo("acme/ops"), Timezone: "Europe/London", TZLabel: "UK",
 		Cutoff: clock.HM{H: 20}, ReleaseFrom: clock.HM{H: 21, M: 59}, Start: clock.HM{H: 22}, End: clock.HM{H: 22, M: 30},
-		QueuedLabel: "q", ScheduledLabel: "s", RolledLabel: "r", AppliedLabel: "a", FailedLabel: "f", ManifestLabel: "m", ManifestTitle: "Night {night}",
+		QueuedLabel: "q", ScheduledLabel: "s", RolledLabel: "r", AppliedLabel: "a", FailedLabel: "f", PendingLabel: "p", ManifestLabel: "m", ManifestTitle: "Night {night}",
 		ConductorBot: "infra-bot", Team: "acme/sre", AttendCommand: "/here", ReleaseCommand: "/go", CancelCommand: "/stop",
 	}
 	if !reflect.DeepEqual(mw, wantMW) {

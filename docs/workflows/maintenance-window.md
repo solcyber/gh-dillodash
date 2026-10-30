@@ -27,10 +27,14 @@ time on screen is formatted in the configured zone with its abbreviation
 
 - **The section** `queued for the maintenance window` sits below the pull
   requests. It is grouped by the night each item will run in, the next
-  window first. Each row shows the status (`queued`, `scheduled 23:04 EDT`
-  once the freeze has slotted it, or `rolled: <reason>`), the stack, and
-  `revertible` or **`attended night needed`** for an item that runs only
-  when someone posts `/attend` and `/release` on that night's manifest.
+  window first. A terraform row shows the status (`queued`, `scheduled
+  23:04 EDT` once the freeze has slotted it, or `rolled: <reason>`), the
+  stack, and `revertible` or **`attended night needed`** for an item that
+  runs only when someone posts `/attend` and `/release` on that night's
+  manifest. A release row (with `release_pr` and
+  `approval_queues_for_window`) keeps the release workflow's chips:
+  `scheduled 23:04` (no zone) once slotted, `waiting for slot`, then its
+  rail once it runs.
 - **The night's manifest issue is the first row under its sub-header**
   (chip `manifest <phase>`), never a loose row in `issues`. `enter` opens
   it, `o` opens it in the browser, `w` acts on its night.
@@ -50,17 +54,27 @@ time on screen is formatted in the configured zone with its abbreviation
 
 ## `w`
 
-From the list (on a queued row or a manifest row), from a PR's detail, or
-from the manifest's own detail, `w` opens a menu for that night, or the next
-night with a manifest: `/attend`, `/release`, `/window-cancel <id>` (only
-for the selected item), open the manifest issue. Each entry says why it
-would or would not count now, using the conductor's own rules: `/attend`
-only before the cutoff; `/release` only from an attendee, from
-`release_from` to `end`; a cancel only before the item starts or while it
-waits for `/release`. A command the conductor would refuse posts nothing and
-says why. Anything else asks y/N, then posts the plain command as a comment
-on the manifest. dillodash refreshes 45 seconds after posting and reads the
-conductor's reply.
+From the list (on a queued terraform row, a release row under a night, or a
+manifest row), from a queued PR's or release's detail, or from the
+manifest's own detail, `w` opens a menu for that night, or the next night
+with a manifest: `/attend`, `/release`, `/window-cancel <id>` (only for the
+selected item: `#N` for a terraform PR, `rel:<repo>#<N>` for a release),
+open the manifest issue. Each entry says why it would or would not count
+now, using the conductor's own rules: `/attend` only before the cutoff;
+`/release` only from an attendee, from `release_from` to `end`; a cancel
+only before the item starts or while it waits for `/release`. A release
+joins the manifest only at the freeze, and the conductor refuses a cancel
+for a `rel:` id the manifest does not list, so before the cutoff the
+release's cancel entry is marked `(not now)` and says what takes it out
+instead: a Request changes review on the release PR. A command the
+conductor would refuse posts nothing and says why. Anything else asks y/N,
+then posts the plain command as a comment on the manifest. dillodash
+refreshes 45 seconds after posting and reads the conductor's reply.
+
+dillodash does not check who may run window commands: the conductor does.
+When `team` is set, the menu title names it (`commands count only from
+@org/team`); a command from someone outside it is posted, and the
+conductor's reply refuses it.
 
 Posting needs the token's Issues read and write, because the manifest is
 an issue.
@@ -71,8 +85,10 @@ an issue.
 `window:queued`) when queued; `scheduled_label` (`window:scheduled`) once
 the freeze gave it a slot; `rolled_label` (`window:rolled`) when it rolled
 to a later night; on a release the conductor ran, `applied_label`
-(`window:applied`) when it verified and `failed_label` (`window:failed`)
-when it did not (the release workflow's live progress reads them).
+(`window:applied`) when it verified, `failed_label` (`window:failed`)
+when it did not, and `pending_label` (`window:pending`) when it merged and
+its deploy waits on an environment approval (the release workflow's live
+progress reads them).
 
 **The queue notice**, a comment by `conductor_bot` on the PR when it is
 queued:

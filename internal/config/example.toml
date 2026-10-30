@@ -76,6 +76,7 @@ enabled = false
 # rolled_label = "window:rolled"            # label after rolling to a later night
 # applied_label = "window:applied"          # label the conductor puts on a verified release
 # failed_label = "window:failed"            # and on a failed one
+# pending_label = "window:pending"          # and on one merged whose deploy waits on an environment approval
 # manifest_label = "window-manifest"        # label on manifest issues
 # manifest_title = "Window {night}"         # manifest issue title; {night} is YYYY-MM-DD; add the start time if your bot does
 # conductor_bot = "github-actions"          # login that runs the window
