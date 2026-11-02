@@ -84,6 +84,29 @@
     with release NOW, the next in the lane with its slot cancelled, its
     migration's `stg` and `prod` approved with `D`. The gallery has a shot
     of each step, and the release-pr doc a section on the night.
+- dillodash keeps itself on the latest release (#25). A running
+  dashboard checks at startup and every 30 minutes (conditional on the
+  ETag); a newer release is downloaded in the background and installed
+  only when its SHA-256 matches the release's `digest` **and** `gh
+  attestation verify --repo solcyber/gh-dillodash` passes. It goes over
+  every install dillodash may replace — the gh extension (its
+  `manifest.yml` tag follows) and standalone binaries — by a rename
+  beside each, the old binary kept as `<name>.prev`. A launcher script, a
+  pinned extension and a path dillodash cannot write are left alone, the
+  last with the one command that would update it. A refusal replaces
+  nothing and stays on the status line, marked as an error. Never a
+  downgrade, a draft or a prerelease.
+- `R` restarts into the installed release on the same view: the open PR
+  or issue, the selected row and the filter come back. It waits for an
+  action in flight. Until then `a`, `M`, `D` and `w` offer the restart
+  first (#25).
+- `gh dillodash update` installs the latest release now and prints what
+  changed; `gh dillodash update --rollback` swaps the `.prev` binaries
+  back (#25).
+- `[update]` with `auto` (default `true`; `false` keeps the check and
+  the banner and installs nothing) and `channel` (`stable`), and
+  `DILLODASH_AUTO_UPDATE=0` to pin one host whatever a pulled config
+  says (#25).
 
 ## [1.5.4]
 

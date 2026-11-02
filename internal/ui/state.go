@@ -216,6 +216,16 @@ type Model struct {
 	updater  Updater
 	upd      selfupdate.Status
 	checking bool
+	// the background install, once per release; a restart asked for
+	// while an action ran; the restart R requested; where the last
+	// restart left off
+	installing       bool
+	installErr       string
+	installTried     string
+	nextBuildCheckAt float64
+	restartQueued    bool
+	restartTo        *Restore
+	restore          *Restore
 }
 
 // Options build a Model.
@@ -229,6 +239,8 @@ type Options struct {
 	// Updater checks for a newer release (nil: no check, as in the demo
 	// and the screenshots).
 	Updater Updater
+	// Restore is where a restart left off (nil on a fresh start).
+	Restore *Restore
 }
 
 // New makes the model; Run starts it.
@@ -246,6 +258,7 @@ func New(ctx context.Context, o Options) *Model {
 		ctx:             ctx,
 		ver:             o.Version,
 		updater:         o.Updater,
+		restore:         o.Restore,
 		upd:             selfupdate.Status{Running: o.Version},
 		fx:              fx.New(),
 		view:            ViewList,

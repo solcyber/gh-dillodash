@@ -35,18 +35,22 @@ type Install struct {
 	Note    string
 }
 
-// releasesURL is where a standalone binary's upgrade comes from.
-const releasesURL = "https://github.com/solcyber/gh-dillodash/releases"
+// ManualCommand is the one command that puts release tag over this
+// install by hand: what to run when the install path is not writable
+// to dillodash itself.
+func (i Install) ManualCommand(tag, asset string) string {
+	if i.Kind == KindBinary {
+		return fmt.Sprintf("gh release download %s -R %s -p %s -O %s --clobber", tag, Repo, asset, i.Path)
+	}
+	return ManualHint
+}
 
 // UpgradeHint is the one command (or step) that brings this install to
 // version to.
 func (i Install) UpgradeHint(to string) string {
 	switch i.Kind {
 	case KindBinary:
-		if to == "" {
-			to = "the latest"
-		}
-		return fmt.Sprintf("replace %s with the %s binary from %s", i.Path, to, releasesURL)
+		return i.Path + " update"
 	case KindLauncher:
 		return "upgrade what " + i.Path + " runs"
 	}

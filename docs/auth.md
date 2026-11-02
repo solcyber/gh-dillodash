@@ -46,6 +46,11 @@ Merging and approving deployments need more, on the repos where you use
 | Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge or on a waiting run |
 | Members (organization) | **Read**, only with `[github] approvers_team`: dillodash checks the posting login is in the team before it posts a release, window or plan command; without it dillodash warns and posts unchecked |
 
+Updates read `solcyber/gh-dillodash`'s releases on github.com with the
+`gh` login for github.com (any token, or none: the repository is public)
+and verify the download with `gh attestation verify`, which reads the
+same repository's attestations.
+
 Without them GitHub answers `403 Resource not accessible by personal access
 token`, and `M`/`D` name the permission to add.
 

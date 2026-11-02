@@ -29,7 +29,7 @@ func TestBuildReport(t *testing.T) {
 		"installs:",
 		"gh extension  /home/alice/.local/share/gh/extensions/gh-dillodash/gh-dillodash  v1.5.2  (running)",
 		"launcher      /home/alice/.local/bin/dillodash  runs gh dillodash",
-		"binary        /opt/bin/dillodash  v1.4.1  — STALE: replace /opt/bin/dillodash with the v1.5.4 binary",
+		"binary        /opt/bin/dillodash  v1.4.1  — STALE: /opt/bin/dillodash update",
 		"note: installs of different versions (v1.5.2, v1.4.1)",
 	} {
 		if !strings.Contains(s, want) {

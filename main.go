@@ -100,6 +100,10 @@ usage:
   gh dillodash font license       print the font's licences (also written beside the installed files)
   gh dillodash glyph-test [--icons SET]
                                   print every glyph and the palette (checks the terminal font)
+  gh dillodash update [--rollback]
+                                  install the latest release now, verified, over every install
+                                  it may replace (the old binary is kept as .prev); --rollback
+                                  puts the .prev back
   gh dillodash amos               say hello to Amos
   gh dillodash version
   gh dillodash help               this text (every command takes --help too)
@@ -118,6 +122,8 @@ flags:
 
 environment:
   DILLODASH_CONFIG   the config file, when --config is not given
+  DILLODASH_AUTO_UPDATE
+                     0 turns installing updates off on this host ([update] auto)
   GH_HOST            the GitHub host when [github] host is unset (gh's default otherwise)
   GH_TOKEN, GITHUB_TOKEN
                      a token that overrides the gh login (config check says when one does)
@@ -239,6 +245,8 @@ func dispatch(args []string) error {
 			return configCmd(args[1:])
 		case "font":
 			return fontCmd(args[1:])
+		case "update":
+			return updateCmd(args[1:], os.Stdout)
 		}
 	}
 	return dashboard(args)
@@ -350,6 +358,9 @@ func dashboard(args []string) error {
 	if err != nil {
 		return err
 	}
+	autoUpdateEnv(cfg, os.Getenv)
+	restore := ui.DecodeRestore(os.Getenv(ui.RestoreEnv))
+	os.Unsetenv(ui.RestoreEnv) // the next restart sets its own
 	if err := needTerminal(); err != nil {
 		return err
 	}
@@ -386,7 +397,7 @@ func dashboard(args []string) error {
 	if err != nil {
 		return exitError{2, err}
 	}
-	return ui.Run(context.Background(), ui.Options{
+	err = ui.Run(context.Background(), ui.Options{
 		Config:    cfg,
 		GH:        gh,
 		Workflows: wf,
@@ -394,7 +405,128 @@ func dashboard(args []string) error {
 		Host:      gh.Host(),
 		Version:   version,
 		Updater:   newChecker(gh),
+		Restore:   restore,
 	})
+	var re *ui.RestartError
+	if errors.As(err, &re) {
+		return restart(re.Restore)
+	}
+	return err
+}
+
+// autoUpdateEnv applies DILLODASH_AUTO_UPDATE over [update] auto: a
+// pulled org config replaces the file, so one host pins itself here.
+func autoUpdateEnv(cfg *config.Config, getenv func(string) string) {
+	switch strings.ToLower(strings.TrimSpace(getenv("DILLODASH_AUTO_UPDATE"))) {
+	case "0", "false", "off", "no":
+		cfg.Update.Auto = false
+	case "1", "true", "on", "yes":
+		cfg.Update.Auto = true
+	}
+}
+
+// restart runs the binary this process started from (now the new
+// release) with the same arguments and the place to restore. The
+// dashboard has already quit and given the terminal back.
+func restart(r ui.Restore) error {
+	if startExe == "" {
+		return exitError{1, errors.New("couldn't restart: the running binary's path is unknown; start dillodash again")}
+	}
+	env := []string{ui.RestoreEnv + "=" + r.Encode()}
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, ui.RestoreEnv+"=") {
+			env = append(env, kv)
+		}
+	}
+	if err := execSelf(startExe, append([]string{startExe}, os.Args[1:]...), env); err != nil {
+		return exitError{1, fmt.Errorf("couldn't restart %s: %w; start dillodash again", startExe, err)}
+	}
+	return nil
+}
+
+// updateCmd is `dillodash update [--rollback]`: install the latest
+// release now (whatever [update] auto says: asking is consent), or put
+// the .prev binaries back.
+func updateCmd(args []string, w io.Writer) error {
+	var rollback bool
+	if _, err := subFlags("update", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&rollback, "rollback", false, "put the .prev binaries back")
+	}); err != nil {
+		return err
+	}
+	var gh client
+	if c, err := newClient(ghapi.Options{Host: "github.com", Version: version}); err == nil {
+		gh = c
+	} else if !rollback {
+		return exitError{2, err}
+	}
+	u := newChecker(gh)
+	if rollback {
+		res := u.Installer.Rollback()
+		for _, p := range res.Updated {
+			fmt.Fprintf(w, "rolled back %s (its replacement is now the .prev)\n", p)
+		}
+		for _, n := range res.Notes {
+			fmt.Fprintf(w, "  note: %s\n", n)
+		}
+		if res.Err != nil {
+			return exitError{1, res.Err}
+		}
+		fmt.Fprintln(w, "restart dillodash to run it")
+		return nil
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runUpdate(ctx, u, w)
+}
+
+// runUpdate checks, installs and reports.
+func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
+	st := u.Check(ctx, true)
+	if st.Latest == "" {
+		return exitError{1, fmt.Errorf("couldn't read the latest release: %s", st.Err)}
+	}
+	fmt.Fprintf(w, "dillodash %s; the latest release is %s\n", st.Running, st.Latest)
+	switch {
+	case !selfupdate.Comparable(st.Running):
+		return exitError{2, fmt.Errorf("%s is not a release build — update replaces release builds only: gh extension install solcyber/gh-dillodash", st.Running)}
+	case !st.Stale():
+		fmt.Fprintln(w, "already current")
+		return nil
+	}
+	res := u.Install(ctx, st)
+	for _, p := range res.Updated {
+		fmt.Fprintf(w, "installed %s over %s (the old one is %s.prev)\n", res.Version, p, p)
+	}
+	for _, n := range res.Notes {
+		fmt.Fprintf(w, "  note: %s\n", n)
+	}
+	if res.Err != nil {
+		return exitError{1, fmt.Errorf("%s NOT installed: %v; by hand: %s", st.Latest, res.Err, selfupdate.ManualHint)}
+	}
+	if len(res.Updated) == 0 {
+		return nil
+	}
+	if notes := firstLines(st.Notes, 8); notes != "" {
+		fmt.Fprintf(w, "what changed in %s:\n%s\n", res.Version, notes)
+	}
+	fmt.Fprintln(w, "restart dillodash to run it (R in a running dashboard)")
+	return nil
+}
+
+// firstLines is the first n non-empty lines of s, indented.
+func firstLines(s string, n int) string {
+	var out []string
+	for _, l := range strings.Split(s, "\n") {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		out = append(out, "  "+strings.TrimRight(l, "\r"))
+		if len(out) == n {
+			break
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // findOptions say where this machine's dillodash installs live.
@@ -414,19 +546,33 @@ func runVersion(path string) (string, error) {
 	return string(out), err
 }
 
-// newChecker is the build check: the latest release is read from
-// github.com through gh's login (the dashboard's own client when it
-// talks to github.com). With no token for github.com the check only
-// reads its cache. Tests replace it.
-var newChecker = func(gh client) *selfupdate.Checker {
+// newChecker is the build check and the installer: the latest release
+// is read from github.com through gh's login (the dashboard's own client
+// when it talks to github.com). With no token for github.com the check
+// only reads its cache and nothing is installed. Tests replace it.
+var newChecker = func(gh client) *selfupdate.Updater {
 	var src selfupdate.Source
+	var dl selfupdate.Downloader
 	if s, ok := gh.(selfupdate.Source); ok && gh != nil && gh.Host() == "github.com" {
 		src = s
 	} else if c, err := newClient(ghapi.Options{Host: "github.com", Version: version}); err == nil {
 		src, _ = c.(selfupdate.Source)
 	}
+	dl, _ = src.(selfupdate.Downloader)
 	home, _ := os.UserHomeDir()
-	return &selfupdate.Checker{Src: src, Path: selfupdate.CachePath(os.Getenv, home), Find: findOptions()}
+	find := findOptions()
+	return &selfupdate.Updater{
+		Checker:   &selfupdate.Checker{Src: src, Path: selfupdate.CachePath(os.Getenv, home), Find: find},
+		Installer: &selfupdate.Installer{DL: dl, Run: runProgram, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Find: find},
+	}
+}
+
+// runProgram runs argv (gh attestation verify) and returns its combined
+// output, bounded so a hung gh can't hold an install.
+func runProgram(ctx context.Context, argv []string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	return exec.CommandContext(ctx, argv[0], argv[1:]...).CombinedOutput()
 }
 
 // buildCheck is config check's build report: a fresh check, and every
