@@ -23,6 +23,8 @@ var (
 	MotionChoices = []string{"full", "off"}
 	MascotChoices = []string{"sprite", "ascii", "none"}
 	MergeChoices  = []string{"merge", "squash", "rebase"}
+	// ChannelChoices are the update channels: published releases only.
+	ChannelChoices = []string{"stable"}
 )
 
 // Load reads and parses the TOML file at path, applying the overrides.
@@ -377,6 +379,7 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseReviews(top, cfg, ov)
 	p.parseDisplay(top, cfg, ov)
 	p.parseBots(top, cfg)
+	p.parseUpdate(top, cfg)
 
 	// [repos."owner/name"] is reserved for per-repo settings
 	if _, ok := top.get("repos"); ok {
@@ -491,6 +494,13 @@ func (p *parser) parseBots(top *table, cfg *Config) {
 		}
 	}
 	cfg.Bots.Logins = out
+	t.done()
+}
+
+func (p *parser) parseUpdate(top *table, cfg *Config) {
+	t, _ := top.sub("update")
+	cfg.Update.Auto = t.boolean("auto", cfg.Update.Auto)
+	cfg.Update.Channel = t.choice("channel", cfg.Update.Channel, ChannelChoices)
 	t.done()
 }
 

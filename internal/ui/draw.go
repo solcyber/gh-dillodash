@@ -418,8 +418,13 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 			icon = kind
 		}
 		segs = []text.Seg{text.S(" "+glyphs.Ico(icon)+m.status, style)}
-	case m.warn != "" || m.upd.Stale():
-		segs = []text.Seg{text.S(" "+glyphs.Ico("warn")+joinNonEmpty("; ", m.upd.Banner(), m.warn), "toast.warn")}
+	case m.warn != "" || m.upd.Stale() || m.upd.Pending():
+		line, refused := m.persistentLine()
+		if refused { // an install that refused stays marked as an error
+			segs = []text.Seg{text.S(" ", "text"), text.S(" "+glyphs.G("err")+" ", "chip.err"), text.S(" "+line, "toast.warn")}
+		} else {
+			segs = []text.Seg{text.S(" "+glyphs.Ico("warn")+line, "toast.warn")}
+		}
 	default:
 		return
 	}

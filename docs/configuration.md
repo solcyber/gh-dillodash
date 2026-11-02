@@ -33,6 +33,19 @@ of `host`, the way every `gh` extension does; `GH_TOKEN` and
 | `repos` | — | The repositories whose open pull requests and issues are listed, as `"owner/name"`. One or many; several owners are fine. `--repo OWNER/NAME` (repeatable) replaces the list for one run. With more than one repo every reference reads `repo#N`. |
 | `ci_recheck_secs` | `900` | When CI is read through the Actions API (a fine-grained token cannot read the check rollup), a settled, passing head commit is re-checked after this long; a failing or running one on every refresh; everything on `r`. |
 
+## `[update]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `auto` | `true` | Keep this install on the latest release. A running dashboard checks at startup and every 30 minutes (a conditional request: free when nothing changed); a newer release is downloaded in the background, verified (its digest and its build attestation, [SECURITY.md](../SECURITY.md)), and installed over every gh extension or standalone binary it may replace, the old one kept as `<name>.prev`. The status line then says `dillodash vX.Y.Z installed — R: restart now (keeps your place)`, and `a`, `M`, `D` and `w` offer that restart first. `false` keeps the check and the banner and installs nothing (a pinned host). `DILLODASH_AUTO_UPDATE=0` turns it off on one host whatever a pulled config says. |
+| `channel` | `stable` | Which releases count: `stable`, the published releases. A draft or a prerelease is never installed. |
+
+`gh dillodash update` installs the latest release now (whatever `auto`
+says) and prints the first lines of what changed; `gh dillodash update
+--rollback` puts the `.prev` binaries back. A launcher script on `PATH`
+(a wrapper that sets a token and runs `gh dillodash`) is never replaced:
+it runs whatever it wraps.
+
 ## `[display]`
 
 | Key | Default | Flag | Meaning |
@@ -128,7 +141,10 @@ do not speak. `waiting_runs` is new in dillodash; add its table by hand.
 |---|---|
 | `$XDG_CACHE_HOME/dillodash/release-repos-<org>.json` (default `~/.cache/dillodash/`) | The `release_pr` workflow's discovered repo list, cached for `discover_ttl_secs`. Written 0600. Delete it to re-discover now. |
 | `$XDG_CACHE_HOME/dillodash/latest-release.json` (default `~/.cache/dillodash/`) | The latest dillodash release and its ETag, from the build check at startup and in `config check`. Each check is a conditional request (free when nothing changed); offline, the last answer stands. Written 0600. |
+| `<install>.prev`, and `manifest.yml.prev` beside the gh extension | The binary (and gh's manifest) an update or `gh dillodash update` replaced. `gh dillodash update --rollback` swaps it back. A temporary `.dillodash-*` file beside an install exists only while an update is written. |
 | `config.toml.bak` beside the config | The previous config, kept whenever `config pull --force` or `config migrate --force` replaces one. |
 | `$TMPDIR/dillodash-*.md`, `*.diff` | A comment being edited in `$EDITOR`, a diff shown in `$PAGER`. Created 0600 and removed afterwards. |
 
 Nothing else. The token never touches the disk through dillodash.
+An update rewrites its own binaries (above), never anything of `gh`'s
+but the dillodash extension's `manifest.yml` tag.

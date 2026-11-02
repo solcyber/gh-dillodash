@@ -133,7 +133,7 @@ func TestGate(t *testing.T) {
 		t.Errorf("unchecked gate %q", g)
 	}
 	bin := Status{Running: "v1.5.2", Latest: "v1.5.4", Self: Install{Kind: KindBinary, Path: "/opt/bin/dillodash"}}
-	if !strings.Contains(bin.Banner(), "replace /opt/bin/dillodash with the v1.5.4 binary from https://github.com/solcyber/gh-dillodash/releases") {
+	if !strings.Contains(bin.Banner(), "dillodash v1.5.2 — v1.5.4 is out: /opt/bin/dillodash update") {
 		t.Errorf("binary banner %q", bin.Banner())
 	}
 }

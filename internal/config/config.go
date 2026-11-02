@@ -29,6 +29,7 @@ type Config struct {
 	Reviews  ReviewsConfig
 	Display  DisplayConfig
 	Bots     BotsConfig
+	Update   UpdateConfig
 	Warnings []string
 
 	TerraformApprove  *TerraformApproveConfig
@@ -64,6 +65,16 @@ type DisplayConfig struct {
 	Theme       string // auto | mono
 	Motion      string // full | off
 	Mascot      string // sprite | ascii | none
+}
+
+// UpdateConfig is [update]: how dillodash keeps itself current.
+type UpdateConfig struct {
+	// Auto installs a newer release in the background (verified) and
+	// offers a restart; false only warns, for a pinned host.
+	Auto bool
+	// Channel is which releases count: "stable" is the only one, the
+	// published releases (never a draft or a prerelease).
+	Channel string
 }
 
 // MinRefreshSecs is the floor for refresh_secs; lower values are clamped
@@ -258,6 +269,7 @@ func Default() *Config {
 		Reviews: ReviewsConfig{CIRecheckSecs: 900},
 		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite"},
 		Bots:    BotsConfig{Logins: []string{"github-actions", "dependabot"}},
+		Update:  UpdateConfig{Auto: true, Channel: "stable"},
 	}
 }
 

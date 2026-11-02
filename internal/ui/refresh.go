@@ -232,6 +232,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		if !spoke {
 			m.errText = ""
 		}
+		m.applyRestore()
 		// the listed PR behind an open detail follows the fresh list, so
 		// cards and the header icon read this refresh's data; one that
 		// left the list keeps its last copy (nothing newer exists)

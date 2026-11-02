@@ -45,7 +45,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		seen[m[1]] = true
 	}
 	want := []string{
-		"host", "login", "approvers_team", "repos", "ci_recheck_secs", "refresh_secs", "icons", "theme", "motion", "mascot", "logins",
+		"host", "login", "approvers_team", "repos", "ci_recheck_secs", "refresh_secs", "icons", "theme", "motion", "mascot", "logins", "auto", "channel",
 		"enabled", "digest_bot", "plan_workflow", "gate_context", "gate_done_prefixes", "approve_command",
 		"confirm_destroys_flag", "outside_window_flag", "outside_window_min_reason", "ceremony_window",
 		"manifest_repo", "timezone", "tz_label", "cutoff", "start", "release_from", "end", "queued_label",
@@ -75,7 +75,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 	want2 := Default()
 	want2.Path = "uncommented"
 	want2.Reviews.Repos = c.Reviews.Repos
-	if c.GitHub != want2.GitHub || c.Reviews.CIRecheckSecs != want2.Reviews.CIRecheckSecs || c.Display != want2.Display {
+	if c.GitHub != want2.GitHub || c.Reviews.CIRecheckSecs != want2.Reviews.CIRecheckSecs || c.Display != want2.Display || c.Update != want2.Update {
 		t.Errorf("uncommented core differs from Default():\n got %+v\nwant %+v", c, want2)
 	}
 	if strings.Join(c.Bots.Logins, ",") != strings.Join(want2.Bots.Logins, ",") {

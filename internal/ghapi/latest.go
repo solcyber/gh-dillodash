@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -58,4 +60,39 @@ func (c *GitHub) LatestRelease(ctx context.Context, repo model.Repo, etag string
 		return nil, "", &Error{Method: http.MethodGet, URL: rawURL, Message: "bad response: " + err.Error()}
 	}
 	return &rel, h.Get("ETag"), nil
+}
+
+// downloadTimeout bounds an asset download: a release binary is tens of
+// megabytes, far past the per-request timeout of an API call.
+const downloadTimeout = 10 * time.Minute
+
+// DownloadAsset streams a release asset into w through the API (so a
+// private repo's asset works with the token), refusing more than limit
+// bytes. GitHub redirects to its storage host; the token goes only to
+// the API host.
+func (c *GitHub) DownloadAsset(ctx context.Context, repo model.Repo, id int64, w io.Writer, limit int64) error {
+	rawURL := c.restURL(repoPath(repo, fmt.Sprintf("releases/assets/%d", id)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return &Error{Method: http.MethodGet, URL: rawURL, Message: "bad request: " + err.Error()}
+	}
+	req.Header.Set("Accept", "application/octet-stream")
+	hc := *c.http
+	hc.Timeout = downloadTimeout
+	resp, err := hc.Do(req)
+	if err != nil {
+		return &Error{Method: http.MethodGet, URL: rawURL, Message: "network error: " + netErrorText(err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return httpError(http.MethodGet, rawURL, resp)
+	}
+	n, err := io.Copy(w, io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return &Error{Method: http.MethodGet, URL: rawURL, Message: "network error: " + netErrorText(err)}
+	}
+	if n > limit {
+		return &Error{Method: http.MethodGet, URL: rawURL, Message: fmt.Sprintf("the asset is larger than %d bytes", limit)}
+	}
+	return nil
 }

@@ -43,6 +43,16 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # logins = ["github-actions", "dependabot"]
 
 # ============================================================================
+# Update — dillodash keeps itself on the latest release. A newer one is
+# downloaded in the background, verified (its digest and its build
+# attestation), installed beside the old one (kept as .prev), and R restarts
+# into it. DILLODASH_AUTO_UPDATE=0 turns installing off on one host.
+# ============================================================================
+[update]
+# auto = true                 # false: only say a newer release is out (a pinned host)
+# channel = "stable"          # published releases only; drafts and prereleases never
+
+# ============================================================================
 # Workflow: terraform approve
 # PRs whose plan digest comes from a bot, approved with a slash command
 # ============================================================================

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -32,5 +33,26 @@ func TestLatestReleaseConditional(t *testing.T) {
 	}
 	if _, _, err := c.LatestRelease(context.Background(), model.Repo{Owner: "acme", Name: "gone"}, ""); err == nil {
 		t.Error("404 should be an error")
+	}
+}
+
+func TestDownloadAsset(t *testing.T) {
+	s := newServer(t)
+	s.handle("GET", "/repos/acme/tool/releases/assets/7", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept") != "application/octet-stream" {
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return
+		}
+		w.Write([]byte("binary bytes"))
+	})
+	c := s.client(t)
+	repo := model.Repo{Owner: "acme", Name: "tool"}
+	var b strings.Builder
+	if err := c.DownloadAsset(context.Background(), repo, 7, &b, 100); err != nil || b.String() != "binary bytes" {
+		t.Fatalf("download: %q %v", b.String(), err)
+	}
+	b.Reset()
+	if err := c.DownloadAsset(context.Background(), repo, 7, &b, 5); err == nil || !strings.Contains(err.Error(), "larger than 5 bytes") {
+		t.Errorf("limit: %v", err)
 	}
 }

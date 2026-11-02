@@ -44,11 +44,14 @@ Everything else is optional and documented in [`config.example.toml`](config.exa
 An organization can keep its config in a repo and install it with
 `gh dillodash config pull owner/repo` (see [docs/configuration.md](docs/configuration.md)).
 
-Upgrade with `gh extension upgrade dillodash`. When a newer release is
-out, the header turns the version gold (`v1.5.2 → v1.5.4`), the status
-line names the upgrade command on every screen, and `a`, `M`, `D` and `w`
-say what this build lacks before they run; `config check` lists every
-dillodash on the machine with its version. Remove it with
+dillodash keeps itself up to date: a newer release is downloaded in the
+background, verified against its digest and its build attestation, and
+installed beside the old one; `R` restarts into it where you were.
+`gh dillodash update` does it now and `--rollback` undoes it;
+`[update] auto = false` only warns (the header turns the version gold,
+`v1.5.2 → v1.5.4`, and `a`, `M`, `D` and `w` say what this build lacks
+before they run). `config check` lists every dillodash on the machine
+with its version. Remove it with
 `gh extension remove dillodash` (the config in `~/.config/dillodash` and
 any installed font stay until you delete them). When something looks
 wrong, [docs/troubleshooting.md](docs/troubleshooting.md) lists the

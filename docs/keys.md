@@ -43,6 +43,7 @@
 | list | `y` | copy the URL (tmux buffer, the system clipboard, or OSC 52); the status line says which |
 | list, detail, files, diff, fortress | `o` | open the URL in a browser when this host has one; otherwise like `y` |
 | list, detail, diff, fortress | `r` | refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed) |
+| list, detail | `R` | restart into the dillodash release installed in the background, keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it once one is installed) |
 | list | `q` | quit (press twice while an action is still talking to GitHub) |
 | any | `:` | go to `#N`, `repo#N` or `owner/repo#N`: a PR first, then an issue |
 | any | `?` | help: every key, the glyph legend, the version; `j`/`k` scroll it when it overflows |

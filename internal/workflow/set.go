@@ -88,12 +88,12 @@ func NewSet(ctx *Context, items ...Workflow) (*Set, error) {
 // ui package's key table, view:key (a test keeps the two equal).
 var coreKeys = map[string]bool{
 	"list:/": true, "list::": true, "list:A": true, "list:D": true, "list:G": true, "list:d": true, "list:g": true, "list:j": true,
-	"list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:y": true,
+	"list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:y": true, "list:R": true,
 	"detail:/": true, "detail:C": true, "detail:D": true, "detail:G": true, "detail:M": true, "detail:N": true, "detail:a": true, "detail:c": true,
 	"detail:f": true, "detail:g": true, "detail:h": true, "detail:j": true, "detail:k": true, "detail:m": true, "detail:n": true, "detail:o": true,
-	"detail:q": true, "detail:r": true, "detail:t": true, "detail:v": true, "detail:y": true,
+	"detail:q": true, "detail:r": true, "detail:t": true, "detail:v": true, "detail:y": true, "detail:R": true,
 	"issue:/": true, "issue:C": true, "issue:G": true, "issue:N": true, "issue:c": true, "issue:g": true, "issue:h": true, "issue:j": true,
-	"issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:t": true, "issue:y": true,
+	"issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:t": true, "issue:y": true, "issue:R": true,
 	"any::": true, "any:?": true, "any:e": true,
 }
 

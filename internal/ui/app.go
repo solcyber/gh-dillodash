@@ -43,6 +43,9 @@ func Run(ctx context.Context, o Options) error {
 	if errors.Is(err, tea.ErrInterrupted) {
 		return ErrInterrupted
 	}
+	if err == nil && m.restartTo != nil {
+		return &RestartError{Restore: *m.restartTo}
+	}
 	return err
 }
 
@@ -179,14 +182,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pollDue() {
 			m.poll()
 		}
+		if m.updater != nil && fx.Now() >= m.nextBuildCheckAt {
+			m.checkBuild(true)
+		}
+		if m.restartQueued && m.modal == nil && !m.action {
+			return m, m.restartNow()
+		}
 		return m, m.tick()
 	case refreshDoneMsg:
 		m.applyRefresh(msg.out)
 	case pollDoneMsg:
 		m.applyPoll(msg.out)
 	case buildCheckMsg:
-		m.checking = false
-		m.upd = msg.st
+		m.applyBuildCheck(msg.st)
+	case buildInstallMsg:
+		m.applyBuildInstall(msg.res)
 	case showModalMsg:
 		m.modal = msg.modal
 		m.modalDone = msg.done
@@ -310,6 +320,9 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	if m.action {
 		if m.view == ViewList && k.Rune == 'q' {
 			return m.requestQuit(false) // warns once, quits on the second press
+		}
+		if k.Rune == 'R' && m.upd.Pending() {
+			return doRestart(m, k, 0, nil) // queued until the action settles
 		}
 		return nil // an action is mid-flight: its modal owns the keys
 	}
