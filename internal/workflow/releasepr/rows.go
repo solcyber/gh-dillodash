@@ -207,7 +207,13 @@ func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workfl
 func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 	return map[string]workflow.RowKind{
 		RowRelease: {
-			Icon:   "release",
+			Icon: "release",
+			NumText: func(row workflow.Row) string {
+				if pr, ok := row.Item.(*model.PR); ok {
+					return fmt.Sprintf("#%d", pr.Number)
+				}
+				return ""
+			},
 			Layout: w.releaseLayout,
 			Segs:   w.releaseSegs,
 			Live:   w.rowLive,
@@ -219,9 +225,10 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 			},
 		},
 		RowStage: {
-			Icon:   "stage",
-			Layout: w.stageLayout,
-			Segs:   w.stageSegs,
+			Icon:    "stage",
+			NumText: func(workflow.Row) string { return "stage" },
+			Layout:  w.stageLayout,
+			Segs:    w.stageSegs,
 			URL: func(app workflow.App, row workflow.Row) string {
 				s, ok := row.Item.(*Stage)
 				if !ok {
@@ -261,8 +268,13 @@ func titleRoom(cols workflow.Layout, w, numW int) int {
 
 // fit drops columns in order until the title keeps 24 cells.
 func fit(cols workflow.Layout, w, numW int, dropOrder ...string) workflow.Layout {
+	return fitTo(cols, w, numW, 24, dropOrder...)
+}
+
+// fitTo drops columns in order until the title keeps room cells.
+func fitTo(cols workflow.Layout, w, numW, room int, dropOrder ...string) workflow.Layout {
 	for _, name := range dropOrder {
-		if titleRoom(cols, w, numW) >= 24 {
+		if titleRoom(cols, w, numW) >= room {
 			break
 		}
 		delete(cols, name)
@@ -324,7 +336,10 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 	if titleRoom(cols, width, numW) < 24 {
 		cols["kind"] = maxSegs(items, func(r workflow.Row) []text.Seg { return w.kindChip(app, r.Item.(*model.PR), -1, true) }, 99)
 	}
-	return fit(cols, width, numW, "kind", "repo")
+	// a release's title is its branch (release/<date>), the least of
+	// what the row says: on a narrow screen it is clipped to 12 cells
+	// before the phase (the slot, the rail, bumped) or the repo goes
+	return fitTo(cols, width, numW, 12, "kind", "repo")
 }
 
 func (w *Workflow) stageLayout(_ workflow.App, items []workflow.Row, _, numW, repoW int) workflow.Layout {
@@ -569,9 +584,9 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 // HelpRows are the workflow's help lines.
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
-		{"releases", fmt.Sprintf("a  on an app release PR: approve (queues it for the window) or approve + %s", w.cfg.ReleaseNowCommand)},
-		{"", "M  merge an APPROVED release at its slot (= the prod deploy)   D  approve its deployments (row or detail)"},
-		{"", "a release in flight shows its rail on the row and its steps, clocks and run in the detail; it says when it lands"},
+		{"releases", fmt.Sprintf("a  on a release's row or in its detail: approve (queues it for the window) or approve + %s; on one already approved (or bumped by the window) %s alone, no second review", w.cfg.ReleaseNowCommand, w.cfg.ReleaseNowCommand)},
+		{"", "D  approve its deployments (row or detail)   M  last resort: merge by hand when the release-now dispatch can't run (the release job merges at the slot)"},
+		{"", "a release in flight shows its rail on the row and its steps, clocks and run in the detail; it says when it lands, and which release is next in the lane"},
 	}
 }
 
@@ -593,11 +608,14 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	rail = append(rail, railSegs(deploying, time.Time{}, nil, "", railCells, false)...)
 	rail = append(rail, text.S(" deploying 3/9 · 2m", "chip.queued"), text.S(glyphs.G("capr"), "cap:chip.queued"))
 	rail = append(rail, text.S(" a release in flight: its rail fills from setup to finishing", "muted"))
-	rail = append(rail, sp)
-	rail = append(rail, scenes.Chip("released", "chip.approved")...)
-	rail = append(rail, sp)
-	rail = append(rail, scenes.Chip("release FAILED", "chip.rolled")...)
-	return [][]text.Seg{row, rail}
+	ends := []text.Seg{text.S(text.Pad("", 10), "section")}
+	ends = append(ends, scenes.Chip("released", "chip.approved")...)
+	ends = append(ends, sp)
+	ends = append(ends, scenes.Chip("release FAILED", "chip.rolled")...)
+	ends = append(ends, sp)
+	ends = append(ends, scenes.Chip("bumped — a: release NOW", "chip.rolled")...)
+	ends = append(ends, text.S(" its approval stands", "muted"))
+	return [][]text.Seg{row, rail, ends}
 }
 
 // FortressLaneLabel names a release repo's lane.
@@ -670,9 +688,9 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 		rule = fmt.Sprintf("only %s<date> (the go-tagged cut on %s) and %s<slug> ship to %s; a, M and D refuse anything else",
 			w.cfg.ReleasePrefix, w.cfg.StagingBranch, w.cfg.HotfixPrefix, w.cfg.ProductionBranch)
 	case (src.State == "" || src.State == "OPEN") && (workflow.IApproved(app, pr) || workflow.IApproved(app, src)):
-		rule = fmt.Sprintf("approved by you — a: release NOW posts %s \"<reason>\" with no second review (yours stands); M merges it at its slot; D approves the deployments waiting on the merge", cmd)
+		rule = fmt.Sprintf("approved by you — a: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves the deployments waiting on the merge", cmd)
 	case w.cfg.ApprovalQueuesForWindow && w.win != nil:
-		rule = fmt.Sprintf("a: an approving review queues it for %s window; %s \"<reason>\" releases it now; M merges it at its slot (the deploy); D approves the deployments waiting on the merge",
+		rule = fmt.Sprintf("a: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
 			w.NightPhrase(app.Now()), cmd)
 	default:
 		rule = fmt.Sprintf("a: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)

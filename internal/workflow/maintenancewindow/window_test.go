@@ -185,7 +185,8 @@ func TestNightMaths(t *testing.T) {
 		InReleaseWindow(at("2026-10-22T03:05:00Z"), cfg) && !InReleaseWindow(at("2026-10-21T19:00:00Z"), cfg) &&
 			InReleaseWindow(at("2026-10-22T02:59:00Z"), cfg) && !InReleaseWindow(at("2026-10-22T03:30:00Z"), cfg))
 	check(t, "countdown to the start", Countdown("2026-10-21", at("2026-10-22T00:57:00Z"), cfg) == "starts in 2h03m" &&
-		Countdown("2026-10-21", at("2026-10-22T03:00:00Z"), cfg) == "")
+		Countdown("2026-10-21", at("2026-10-22T03:00:00Z"), cfg) == "" &&
+		Countdown("2026-10-21", at("2026-10-22T02:56:00Z"), cfg) == "starts in 4m")
 	check(t, "night labels", NightLabel("2026-10-21", at("2026-10-21T22:00:00Z"), cfg) == "window 2026-10-21 23:00 ET, tonight" &&
 		NightLabel("2026-10-22", at("2026-10-21T22:00:00Z"), cfg) == "window 2026-10-22 23:00 ET, tomorrow night" &&
 		NightLabel("2026-10-24", at("2026-10-21T22:00:00Z"), cfg) == "window 2026-10-24 23:00 ET, Sat")
@@ -603,12 +604,22 @@ func TestReleases(t *testing.T) {
 	check(t, "w on a queued release row acts on its night and PR", n == mn && pr == rel42)
 	w.AfterApply(app)
 	check(t, "a queued release makes the worker fetch the manifests", w.relQueued.Load())
+	check(t, "and pulls the next refresh in, since this pass skipped them", len(app.Soon) == 1)
+	w.AfterApply(app)
+	check(t, "still queued: no second early refresh", len(app.Soon) == 1)
 	app.SetState(ReleaseState, releases{})
 	w.AfterApply(app)
 	check(t, "nothing queued, nothing scheduled: no manifests", !w.relQueued.Load())
 	app.SetState(ReleaseState, scheduledOnly{rel42})
 	w.AfterApply(app)
 	check(t, "a scheduled release alone keeps the manifests read", w.relQueued.Load())
+}
+
+func TestManifestsReadFromTheFirstRefresh(t *testing.T) {
+	c := &config.Config{MaintenanceWindow: config.DefaultMaintenanceWindow()}
+	check(t, "no release workflow: manifests wait for a queued PR", !fromConfig(c).relQueued.Load())
+	c.ReleasePR = config.DefaultReleasePR()
+	check(t, "releases on: the first refresh reads the manifests", fromConfig(c).relQueued.Load())
 }
 
 // scheduledOnly is a release state with a release on a manifest and

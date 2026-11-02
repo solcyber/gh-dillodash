@@ -13,7 +13,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
-// The night demo (`--demo night`) replays a manual release night in
+// The night demo (`--demo-night`) replays a manual release night in
 // dillodash alone: after the freeze, an approved release the window
 // bumped goes out with release NOW, then, once it is released, the next
 // one in the lane (a database migration with a slot on the manifest):

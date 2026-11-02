@@ -150,11 +150,11 @@ func TestAutoUpdateInstallsAndRestartKeepsThePlace(t *testing.T) {
 	var asked []string
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return false }
 	h.key('a')
-	if len(asked) != 1 || !strings.Contains(asked[0], "dillodash v1.5.4 is installed and this session still runs v1.5.2 — R restarts into it") {
+	if len(asked) == 0 || !strings.Contains(asked[0], "dillodash v1.5.4 is installed — restart into v1.5.4 first?") {
 		t.Errorf("gate: %q", asked)
 	}
 	if len(h.gh.Approvals) != 0 {
-		t.Error("approved through a declined gate")
+		t.Error("approved with every confirm declined")
 	}
 	h.m.mu.Lock()
 	cmd := h.m.handleKey(widgets.R('R'))
@@ -171,6 +171,26 @@ func TestAutoUpdateInstallsAndRestartKeepsThePlace(t *testing.T) {
 	}
 	if got := DecodeRestore(r.Encode()); got == nil || got.Detail.Number != 101 {
 		t.Errorf("round trip %+v", got)
+	}
+}
+
+// TestReleaseActionRestartsFirst: yes to the restart-first question
+// restarts into the installed release once the action settles, keeping
+// the open PR, and posts nothing.
+func TestReleaseActionRestartsFirst(t *testing.T) {
+	h, _ := staleHarness(t, "v1.5.4")
+	h.load()
+	h.named("enter")
+	h.m.tp.Confirm = func(string) bool { return true }
+	h.m.tp.Pick = func(string, []string) int { t.Error("no menu after yes to the restart"); return -1 }
+	h.key('a')
+	h.pump()
+	h.m.Update(tickMsg{h.m.tickGen})
+	if h.m.restartTo == nil || h.m.restartTo.Detail == nil || h.m.restartTo.Detail.Number != 101 {
+		t.Fatalf("restart: %+v status %q", h.m.restartTo, h.m.status)
+	}
+	if len(h.gh.Approvals) != 0 || len(h.gh.CommentsPosted) != 0 {
+		t.Error("posted on the way to a restart")
 	}
 }
 

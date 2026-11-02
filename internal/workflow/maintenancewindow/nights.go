@@ -271,6 +271,9 @@ func span(d time.Duration) string {
 	if secs < 0 {
 		secs = 0
 	}
+	if secs < 3600 {
+		return fmt.Sprintf("%dm", secs/60)
+	}
 	return fmt.Sprintf("%dh%02dm", secs/3600, (secs%3600)/60)
 }
 

@@ -126,3 +126,33 @@ func TestRestartExecsTheStartBinaryWithThePlace(t *testing.T) {
 		t.Errorf("%d restore entries in the env", n)
 	}
 }
+
+// TestRunUpdateNothingReplaced: an update with no install it may replace
+// (a pinned extension here) says so and fails, never a silent success.
+func TestRunUpdateNothingReplaced(t *testing.T) {
+	u, ext := testUpdater(t, []byte("new"), []byte("new"))
+	os.WriteFile(filepath.Join(filepath.Dir(ext), "manifest.yml"), []byte("tag: v1.5.2\nispinned: true\n"), 0o600)
+	var out bytes.Buffer
+	err := runUpdate(context.Background(), u, &out)
+	if err == nil || !strings.Contains(err.Error(), "v1.5.4 NOT installed: no install here can be replaced") {
+		t.Errorf("err %v\n%s", err, out.String())
+	}
+	if b, _ := os.ReadFile(ext); string(b) != "old" {
+		t.Errorf("a pinned install changed: %q", b)
+	}
+}
+
+// TestFirstLinesStopsAtTheFirstSection: the excerpt is the notes'
+// opening paragraph, never half a list.
+func TestFirstLinesStopsAtTheFirstSection(t *testing.T) {
+	notes := "A release night in dillodash alone,\nand installs that keep themselves current.\n\n### Fixed\n\n- one\n  wrapped\n- two\n"
+	if got := firstLines(notes, 8); got != "  A release night in dillodash alone,\n  and installs that keep themselves current." {
+		t.Errorf("got %q", got)
+	}
+	if got := firstLines("### Fixed\n\n- one\n- two\n\n### Added\n- three\n", 8); got != "  - one\n  - two" {
+		t.Errorf("headed notes: %q", got)
+	}
+	if got := firstLines("a\nb\nc\n", 2); got != "  a\n  b …" {
+		t.Errorf("capped: %q", got)
+	}
+}

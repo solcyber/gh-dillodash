@@ -54,8 +54,18 @@ func init() {
 		if ctx.Config == nil || ctx.Config.MaintenanceWindow == nil {
 			return nil, nil
 		}
-		return New(ctx.Config.MaintenanceWindow, ctx.Config.TerraformApprove), nil
+		return fromConfig(ctx.Config), nil
 	})
+}
+
+// fromConfig builds the workflow from the whole config. With releases
+// on, the manifests are read from the first refresh: AfterApply learns of
+// queued or scheduled releases only after a pass, and a night's slots
+// must not wait a whole refresh (or a restart) for it.
+func fromConfig(c *config.Config) *Workflow {
+	w := New(c.MaintenanceWindow, c.TerraformApprove)
+	w.relQueued.Store(c.ReleasePR != nil)
+	return w
 }
 
 // New builds the workflow; ta is the terraform workflow's config (its
@@ -179,7 +189,14 @@ func (w *Workflow) AfterApply(app workflow.App) {
 	if sp, ok := app.State(ReleaseState).(workflow.ScheduledProvider); ok && sp != nil {
 		scheduled = len(sp.ScheduledForWindow())
 	}
-	w.relQueued.Store(len(w.queuedReleases(app)) > 0 || scheduled > 0)
+	want := len(w.queuedReleases(app)) > 0 || scheduled > 0
+	if want && !w.relQueued.Swap(want) {
+		// A release joined the queue during this pass: the manifests
+		// were skipped, so fetch them now rather than at the next tick.
+		app.RefreshSoon(2 * time.Second)
+		return
+	}
+	w.relQueued.Store(want)
 }
 
 func (w *Workflow) state(app workflow.App) *State {

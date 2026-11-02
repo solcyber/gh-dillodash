@@ -297,6 +297,9 @@ func parseFlags(args []string) (flags, error) {
 			f.refreshSet = true
 		}
 	})
+	if f.demo && f.demoNight {
+		return f, exitError{2, errors.New("--demo and --demo-night are two different replays: pass one")}
+	}
 	return f, nil
 }
 
@@ -458,7 +461,7 @@ func updateCmd(args []string, w io.Writer) error {
 	if c, err := newClient(ghapi.Options{Host: "github.com", Version: version}); err == nil {
 		gh = c
 	} else if !rollback {
-		return exitError{2, err}
+		return exitError{2, fmt.Errorf("update reads its releases from github.com: %w — gh auth login --hostname github.com", err)}
 	}
 	u := newChecker(gh)
 	if rollback {
@@ -484,7 +487,11 @@ func updateCmd(args []string, w io.Writer) error {
 func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 	st := u.Check(ctx, true)
 	if st.Latest == "" {
-		return exitError{1, fmt.Errorf("couldn't read the latest release: %s", st.Err)}
+		why := st.Err
+		if why == "" {
+			why = "no answer"
+		}
+		return exitError{1, fmt.Errorf("couldn't read the latest release (%s): check gh auth status --hostname github.com, or by hand: %s", why, selfupdate.ManualHint)}
 	}
 	fmt.Fprintf(w, "dillodash %s; the latest release is %s\n", st.Running, st.Latest)
 	switch {
@@ -505,7 +512,7 @@ func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 		return exitError{1, fmt.Errorf("%s NOT installed: %v; by hand: %s", st.Latest, res.Err, selfupdate.ManualHint)}
 	}
 	if len(res.Updated) == 0 {
-		return nil
+		return exitError{1, fmt.Errorf("%s NOT installed: no install here can be replaced in place (the notes above say why; gh dillodash config check lists them); by hand: %s", st.Latest, selfupdate.ManualHint)}
 	}
 	if notes := firstLines(st.Notes, 8); notes != "" {
 		fmt.Fprintf(w, "what changed in %s:\n%s\n", res.Version, notes)
@@ -514,17 +521,25 @@ func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 	return nil
 }
 
-// firstLines is the first n non-empty lines of s, indented.
+// firstLines is the release notes' opening paragraph, indented, at most
+// n lines: it stops at the first blank line or heading after some text,
+// so a list is never cut mid-item.
 func firstLines(s string, n int) string {
 	var out []string
 	for _, l := range strings.Split(s, "\n") {
-		if strings.TrimSpace(l) == "" {
+		l = strings.TrimRight(l, "\r")
+		t := strings.TrimSpace(l)
+		if t == "" || strings.HasPrefix(t, "#") {
+			if len(out) > 0 {
+				break
+			}
 			continue
 		}
-		out = append(out, "  "+strings.TrimRight(l, "\r"))
 		if len(out) == n {
+			out[n-1] += " …"
 			break
 		}
+		out = append(out, "  "+l)
 	}
 	return strings.Join(out, "\n")
 }
@@ -678,6 +693,7 @@ func configCmd(args []string) error {
 		if err != nil {
 			return err
 		}
+		autoUpdateEnv(cfg, os.Getenv) // report what the dashboard would do
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return doctor.Run(ctx, os.Stdout, cfg, version, buildCheck)
@@ -715,7 +731,7 @@ func configCmd(args []string) error {
 			path = config.InstallPath(os.Getenv)
 		}
 		if _, err := os.Stat(path); err == nil {
-			return exitError{2, fmt.Errorf("%s already exists", path)}
+			return exitError{2, fmt.Errorf("%s already exists: edit it, then gh dillodash config check (config pull replaces it with your org's)", path)}
 		}
 		if err := config.WriteFileAtomic(path, []byte(config.Example()), 0o600); err != nil {
 			return err

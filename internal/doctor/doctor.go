@@ -33,6 +33,7 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string, b
 	if build != nil {
 		st, installs := build(ctx)
 		Build(w, st, installs)
+		AutoUpdate(w, cfg.Update.Auto, os.Getenv("DILLODASH_AUTO_UPDATE"))
 	}
 	fmt.Fprintf(w, "config: %s\n", cfg.Path)
 	var src config.Source
