@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [1.6.0]
+
+A release night in dillodash alone, and installs that keep themselves
+current: release NOW from every place a release can be opened (#23), a
+warning on a stale build (#22), the identity check, lane and slot cancel
+of a manual night (#24), and a verified auto-update with `R` to restart
+into it (#25).
 
 ### Fixed
 
@@ -35,7 +41,9 @@
   `merged; its deploy waits on stg — press D on its row` (#24).
 - `M` on a release outside the window points at `a` while the release-now
   dispatch can fire: merging by hand is the last resort, for when the
-  dispatch failed this session or `release_now_dispatch` is off (#24).
+  dispatch failed this session, the command has waited five minutes
+  with no run (a restart forgets a failed dispatch), or
+  `release_now_dispatch` is off (#24).
 
 ### Added
 
