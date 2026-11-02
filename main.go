@@ -114,6 +114,7 @@ flags:
   --motion MODE      full | off
   --mono             no colors, attributes only (also: NO_COLOR)
   --demo             open the dashboard on an offline fixture, no GitHub needed
+  --demo-night       replay a manual release night offline: release NOW, the lane, D
 
 environment:
   DILLODASH_CONFIG   the config file, when --config is not given
@@ -245,6 +246,7 @@ func dispatch(args []string) error {
 
 type flags struct {
 	demo       bool
+	demoNight  bool
 	config     string
 	repos      repoList
 	refresh    int
@@ -271,6 +273,7 @@ func parseFlags(args []string) (flags, error) {
 	fs.StringVar(&f.motion, "motion", "", "motion")
 	fs.BoolVar(&f.mono, "mono", false, "no colors")
 	fs.BoolVar(&f.demo, "demo", false, "run on an offline fixture (no GitHub)")
+	fs.BoolVar(&f.demoNight, "demo-night", false, "replay a manual release night offline")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Print(usage())
@@ -340,7 +343,7 @@ func dashboard(args []string) error {
 	if err != nil {
 		return err
 	}
-	if f.demo {
+	if f.demo || f.demoNight {
 		return runDemo(context.Background(), f)
 	}
 	cfg, err := loadConfig(f)
@@ -476,6 +479,10 @@ func refuseBot(cfg *config.Config, me, source string) error {
 // apply; --config and --repo have nothing to override.
 func runDemo(ctx context.Context, f flags) error {
 	cfg := demo.Config()
+	var gh ghapi.Client = demo.Client()
+	if f.demoNight {
+		cfg, gh = demo.NightConfig(), demo.NightClient(demo.NightStart).GH
+	}
 	if f.icons != "" {
 		cfg.Display.Icons = f.icons
 	}
@@ -503,7 +510,7 @@ func runDemo(ctx context.Context, f flags) error {
 	if err != nil {
 		return err
 	}
-	return ui.Run(ctx, ui.Options{Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: version + " demo"})
+	return ui.Run(ctx, ui.Options{Config: cfg, GH: gh, Workflows: wf, Me: demo.Me, Host: "github.com", Version: version + " demo"})
 }
 
 func configCmd(args []string) error {

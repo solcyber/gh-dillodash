@@ -118,6 +118,7 @@ type Model struct {
 	status     string
 	statusKind string // "ok" | "warn" | "info"
 	statusAt   float64
+	msgSeq     int // bumped by every status or error message, so a pass can tell a workflow spoke
 
 	// refresh
 	refreshing bool
@@ -280,6 +281,7 @@ func (m *Model) setStatus(msg string) {
 	if msg != "" {
 		m.errText = ""
 		m.lastMsg = msg
+		m.msgSeq++
 		m.fx.Start("toast", 0.25, nil)
 	}
 }
@@ -299,6 +301,7 @@ func (m *Model) notice(msg string) {
 func (m *Model) fail(msg string) {
 	m.errText = msg
 	m.lastMsg = msg
+	m.msgSeq++
 	m.status = ""
 	m.fx.Start("toast", 0.25, nil)
 	m.fx.Start("toast.shake", 0.3, nil)

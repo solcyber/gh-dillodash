@@ -19,6 +19,7 @@ default and a comment. This page explains the sections.
 |---|---|---|
 | `host` | unset | A GitHub Enterprise Server hostname. Unset, the host is `$GH_HOST`, then `gh`'s default host, then `github.com`. Sign in to it with `gh auth login --hostname HOST`; dillodash uses that token. |
 | `login` | unset | The login you expect to act as. When `gh` is signed in as someone else dillodash warns, pauses three seconds, and continues as that account (`gh auth switch` changes it). |
+| `approvers_team` | unset | `"org/team"`. Before posting a command a bot accepts only from an approver (the review that queues a release, `/release-now`, `/attend`, `/release`, `/window-cancel`, `/approve`), dillodash checks the login is an active member, and refuses otherwise. Reading the team needs the organization's Members read on a fine-grained token; without it dillodash warns and posts. |
 
 There is no token in the config. dillodash asks the `gh` CLI for the token
 of `host`, the way every `gh` extension does; `GH_TOKEN` and

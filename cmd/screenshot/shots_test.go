@@ -10,12 +10,10 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 
-	"github.com/solcyber/gh-dillodash/internal/demo"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/ui"
-	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 var imgRE = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]*shots/([a-z0-9-]+)\.png)\)`)
@@ -105,16 +103,13 @@ func TestEveryShotSettles(t *testing.T) {
 	glyphs.Use(glyphs.Nerd)
 	theme.Setup(colorprofile.Ascii, false)
 	fx.Motion = "off"
-	cfg := demo.Config()
 	for _, s := range shots {
-		wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
+		o, err := options(s, "test")
 		if err != nil {
 			t.Fatal(err)
 		}
 		cols, rows := s.size()
-		frames, err := ui.SnapshotsWith(context.Background(), ui.Options{
-			Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: "test",
-		}, s.Opts, cols, rows, [][]string{s.Steps})
+		frames, err := ui.SnapshotsWith(context.Background(), o, s.Opts, cols, rows, [][]string{s.Steps})
 		if err != nil || len(frames) != 1 {
 			t.Errorf("%s: %v (%d frames)", s.Name, err, len(frames))
 			continue

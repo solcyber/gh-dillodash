@@ -240,6 +240,16 @@ func (w *Workflow) notePosted(pr *model.PR, now time.Time, told bool) {
 	t.set(w.derive(pr, t, now))
 }
 
+// dispatchFailed reports a release this session posted the command on
+// whose dispatch to the manifest repo failed: only then does M merge it
+// by hand outside the window.
+func (w *Workflow) dispatchFailed(pr *model.PR) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.progress[pr.Ident()]
+	return ok && t.notTold
+}
+
 // ---- refresh goroutine ----
 
 // noteTracks (worker goroutine) decides which releases of the fresh
@@ -653,11 +663,13 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		if !p.Started.IsZero() && !p.UpdatedAt.IsZero() && p.UpdatedAt.After(p.Started) {
 			msg += " after " + deploys.FmtSecs(p.UpdatedAt.Sub(p.Started))
 		}
-		app.OK(msg)
+		app.OK(msg + w.laneNote(pr))
 		app.Launch()
 	case PhasePending:
 		msg := fmt.Sprintf("%s merged; its deploy waits on an environment approval", wh)
-		if p.Detail != "" {
+		if envs := waitingEnvs(pr); envs != "" {
+			msg = fmt.Sprintf("%s merged; its deploy waits on %s", wh, envs)
+		} else if p.Detail != "" {
 			msg += " (" + p.Detail + ")"
 		}
 		app.Notice(msg + " — press D on its row")
@@ -691,6 +703,20 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		}
 		app.Notice(msg)
 	}
+}
+
+// waitingEnvs names the environments a merged release's deploy waits on
+// ("stg", "stg and prod"), or "".
+func waitingEnvs(pr *model.PR) string {
+	dep, ok := pr.Get(ExtDeploy).(deploys.State)
+	if !ok {
+		return ""
+	}
+	var envs []string
+	for _, wt := range dep.Waits {
+		envs = append(envs, wt.EnvName)
+	}
+	return strings.Join(envs, " and ")
 }
 
 func (w *Workflow) progressTimeout() time.Duration {
@@ -899,7 +925,11 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 		}
 	}
 	if t.item != nil {
-		if ph, ok := w.fromItem(&p, t.item, now); ok {
+		// a release the window left behind (bumped, rolled) that was sent
+		// NOW since: the command is the newer news, not the item
+		q := p
+		if ph, ok := w.fromItem(&q, t.item, now); ok && !((ph == PhaseBumped || ph == PhaseRolled) && !cmdAt.IsZero()) {
+			p = q
 			if !p.Terminal && ph != PhaseScheduled && ph != PhaseWaitingSlot {
 				return w.timeout(p, now)
 			}

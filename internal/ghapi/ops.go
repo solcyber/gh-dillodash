@@ -25,6 +25,44 @@ func (c *GitHub) Whoami(ctx context.Context) (string, error) {
 	return u.Login, nil
 }
 
+// TeamMembership is TeamMember's answer.
+type TeamMembership struct {
+	Member   bool // an active member (a pending invitation is not)
+	Readable bool // the token can read the team; false: Member says nothing
+}
+
+// TeamMember reads org/team, then login's membership in it. A 403 or 404
+// on the team itself means the token cannot see it (unreadable, no
+// error); a 404 on the membership, with the team readable, means login
+// is not a member.
+func (c *GitHub) TeamMember(ctx context.Context, org, team, login string) (TeamMembership, error) {
+	base := "orgs/" + url.PathEscape(org) + "/teams/" + url.PathEscape(team)
+	var t struct {
+		Slug string `json:"slug"`
+	}
+	if err := c.restJSON(ctx, http.MethodGet, base, nil, &t); err != nil {
+		if e, ok := AsError(err); ok && (e.Status == http.StatusForbidden || e.Status == http.StatusNotFound) {
+			return TeamMembership{}, nil
+		}
+		return TeamMembership{}, err
+	}
+	var m struct {
+		State string `json:"state"`
+	}
+	if err := c.restJSON(ctx, http.MethodGet, base+"/memberships/"+url.PathEscape(login), nil, &m); err != nil {
+		if e, ok := AsError(err); ok {
+			switch e.Status {
+			case http.StatusNotFound:
+				return TeamMembership{Readable: true}, nil
+			case http.StatusForbidden:
+				return TeamMembership{}, nil
+			}
+		}
+		return TeamMembership{}, err
+	}
+	return TeamMembership{Member: m.State == "active", Readable: true}, nil
+}
+
 // PRDetail is the detail query's view of a PR.
 func (c *GitHub) PRDetail(ctx context.Context, repo model.Repo, number int) (*model.PR, error) {
 	vars := repoVars(repo)

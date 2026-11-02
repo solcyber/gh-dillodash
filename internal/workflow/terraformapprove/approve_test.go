@@ -316,3 +316,19 @@ func TestLegendAndHooks(t *testing.T) {
 	check(t, "the bot login comes from the config", len(w.BotLogins()) == 1 && w.BotLogins()[0] == "infra-bot")
 	var _ workflow.Workflow = w
 }
+
+// TestApproveGuard (#24): /approve is posted only by a member of
+// approvers_team; anyone else is refused before the first question.
+func TestApproveGuard(t *testing.T) {
+	workflow.ResetMembershipCache()
+	t.Cleanup(workflow.ResetMembershipCache)
+	cfg := testCfg()
+	cfg.GitHub.ApproversTeam = "acme/release-approvers"
+	app := wftest.New(cfg, "alice")
+	app.Fake.Teams = map[string][]string{"acme/release-approvers": {"carol"}}
+	app.Confirms = []bool{true}
+	w := New(cfg.TerraformApprove, cfg.MaintenanceWindow)
+	handled := w.Approve(app, simple("prod/07-warehouse", idA, 0), nil)
+	check(t, "guard: handled, nothing asked or posted", handled && len(app.Questions) == 0 && len(app.Fake.CommentsPosted) == 0)
+	check(t, "guard: the refusal names the login", hasLog(app, "notice:", "/approve not posted: alice is not in @acme/release-approvers"))
+}

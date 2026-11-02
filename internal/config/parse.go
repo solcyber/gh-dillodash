@@ -405,6 +405,13 @@ func (p *parser) parseGitHub(top *table, cfg *Config) {
 		cfg.GitHub.Host = host
 	}
 	cfg.GitHub.Login = strings.TrimSpace(t.str("login", ""))
+	if team := strings.TrimSpace(t.str("approvers_team", "")); team != "" {
+		if _, ok := model.ParseRepo(strings.TrimPrefix(team, "@")); !ok {
+			t.errf("approvers_team", "%q is not \"org/team\"", team)
+		} else {
+			cfg.GitHub.ApproversTeam = strings.TrimPrefix(team, "@")
+		}
+	}
 	t.done()
 }
 
@@ -698,6 +705,25 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.DeployStuckSecs = t.int("deploy_stuck_secs", w.DeployStuckSecs)
 	w.DeployRefreshSecs = t.int("deploy_refresh_secs", w.DeployRefreshSecs)
 	w.DeployApprovalComment = t.nonEmpty("deploy_approval_comment", w.DeployApprovalComment)
+	if lane, present := t.strs("lane_order", nil); present {
+		seen := map[string]bool{}
+		for _, r := range lane {
+			r = strings.TrimSpace(r)
+			if i := strings.LastIndex(r, "/"); i >= 0 {
+				r = r[i+1:] // "owner/name" is accepted; the lane is by name
+			}
+			switch {
+			case r == "":
+				t.errf("lane_order", "an entry is empty")
+			case seen[strings.ToLower(r)]:
+				t.warnf("lane_order", "%q is listed twice; the first place counts", r)
+			default:
+				seen[strings.ToLower(r)] = true
+				w.LaneOrder = append(w.LaneOrder, r)
+			}
+		}
+	}
+	w.ApplyBudgetMins = t.int("apply_budget_mins", w.ApplyBudgetMins)
 	for _, ph := range placeholderRE.FindAllString(w.DeployApprovalComment, -1) {
 		switch ph {
 		case "{repo}", "{number}", "{sha}":

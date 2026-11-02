@@ -671,6 +671,9 @@ func (w *Workflow) DoWindow(app workflow.App) {
 		app.Notice(fmt.Sprintf("%s not posted: %s", c.text, why))
 		return
 	}
+	if !workflow.PostGuard(app, c.text) {
+		return
+	}
 	if !app.Confirm(fmt.Sprintf("post %s on manifest #%d (window %s %s)?", c.text, info.Issue, night, local.T(w.cfg.Start))) {
 		app.Notice(c.text + " not posted")
 		return

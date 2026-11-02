@@ -197,3 +197,29 @@ func TestReportReleaseReach(t *testing.T) {
 		t.Errorf("without the window:\n%s", out)
 	}
 }
+
+// TestReportApprovers (#24): with approvers_team set, config check says
+// whether the login is in it, or that the token cannot read it.
+func TestReportApprovers(t *testing.T) {
+	cfg := cfgWith(infra)
+	cfg.GitHub.ApproversTeam = "acme/release-approvers"
+	for _, tc := range []struct{ user, want string }{
+		{"alice", "approvers: alice is in @acme/release-approvers"},
+		{"bob", "approvers: bob is NOT in @acme/release-approvers; dillodash refuses to post /release-now"},
+	} {
+		gh := fake.New(tc.user)
+		gh.Open = map[model.Repo]ghapi.ListResult{infra: {PRs: []*model.PR{{Number: 1}}, Permission: "ADMIN"}}
+		gh.Teams = map[string][]string{"acme/release-approvers": {"alice"}}
+		out, _ := reportWith(t, gh, cfg)
+		if !strings.Contains(out, tc.want) {
+			t.Errorf("%s: want %q in\n%s", tc.user, tc.want, out)
+		}
+	}
+	out, _ := report(t, "alice", "keyring", cfg) // no Teams: unreadable
+	if !strings.Contains(out, "could not read @acme/release-approvers with this token (it needs the organization's Members read)") {
+		t.Errorf("unreadable:\n%s", out)
+	}
+	if out, _ := report(t, "alice", "keyring", cfgWith(infra)); strings.Contains(out, "approvers:") {
+		t.Errorf("no team, no line:\n%s", out)
+	}
+}

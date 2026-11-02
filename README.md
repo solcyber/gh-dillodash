@@ -20,6 +20,7 @@ and building from source needs Go 1.27.3 or newer.
 ```sh
 gh extension install solcyber/gh-dillodash
 gh dillodash --demo            # try it on an offline fixture first, no GitHub needed
+gh dillodash --demo-night      # replay a manual release night offline
 gh dillodash font install      # optional: the bundled Nerd Font for the icons
 ```
 

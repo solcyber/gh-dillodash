@@ -350,6 +350,11 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	}
 	whereAs := fmt.Sprintf("on %s as %s", where, me)
 	now := app.Now()
+	// the dispatcher accepts the command only from an approver: refuse
+	// before any question rather than post one it will refuse
+	if !workflow.PostGuard(app, cmd) {
+		return true
+	}
 
 	// The maintenance window: a plain approve of a DISRUPTIVE plan queues
 	// it for the window's start instead of applying. Say so before
