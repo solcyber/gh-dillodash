@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
@@ -28,6 +29,20 @@ var (
 	nightApp   = model.Repo{Owner: "acme", Name: "web-portal"}
 	nightDB    = model.Repo{Owner: "acme", Name: "db-migrations"}
 )
+
+// NightEpoch is when the night demo is: 22:55 ET on a window night,
+// after the 21:00 freeze and five minutes before the 23:00 start, with
+// the migration's slot at 23:12. The shots are drawn at this instant;
+// the interactive replay starts at it and runs forward (NightClock), so
+// the night reads the same whenever the demo runs.
+var NightEpoch = time.Date(2026, 11, 2, 3, 55, 0, 0, time.UTC)
+
+// NightClock is the replay's clock: NightEpoch plus the time since the
+// demo started. Install it as clock.Now.
+func NightClock() func() time.Time {
+	started := time.Now()
+	return func() time.Time { return NightEpoch.Add(time.Since(started)) }
+}
 
 // Night stages.
 const (
@@ -77,7 +92,7 @@ type Night struct {
 func NightClient(stage int) *Night {
 	n := &Night{GH: fake.New(Me)}
 	n.night, n.start = tonight()
-	n.GH.Rate = &model.RateLimit{Limit: 5000, Remaining: 4790, ResetAt: time.Now().Add(41 * time.Minute)}
+	n.GH.Rate = &model.RateLimit{Limit: 5000, Remaining: 4790, ResetAt: clock.Now().Add(41 * time.Minute)}
 	n.GH.Teams = map[string][]string{"acme/release-approvers": {"alice", "carol"}}
 	n.GH.Users = map[model.Repo][]model.Actor{nightInfra: {{Login: "alice"}, {Login: "bob"}, {Login: "carol"}}}
 	n.GH.Open = map[model.Repo]ghapi.ListResult{nightInfra: {}}
@@ -94,7 +109,7 @@ func tonight() (string, time.Time) {
 	if err != nil {
 		loc = time.UTC
 	}
-	d := time.Now().In(loc).Add(-6 * time.Hour)
+	d := clock.Now().In(loc).Add(-6 * time.Hour)
 	start := time.Date(d.Year(), d.Month(), d.Day(), 23, 0, 0, 0, loc)
 	return d.Format("2006-01-02"), start.UTC()
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
@@ -24,7 +25,9 @@ const Me = "alice"
 // Repos are the demo's review repos.
 var Repos = []model.Repo{{Owner: "acme", Name: "infra"}, {Owner: "acme", Name: "web-portal"}}
 
-func at(d time.Duration) time.Time { return time.Now().Add(-d) }
+// at is d before now, by the dashboard's clock (the night demo runs on
+// its own).
+func at(d time.Duration) time.Time { return clock.Now().Add(-d) }
 
 func actor(l string) model.Actor { return model.Actor{Login: l} }
 
