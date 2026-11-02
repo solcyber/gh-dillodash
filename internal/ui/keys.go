@@ -75,7 +75,7 @@ var bindings = []binding{
 		Help: "d  fortress mode", Doc: "fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits", Do: doFortress},
 	// detail (and the issue view where it applies)
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('a')}, Bar: "a", Label: "approve", Group: "detail", Prio: 10,
-		Help: "a  approve", Doc: "approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice); otherwise a GitHub review approval after a confirm", Do: doApprove},
+		Help: "a  approve", Doc: "approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm", Do: doApprove},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('M')}, Bar: "M", Label: "merge", Group: "detail", Prio: 10,
 		Help: "M  merge an approved PR", Doc: "merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first", Do: doMerge},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "deploys", Group: "detail", Prio: 30,
@@ -129,7 +129,7 @@ var bindings = []binding{
 	// utilities, everywhere they make sense
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('y')}, Bar: "y", Label: "copy URL", Group: "any", Prio: 70,
 		Help: "y  copy the URL", Doc: "copy the URL (tmux buffer, the system clipboard, or OSC 52); the status line says which", Do: doCopyURL},
-	{Views: []string{ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('y')}, Bar: "y", Label: "URL", Group: "any", Prio: 70, wfBefore: true, Help: "", Do: doCopyURL},
+	{Views: []string{ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('y')}, Bar: "y", Label: "URL", Group: "any", Prio: 70, wfBefore: true, Help: "", Doc: "copy the open PR's, issue's or file's URL, as in the list", Do: doCopyURL},
 	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('o')}, Group: "any",
 		Help: "o  open the URL in a browser", Doc: "open the URL in a browser when this host has one; otherwise like `y`", Do: doOpenURL},
 	{Views: []string{ViewList, ViewDetail, "issue", ViewPatch, ViewFortress}, Keys: []widgets.Key{R('r')}, Bar: "r", Label: "refresh", Group: "any", Prio: 60,
@@ -436,6 +436,7 @@ func KeysDoc() string {
 		}
 		b.WriteString("| " + docViews(bd) + " | " + docKey(bd) + " | " + doc + " |\n")
 	}
+	b.WriteString("| list | `a` | with `release_pr`, on a release's row: what `a` does in its detail — release NOW alone on a release you approved (or one the window bumped), else approve with the queue-or-now choice |\n")
 	b.WriteString("| list, detail | `w` | with `maintenance_window`: `/attend`, `/release` or `/window-cancel` on the night's manifest issue, or open it |\n")
 	b.WriteString("| prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |\n")
 	b.WriteString("| menus | `j`/`k` + enter, `1`–`9` | choose; esc, `q`, Ctrl-C cancel |\n")

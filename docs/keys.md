@@ -15,7 +15,7 @@
 | list | `A` | toggle PRs approved by others (issues are always all shown) |
 | list | `D` | approve the deployments waiting on the selected merged PR, or on the selected waiting run (the bar shows it while `release_pr` or `waiting_runs` is on) |
 | list | `d` | fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits |
-| detail | `a` | approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice); otherwise a GitHub review approval after a confirm |
+| detail | `a` | approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm |
 | detail | `M` | merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first |
 | detail | `D` | approve the environment deployments waiting on the open merged PR |
 | detail | `c` / `C` | comment inline / in `$EDITOR` |
@@ -41,6 +41,7 @@
 | fortress | `c` | the other city |
 | fortress | `d` / `q` / esc | back to the list (`q` and Esc too) |
 | list | `y` | copy the URL (tmux buffer, the system clipboard, or OSC 52); the status line says which |
+| detail, files, diff, fortress | `y` | copy the open PR's, issue's or file's URL, as in the list |
 | list, detail, files, diff, fortress | `o` | open the URL in a browser when this host has one; otherwise like `y` |
 | list, detail, diff, fortress | `r` | refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed) |
 | list, detail | `R` | restart into the dillodash release installed in the background, keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it once one is installed) |
@@ -49,6 +50,7 @@
 | any | `?` | help: every key, the glyph legend, the version; `j`/`k` scroll it when it overflows |
 | any | `e` | the last status or error message in full (the status line cuts a long one with an ellipsis) |
 | any | ctrl+c | quit (interrupt); inside a prompt it cancels the prompt |
+| list | `a` | with `release_pr`, on a release's row: what `a` does in its detail — release NOW alone on a release you approved (or one the window bumped), else approve with the queue-or-now choice |
 | list, detail | `w` | with `maintenance_window`: `/attend`, `/release` or `/window-cancel` on the night's manifest issue, or open it |
 | prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |
 | menus | `j`/`k` + enter, `1`–`9` | choose; esc, `q`, Ctrl-C cancel |
