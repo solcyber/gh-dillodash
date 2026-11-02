@@ -105,6 +105,23 @@ and a PR that is not a release, then offers:
   its way, `a` says so and posts nothing. Before 1.5.3 the core refused `a`
   on any PR you had approved, so an approved release could only be
   released now by posting the comment and firing the dispatch by hand.
+- **From anywhere.** The same menu comes up whether the release was
+  opened from its row under `releases`, from its row under a night
+  (scheduled, bumped or rolled), from `:` (`repo#N` reaches the enrolled
+  release repos too, not only the review repos), or from a link in the
+  manifest. When no row carries the release (the state has not loaded,
+  or a rate-limited refresh stopped early), `a` tells a release by its
+  repo and branches: open into `production_branch` of an enrolled repo
+  from a `release_prefix` or `hotfix_prefix` head. Until the enrolled
+  repos are known (discovery has not run yet), `a` says `couldn't read
+  release state … press r and retry` and posts nothing: a release never
+  gets a plain review, and never the core's "a second review changes
+  nothing". A release whose thread quotes a plan digest is still a
+  release, not a plan.
+- **Bumped.** A release the freeze left out of tonight (the manifest
+  item's `bumped` flag) ends its rail as `bumped`; a bumped or rolled
+  release you approved says `bumped — a: release NOW` on its chip, and
+  its card's `a:` line says the same.
 
 Without the window workflow, an approving review is just an approval, and
 `M` merges whenever GitHub allows.

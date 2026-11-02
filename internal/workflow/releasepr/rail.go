@@ -54,7 +54,7 @@ func railFrac(p Progress, now time.Time) float64 {
 		if i := PhaseIndex(p.FailPhase); i >= 0 {
 			return (float64(i) + 0.5) / n
 		}
-		if p.Phase == PhaseRefused || p.Phase == PhaseNotRun || p.Phase == PhaseRolled {
+		if p.Phase == PhaseRefused || p.Phase == PhaseNotRun || p.Phase == PhaseRolled || p.Phase == PhaseBumped {
 			return 0
 		}
 		return 0.5
@@ -206,6 +206,13 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 		segs = append(segs, railSegs(p, now, app.Fx(), ident, railCells, live)...)
 		segs = append(segs, text.S(" ", style))
 	}
+	if w.nowOffered(app, pr, p) {
+		if compact {
+			label += " · a: NOW"
+		} else {
+			label += " — a: release NOW"
+		}
+	}
 	segs = append(segs, text.S(label, style))
 	if live && fx.Ambient && fx.Motion == "full" {
 		switch p.Phase {
@@ -217,6 +224,19 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 	}
 	segs = append(segs, text.S(glyphs.G("capr"), "cap:"+style))
 	return segs
+}
+
+// nowOffered reports a release the window left behind (bumped or
+// rolled, so not tonight) that is still open and approved by me: its
+// approval stands, so a offers release NOW, and the chip says so.
+func (w *Workflow) nowOffered(app workflow.App, pr *model.PR, p Progress) bool {
+	if p.Phase != PhaseBumped && p.Phase != PhaseRolled {
+		return false
+	}
+	if pr.State != "" && pr.State != "OPEN" {
+		return false
+	}
+	return workflow.IApproved(app, pr)
 }
 
 // widestClock is the widest clock a chip is measured with (deploys.FmtSecs

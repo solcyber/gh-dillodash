@@ -264,6 +264,10 @@ type Workflow struct {
 	progress       map[model.Ident]*track
 	infraOffSaid   bool
 	manifestTarget model.Repo // where the apply runs are, as AfterApply last resolved it
+	// enrolled is the release repos the last refresh read (nil before the
+	// first one), so a can tell a release from its repo and branches
+	// alone when no row carries its info
+	enrolled []model.Repo
 }
 
 var _ workflow.Workflow = (*Workflow)(nil)
@@ -356,6 +360,11 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	names, warn := w.repoNames(ctx, gh, now)
 	if warn != "" {
 		warns = append(warns, warn)
+	}
+	if names != nil {
+		w.mu.Lock()
+		w.enrolled = append([]model.Repo(nil), names...)
+		w.mu.Unlock()
 	}
 	data := map[model.Repo]ghapi.ReleaseRepo{}
 	if len(names) > 0 {
@@ -522,9 +531,18 @@ func (w *Workflow) annotate(st *State) {
 // core's PRs are not releases), and a second pass would only redo it.
 func (w *Workflow) Annotate(_ []*model.PR, _ []*model.Issue, _ workflow.State) {}
 
-// Apply stores the state.
+// Apply stores the state. A nil state (a refresh that stopped at a rate
+// limit before this workflow ran) keeps the last one: blanking it would
+// drop the releases section and leave a with nothing to tell a release
+// by until the next clean refresh.
 func (w *Workflow) Apply(app workflow.App, s workflow.State) {
 	st, _ := s.(*State)
+	if st == nil {
+		if old := w.Current(); old != nil {
+			app.SetState(Name, old)
+		}
+		return
+	}
 	w.mu.Lock()
 	w.cur = st
 	w.mu.Unlock()
@@ -630,6 +648,111 @@ func (w *Workflow) infoFor(pr, listed *model.PR, st *State) *Info {
 
 func (w *Workflow) isRelease(pr, listed *model.PR, st *State) bool {
 	return w.infoFor(pr, listed, st) != nil
+}
+
+// Release is how sure classify is that a PR is a release PR.
+type Release int
+
+const (
+	// NotRelease: no release info, and the repo or the branches say it
+	// is not one.
+	NotRelease Release = iota
+	// IsRelease: a release (or hotfix, or other PR into production) of an
+	// enrolled repo; Info is set.
+	IsRelease
+	// MaybeRelease: shaped like one (a release or hotfix head into the
+	// production branch) but the enrolled repos are not known yet, so
+	// nothing should be posted on it until a refresh says.
+	MaybeRelease
+)
+
+// classify is the release info of pr from wherever it can be had: its
+// own, its listed row's, the state's row, or, when none carries it (a PR
+// opened by goto, a state that has not loaded or was dropped), its repo
+// and branches: open into the production branch of an enrolled repo from
+// a release or hotfix head.
+func (w *Workflow) classify(pr, listed *model.PR, st *State) (*Info, Release) {
+	if i := w.infoFor(pr, listed, st); i != nil {
+		return i, IsRelease
+	}
+	if pr == nil || !w.shaped(pr) {
+		return nil, NotRelease
+	}
+	enrolled, known := w.enrolledRepo(pr.Repo)
+	switch {
+	case !known:
+		return nil, MaybeRelease
+	case !enrolled:
+		return nil, NotRelease
+	}
+	return &Info{Kind: w.Kind(pr), Repo: pr.Repo.Name}, IsRelease
+}
+
+// shaped reports a PR whose branches make it a release candidate: a
+// release or hotfix head into the production branch. A PR with no base
+// name (a bare row) is judged by its head alone.
+func (w *Workflow) shaped(pr *model.PR) bool {
+	if pr.BaseRefName != "" && pr.BaseRefName != w.cfg.ProductionBranch {
+		return false
+	}
+	return w.Kind(pr) != KindOther
+}
+
+// ReleaseShaped reports a PR another workflow should leave to this one:
+// a release or hotfix head into the production branch of a repo that is,
+// or may be, enrolled. The plan workflow asks, so a release PR whose
+// thread happens to quote a plan digest is still a release.
+func (w *Workflow) ReleaseShaped(pr *model.PR) bool {
+	if pr == nil || InfoOf(pr) != nil {
+		return pr != nil
+	}
+	if !w.shaped(pr) {
+		return false
+	}
+	enrolled, known := w.enrolledRepo(pr.Repo)
+	return enrolled || !known
+}
+
+// enrolledRepo reports whether repo is one this workflow reads, and
+// whether that is known: the config's list, else the last refresh's
+// discovery, else the discovery cache on disk however old.
+func (w *Workflow) enrolledRepo(repo model.Repo) (enrolled, known bool) {
+	if !w.cfg.Auto {
+		return containsRepo(w.cfg.Repos, repo), true
+	}
+	w.mu.Lock()
+	names := w.enrolled
+	w.mu.Unlock()
+	if names == nil {
+		if cached, ok := LoadCache(w.cfg.Cache, w.org, time.Duration(1<<62), clock.Now()); ok {
+			names = cached
+		}
+	}
+	if names == nil {
+		return false, false
+	}
+	return containsRepo(names, repo), true
+}
+
+// ExtraRepos is the enrolled release repos as the last refresh read
+// them (the config's list before then), so goto reaches a release in a
+// repo that is not a review repo.
+func (w *Workflow) ExtraRepos() []model.Repo {
+	if !w.cfg.Auto {
+		return append([]model.Repo(nil), w.cfg.Repos...)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]model.Repo(nil), w.enrolled...)
+}
+
+func containsRepo(repos []model.Repo, r model.Repo) bool {
+	for _, x := range repos {
+		if strings.EqualFold(x.Owner, r.Owner) && strings.EqualFold(x.Name, r.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 // NotARelease reports an open PR into production from a branch that is

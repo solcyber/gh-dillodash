@@ -1,5 +1,38 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `a` on a release offers release NOW from every place a release can be
+  opened, and never the core's "already approved by you for this head —
+  a second review changes nothing" (#23). 1.5.3 let `a` reach the release
+  workflow, but the workflow still let go of a release whose row did not
+  carry its info: one opened with `:`, one whose state had not loaded, or
+  one whose state a rate-limited refresh had dropped. Now:
+  - With no row to go by, a PR open into `production_branch` of an
+    enrolled repo from a `release_prefix` or `hotfix_prefix` head is a
+    release. Before the enrolled repos are known, `a` says `couldn't read
+    release state for <repo>#<n> yet — press r and retry` and posts
+    nothing.
+  - A release PR goes to the release workflow before the plan workflow,
+    so a release whose thread quotes a plan digest is no longer answered
+    as a plan.
+  - A refresh that stops at a rate limit before the release workflow
+    keeps the releases section instead of blanking it until the next
+    clean refresh.
+  - `M` on a release reads the same release state `a` does; before, it
+    only looked at the row's own info.
+- `:` reaches the enrolled release repos, not only the review repos.
+
+### Added
+
+- A release the freeze bumped (the manifest item's `bumped` flag) ends
+  its rail as `bumped` instead of being read as an unknown status. A
+  bumped or rolled release you approved says `bumped — a: release NOW`
+  on its chip, and its card's `a:` line says that NOW posts the command
+  with no second review (#23).
+
 ## [1.5.4]
 
 ### Fixed

@@ -416,10 +416,61 @@ func (s *Set) DetailCards(app App, pr, listed *model.PR, width int) []text.Line 
 	return out
 }
 
-// Approve lets the first workflow that handles the PR approve it.
+// ReleaseShaper is a workflow that owns release PRs: one it calls
+// release-shaped goes to it before any other workflow (a release PR
+// whose thread quotes a plan digest is still a release).
+type ReleaseShaper interface {
+	ReleaseShaped(pr *model.PR) bool
+}
+
+// RepoProvider is a workflow that reads repos beyond the review repos
+// (the release repos), so goto can open their PRs too.
+type RepoProvider interface {
+	ExtraRepos() []model.Repo
+}
+
+// ExtraRepos is every workflow's extra repos, in workflow order.
+func (s *Set) ExtraRepos() []model.Repo {
+	if s == nil {
+		return nil
+	}
+	var out []model.Repo
+	for _, w := range s.Items {
+		if p, ok := w.(RepoProvider); ok {
+			out = append(out, p.ExtraRepos()...)
+		}
+	}
+	return out
+}
+
+// ReleaseShaped reports whether a workflow owns pr as a release PR.
+func (s *Set) ReleaseShaped(pr *model.PR) bool {
+	return s.releaseOwner(pr) != nil
+}
+
+func (s *Set) releaseOwner(pr *model.PR) Workflow {
+	if s == nil || pr == nil {
+		return nil
+	}
+	for _, w := range s.Items {
+		if r, ok := w.(ReleaseShaper); ok && r.ReleaseShaped(pr) {
+			return w
+		}
+	}
+	return nil
+}
+
+// Approve lets the first workflow that handles the PR approve it; a
+// release PR's owner goes first.
 func (s *Set) Approve(app App, pr, listed *model.PR) bool {
 	if s == nil {
 		return false
+	}
+	if w := s.releaseOwner(pr); w != nil && w.Approve(app, pr, listed) {
+		return true
+	}
+	if w := s.releaseOwner(listed); w != nil && w.Approve(app, pr, listed) {
+		return true
 	}
 	for _, w := range s.Items {
 		if w.Approve(app, pr, listed) {

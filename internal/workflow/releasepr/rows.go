@@ -669,6 +669,8 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	case kind == KindOther:
 		rule = fmt.Sprintf("only %s<date> (the go-tagged cut on %s) and %s<slug> ship to %s; a, M and D refuse anything else",
 			w.cfg.ReleasePrefix, w.cfg.StagingBranch, w.cfg.HotfixPrefix, w.cfg.ProductionBranch)
+	case (src.State == "" || src.State == "OPEN") && (workflow.IApproved(app, pr) || workflow.IApproved(app, src)):
+		rule = fmt.Sprintf("approved by you — a: release NOW posts %s \"<reason>\" with no second review (yours stands); M merges it at its slot; D approves the deployments waiting on the merge", cmd)
 	case w.cfg.ApprovalQueuesForWindow && w.win != nil:
 		rule = fmt.Sprintf("a: an approving review queues it for %s window; %s \"<reason>\" releases it now; M merges it at its slot (the deploy); D approves the deployments waiting on the merge",
 			w.NightPhrase(app.Now()), cmd)

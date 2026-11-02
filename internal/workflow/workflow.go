@@ -249,9 +249,9 @@ type Poller interface {
 // it, the night, the manifest's phase, the slot (RFC 3339) and whether
 // the item is final. Issue is the manifest issue's number.
 type ManifestItem struct {
-	ID, Status, Night, Phase, StartUTC string
-	Final                              *bool
-	Issue                              int
+	ID, Status, Flag, Night, Phase, StartUTC string
+	Final                                    *bool
+	Issue                                    int
 }
 
 // ManifestItemProvider is implemented by a window workflow's state: the
