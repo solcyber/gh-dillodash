@@ -6,6 +6,7 @@ every repo.
 
 | Symptom | Cause / fix |
 |---|---|
+| The header's version is gold (`v1.5.2 → v1.5.4`) and the status line says `… is out: gh extension upgrade dillodash` | A newer release is out and this build may lack its fixes; `a`, `M`, `D` and `w` say so before they run. Run the command it names. `config check` lists every dillodash on the machine: a launcher script on `PATH` runs whatever it wraps, and a second binary of another version is the one you may be starting instead. |
 | `not signed in to <host>` or `GitHub auth failed on <host>` at startup | `gh` is not signed in to the host, or its token expired. `gh auth status`, then `gh auth login` (`--hostname` for GHES). A `GH_TOKEN` or `GITHUB_TOKEN` in the environment overrides the `gh` login; `config check` says which is in use. |
 | `signed in as <x>, a bot login` at startup, or `login: FAILED: … is a bot login` in `config check` | The token belongs to a login in `[bots] logins` (or one ending in `[bot]`), usually a CI token leaked into the shell. `unset GH_TOKEN` (or `GITHUB_TOKEN`) to use your `gh` login, or `gh auth switch`. dillodash will not post as a bot. |
 | `the dashboard needs a terminal on stdin and stdout` | Output is piped or redirected. `gh dillodash config check` works without a terminal; the dashboard does not. |

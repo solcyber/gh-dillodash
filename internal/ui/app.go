@@ -72,6 +72,7 @@ func (m *Model) Init() tea.Cmd {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.refresh(false)
+	m.checkBuild(false)
 	m.fx.Start("splash", 3600, nil) // the splash ends itself; any key skips it
 	return tea.Batch(tea.RequestWindowSize, m.tick())
 }
@@ -183,6 +184,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyRefresh(msg.out)
 	case pollDoneMsg:
 		m.applyPoll(msg.out)
+	case buildCheckMsg:
+		m.checking = false
+		m.upd = msg.st
 	case showModalMsg:
 		m.modal = msg.modal
 		m.modalDone = msg.done

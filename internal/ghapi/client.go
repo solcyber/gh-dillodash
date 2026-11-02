@@ -326,6 +326,12 @@ func (c *GitHub) restURL(path string) string {
 // and GitHub's message (plus RetryAt on a rate-limited 403/429), a
 // transport failure is "network error: ...".
 func (c *GitHub) do(ctx context.Context, method, rawURL string, payload any, accept string) ([]byte, http.Header, error) {
+	return c.doH(ctx, method, rawURL, payload, accept, nil)
+}
+
+// doH is do with extra request headers (If-None-Match). A 304 answers
+// an *Error with Status 304 and the response headers.
+func (c *GitHub) doH(ctx context.Context, method, rawURL string, payload any, accept string, hdr map[string]string) ([]byte, http.Header, error) {
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
@@ -340,11 +346,17 @@ func (c *GitHub) do(ctx context.Context, method, rawURL string, payload any, acc
 	}
 	req.Header.Set("Accept", accept)
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, nil, &Error{Method: method, URL: rawURL, Message: "network error: " + netErrorText(err)}
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, resp.Header, &Error{Method: method, URL: rawURL, Status: http.StatusNotModified, Message: "not modified"}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, resp.Header, httpError(method, rawURL, resp)
 	}
