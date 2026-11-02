@@ -67,6 +67,16 @@ func DrawBox(c *canvas.Canvas, top, left, height, width int, title, titleStyle, 
 		}
 		c.PutSegs(top+height-1, left+col, []text.Seg{text.S(ch, bs(2*(width-1)+(height-1)-col))}, 0, false, false)
 	}
+	// a blank cell either side, so the list's selection bar (or a chip)
+	// under the box never shows against its border
+	for r := 0; r < height; r++ {
+		if left > 0 {
+			c.Fill(top+r, left-1, left, "text", false, false)
+		}
+		if left+width < c.W {
+			c.Fill(top+r, left+width, left+width+1, "text", false, false)
+		}
+	}
 	return top + 1, left + 2, width - 4
 }
 

@@ -1229,8 +1229,17 @@ func TestDetailCards(t *testing.T) {
 	if rows := w.HelpRows(); len(rows) != 3 || rows[0][0] != "releases" || !strings.Contains(rows[0][1], "/release-now") || !strings.Contains(rows[2][1], "rail") {
 		t.Errorf("help rows: %v", rows)
 	}
-	if rows := w.LegendRows(); len(rows) != 2 || !strings.Contains(text.SegsText(rows[1]), "released") {
-		t.Errorf("two legend rows, the second the rail's: %v", rows)
+	if rows := w.LegendRows(); len(rows) != 3 || !strings.Contains(text.SegsText(rows[1]), "deploying") ||
+		!strings.Contains(text.SegsText(rows[2]), "released") || !strings.Contains(text.SegsText(rows[2]), "bumped — a: release NOW") {
+		t.Errorf("three legend rows: the chips, the rail, the ends: %v", rows)
+	}
+	for i, r := range w.LegendRows() {
+		if n := text.SegsWidth(r); n > 100 {
+			t.Errorf("legend row %d is %d cells, wider than the existing rows (clipped below about 106 columns)", i, n)
+		}
+	}
+	if rows := w.HelpRows(); !strings.Contains(rows[1][1], "M  last resort") || strings.Contains(rows[1][1], "at its slot (= the prod deploy)") {
+		t.Errorf("M's help: %v", rows[1])
 	}
 }
 

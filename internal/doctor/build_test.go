@@ -52,3 +52,21 @@ func TestBuildReport(t *testing.T) {
 		}
 	}
 }
+
+func TestAutoUpdateLine(t *testing.T) {
+	for _, tc := range []struct {
+		auto bool
+		env  string
+		want string
+	}{
+		{true, "", "auto-update: on"},
+		{false, "0", "auto-update: off (DILLODASH_AUTO_UPDATE=0)"},
+		{false, "", "auto-update: off ([update] auto = false)"},
+	} {
+		var out strings.Builder
+		AutoUpdate(&out, tc.auto, tc.env)
+		if !strings.HasPrefix(out.String(), tc.want) {
+			t.Errorf("auto=%v env=%q: %q", tc.auto, tc.env, out.String())
+		}
+	}
+}

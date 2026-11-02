@@ -4,9 +4,10 @@
 // branch) or hotfix/<slug>. An approving review queues it for the
 // maintenance window when one is enabled; a "<release-now command>
 // "<reason>"" comment from an approver releases it at once (a hotfix is
-// an emergency by definition). M merges it at its slot (the push to
-// production is the deploy) and D approves the environment deployments
-// that wait on the merge commit.
+// an emergency by definition). The release job merges it at its slot
+// (the push to production is the deploy); M merges by hand only when the
+// release-now dispatch can't run, or with no window at all. D approves
+// the environment deployments that wait on the merge commit.
 //
 // The workflow adds a "releases (N)" section with one synthetic "stage"
 // row per repo (what the staging branch carries ahead of production, by

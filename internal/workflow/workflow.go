@@ -9,6 +9,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -76,6 +77,11 @@ type RowKind struct {
 	// release in flight): the dashboard keeps its frame clock running
 	// for it instead of sleeping until the next refresh.
 	Live func(app App, row Row) bool
+	// NumText is what the rows print in the shared number column, when
+	// that isn't the core's "repo#N" (a bare "#N" beside a repo column of
+	// their own, or a label): the column is sized by it, so no room goes
+	// to text the row never prints. nil means "repo#N".
+	NumText func(row Row) string
 }
 
 // Key is a key binding a workflow adds.
@@ -174,12 +180,29 @@ type App interface {
 	// build lacks its fix, else the gap when a newer release is out;
 	// "" when the build is current (or not a release build).
 	StaleFor(action string) string
+	// RestartInto is the release installed in the background that this
+	// session hasn't restarted into yet, else "".
+	RestartInto() string
+	// RestartAfterAction restarts into it (keeping the place) as soon
+	// as the action in flight settles.
+	RestartAfterAction()
 }
 
-// StaleGate runs ahead of a release action: on a stale build it shows
-// StaleFor's line and asks whether to go on with this build; false
-// means stop, and the status line keeps the upgrade line.
+// StaleGate runs ahead of a release action. With a newer release
+// already installed it offers the restart first: yes restarts into it
+// (keeping the place, so the key is one press away) and stops; no goes
+// on with this build. On a stale build with nothing installed it shows
+// StaleFor's line and asks whether to go on; false means stop, and the
+// status line keeps the upgrade line.
 func StaleGate(app App, action string) bool {
+	if v := app.RestartInto(); v != "" {
+		if app.Confirm(fmt.Sprintf("dillodash %s is installed — restart into %s first? (keeps your place)\nno goes on with this build", v, v)) {
+			app.Notice(fmt.Sprintf("restarting into %s — press the key again once it is back", v))
+			app.RestartAfterAction()
+			return false
+		}
+		return true
+	}
 	s := app.StaleFor(action)
 	if s == "" {
 		return true

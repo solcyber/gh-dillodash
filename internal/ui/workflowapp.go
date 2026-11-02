@@ -65,6 +65,13 @@ func (m *Model) DetailKind() string      { return m.detailKind }
 func (m *Model) StaleFor(action string) string {
 	return m.upd.Gate(action)
 }
+func (m *Model) RestartInto() string {
+	if m.upd.Pending() {
+		return m.upd.Installed
+	}
+	return ""
+}
+func (m *Model) RestartAfterAction()  { m.restartQueued = true }
 func (m *Model) CurrentView() string  { return m.view }
 func (m *Model) Rows() []workflow.Row { return m.rows }
 func (m *Model) Refresh(again bool)   { m.refresh(again) }
@@ -158,6 +165,8 @@ func (a *lockedApp) StaleFor(action string) string {
 	defer a.lock()()
 	return a.m.upd.Gate(action)
 }
+func (a *lockedApp) RestartInto() string  { defer a.lock()(); return a.m.RestartInto() }
+func (a *lockedApp) RestartAfterAction()  { defer a.lock()(); a.m.RestartAfterAction() }
 func (a *lockedApp) CurrentView() string  { defer a.lock()(); return a.m.view }
 func (a *lockedApp) Rows() []workflow.Row { defer a.lock()(); return a.m.rows }
 func (a *lockedApp) Selected() (workflow.Row, bool) {

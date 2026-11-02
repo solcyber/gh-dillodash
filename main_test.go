@@ -302,3 +302,9 @@ func TestAuthErrorsExit2(t *testing.T) {
 		t.Errorf("bad token: code=%d err=%v", exitCode(err), err)
 	}
 }
+
+func TestDemoFlagsAreExclusive(t *testing.T) {
+	if _, err := parseFlags([]string{"--demo", "--demo-night"}); err == nil || !strings.Contains(err.Error(), "pass one") {
+		t.Errorf("err %v", err)
+	}
+}

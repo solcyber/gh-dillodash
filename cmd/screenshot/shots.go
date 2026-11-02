@@ -100,8 +100,8 @@ func (s shot) glyphSet() string {
 // key outside dillodash, nothing typed but the two reasons.
 func nightSteps(n int) []string {
 	steps := [][]string{
-		{"r", "G"}, // the bumped release, approved
-		{"a"},      // release NOW only: the approval stands
+		{"G"}, // the bumped release, approved: tonight's slots show from the first refresh
+		{"a"}, // release NOW only: the approval stands
 		{"enter", "bumped from the window for time; the fix is waiting", "enter", "y", "r"}, // posted; released, next in lane
 		{"G", "a", "enter", "next in the lane after the portal release", "enter", "y"},      // NOW on the migration; its slot
 		{"y", "D"},      // the slot cancelled; the migration waits on stg

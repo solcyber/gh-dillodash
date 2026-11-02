@@ -246,6 +246,11 @@ func TestNarrowListKeepsThePhase(t *testing.T) {
 	if !sawCompact {
 		t.Error("no width shows the compact chip")
 	}
+	// an 80-column terminal keeps the phase: the release branch title is
+	// clipped first
+	if _, ok := w.releaseLayout(app, rows, 80, 4, 13)["kind"]; !ok {
+		t.Error("80 columns dropped the phase chip")
+	}
 	clock.Now = func() time.Time { return utc(4, 0) } // the clock grows from 1m to 1h01m
 	if got := text.SegsWidth(w.kindChip(app, listed, -1, false)); got != full {
 		t.Errorf("the measured width moved with the clock: %d -> %d", full, got)

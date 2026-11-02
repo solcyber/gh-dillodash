@@ -69,6 +69,9 @@ type App struct {
 
 	// Stale scripts StaleFor, by action.
 	Stale map[string]string
+	// Installed scripts RestartInto; Restarts counts RestartAfterAction.
+	Installed string
+	Restarts  int
 }
 
 // New makes an app on the fake client as user.
@@ -218,6 +221,12 @@ func (a *App) OpenDetail(repo model.Repo, number int, kind string, listed any) {
 	a.Opened = append(a.Opened, model.Ref(repo, number, true)+":"+kind)
 	a.mu.Unlock()
 }
+
+// RestartInto answers from the Installed script.
+func (a *App) RestartInto() string { a.mu.Lock(); defer a.mu.Unlock(); return a.Installed }
+
+// RestartAfterAction counts the restart requests.
+func (a *App) RestartAfterAction() { a.mu.Lock(); a.Restarts++; a.mu.Unlock() }
 
 // StaleFor answers from the Stale script.
 func (a *App) StaleFor(action string) string {

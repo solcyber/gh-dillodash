@@ -289,6 +289,9 @@ func abs(x int) int {
 // numText is the "#N" / "repo#N" / "owner/repo#N" column text of an item
 // (the same rule as where, so a row and its heading agree).
 func (m *Model) numText(row workflow.Row) string {
+	if rk, ok := m.wf.RowKinds()[row.Kind]; ok && rk.NumText != nil {
+		return rk.NumText(row)
+	}
 	switch v := row.Item.(type) {
 	case *model.PR:
 		return m.where(v.Repo, v.Number)

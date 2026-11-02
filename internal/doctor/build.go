@@ -77,6 +77,20 @@ func Build(w io.Writer, st selfupdate.Status, installs []selfupdate.Install) {
 	}
 }
 
+// AutoUpdate prints whether a newer release installs itself, and when
+// it doesn't, what turned it off (env is DILLODASH_AUTO_UPDATE, which
+// the caller has already applied over [update] auto).
+func AutoUpdate(w io.Writer, auto bool, env string) {
+	switch {
+	case auto:
+		fmt.Fprintln(w, "auto-update: on — a newer release installs in the background once verified; R restarts into it")
+	case strings.TrimSpace(env) != "":
+		fmt.Fprintf(w, "auto-update: off (DILLODASH_AUTO_UPDATE=%s) — gh dillodash update installs one by hand\n", strings.TrimSpace(env))
+	default:
+		fmt.Fprintln(w, "auto-update: off ([update] auto = false) — gh dillodash update installs one by hand")
+	}
+}
+
 func sortVersions(vs []string) {
 	for i := 1; i < len(vs); i++ {
 		for j := i; j > 0 && (selfupdate.Compare(vs[j], vs[j-1]) > 0 || (selfupdate.Compare(vs[j], vs[j-1]) == 0 && vs[j] < vs[j-1])); j-- {
