@@ -137,7 +137,9 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	refreshing := m.refreshing
 	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
 	var parts []part
-	if m.detail == nil {
+	if m.upd.Stale() { // gold, in every view: a newer release is out
+		parts = append(parts, part{0, []text.Seg{text.S("  "+glyphs.Ico("warn")+m.ver+" → "+m.upd.Latest, "sum.attn")}})
+	} else if m.detail == nil {
 		parts = append(parts, part{0, []text.Seg{text.S("  "+m.ver, "build")}})
 	}
 	if refreshing {
@@ -416,8 +418,8 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 			icon = kind
 		}
 		segs = []text.Seg{text.S(" "+glyphs.Ico(icon)+m.status, style)}
-	case m.warn != "":
-		segs = []text.Seg{text.S(" "+glyphs.Ico("warn")+m.warn, "toast.warn")}
+	case m.warn != "" || m.upd.Stale():
+		segs = []text.Seg{text.S(" "+glyphs.Ico("warn")+joinNonEmpty("; ", m.upd.Banner(), m.warn), "toast.warn")}
 	default:
 		return
 	}

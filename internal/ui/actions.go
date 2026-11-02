@@ -97,6 +97,9 @@ func (m *Model) doApprove(app *lockedApp) {
 		app.Notice(fmt.Sprintf("you authored %s — a self-approval counts for nothing", where))
 		return
 	}
+	if !workflow.StaleGate(app, "approve") {
+		return
+	}
 	// A workflow goes first even on a PR you approved: its command (a
 	// release-now, an /approve --outside-window) is not a second review.
 	if m.wf.Approve(app, pr, app.DetailListed()) {
@@ -253,6 +256,9 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice("M merges a PR; open one first")
 		return
 	}
+	if !workflow.StaleGate(app, "merge") {
+		return
+	}
 	repo := m.repoOf(pr)
 	where := m.where(repo, pr.Number)
 	if why := m.wf.MergeBlock(pr, m.me); why != "" {
@@ -318,6 +324,9 @@ func mergeSHA(pr *model.PR) string {
 // workflow points at), or on a workflow row of its own (a waiting run,
 // RowDeployer), and nothing else.
 func (m *Model) doDeployApprove(app *lockedApp) {
+	if !workflow.StaleGate(app, "deploy") {
+		return
+	}
 	var pr *model.PR
 	if app.CurrentView() == ViewDetail {
 		pr, _ = app.Detail().(*model.PR)

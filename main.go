@@ -10,13 +10,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
+	ghconfig "github.com/cli/go-gh/v2/pkg/config"
 	"golang.org/x/term"
 
 	"github.com/solcyber/gh-dillodash/internal/amos"
@@ -30,6 +33,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
+	"github.com/solcyber/gh-dillodash/internal/selfupdate"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/ui"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
@@ -151,9 +155,15 @@ func subFlags(name string, args []string, define func(*flag.FlagSet)) ([]string,
 // isHelp reports whether a word asks for help.
 func isHelp(s string) bool { return s == "help" || s == "--help" || s == "-h" }
 
+// startExe is the running binary, read at startup: once an upgrade
+// renames a new binary over it, the process's own link names a deleted
+// file.
+var startExe string
+
 func main() {
 	bi, ok := debug.ReadBuildInfo()
 	version = resolveVersion(version, bi, ok)
+	startExe, _ = os.Executable()
 	if err := run(os.Args[1:]); err != nil {
 		if !errors.Is(err, errInterrupted) {
 			fmt.Fprintln(os.Stderr, "dillodash:", err)
@@ -380,7 +390,47 @@ func dashboard(args []string) error {
 		Me:        me,
 		Host:      gh.Host(),
 		Version:   version,
+		Updater:   newChecker(gh),
 	})
+}
+
+// findOptions say where this machine's dillodash installs live.
+func findOptions() selfupdate.FindOptions {
+	return selfupdate.FindOptions{
+		Exe: startExe, Running: version, DataDir: ghconfig.DataDir(),
+		Path: os.Getenv("PATH"), GOOS: runtime.GOOS, Version: runVersion,
+	}
+}
+
+// runVersion asks another dillodash binary its version (config check
+// only), bounded so a hung binary can't hold the report.
+func runVersion(path string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "version").Output()
+	return string(out), err
+}
+
+// newChecker is the build check: the latest release is read from
+// github.com through gh's login (the dashboard's own client when it
+// talks to github.com). With no token for github.com the check only
+// reads its cache. Tests replace it.
+var newChecker = func(gh client) *selfupdate.Checker {
+	var src selfupdate.Source
+	if s, ok := gh.(selfupdate.Source); ok && gh != nil && gh.Host() == "github.com" {
+		src = s
+	} else if c, err := newClient(ghapi.Options{Host: "github.com", Version: version}); err == nil {
+		src, _ = c.(selfupdate.Source)
+	}
+	home, _ := os.UserHomeDir()
+	return &selfupdate.Checker{Src: src, Path: selfupdate.CachePath(os.Getenv, home), Find: findOptions()}
+}
+
+// buildCheck is config check's build report: a fresh check, and every
+// install found.
+func buildCheck(ctx context.Context) (selfupdate.Status, []selfupdate.Install) {
+	c := newChecker(nil)
+	return c.Check(ctx, true), selfupdate.Find(c.Find)
 }
 
 // client is what main needs of a GitHub client.
@@ -476,7 +526,7 @@ func configCmd(args []string) error {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		return doctor.Run(ctx, os.Stdout, cfg, version)
+		return doctor.Run(ctx, os.Stdout, cfg, version, buildCheck)
 	case "pull":
 		rest := args[1:]
 		spec := ""

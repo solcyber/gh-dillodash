@@ -603,6 +603,9 @@ func (w *Workflow) CancelText(pr *model.PR, item *Item) string {
 // conductor's rules first, confirmed, then posted as a plain comment
 // for the conductor to judge.
 func (w *Workflow) DoWindow(app workflow.App) {
+	if !workflow.StaleGate(app, "window") {
+		return
+	}
 	st := w.state(app)
 	night, pr := w.Target(app)
 	var info *Night

@@ -126,6 +126,7 @@ do not speak. `waiting_runs` is new in dillodash; add its table by hand.
 | Path | What |
 |---|---|
 | `$XDG_CACHE_HOME/dillodash/release-repos-<org>.json` (default `~/.cache/dillodash/`) | The `release_pr` workflow's discovered repo list, cached for `discover_ttl_secs`. Written 0600. Delete it to re-discover now. |
+| `$XDG_CACHE_HOME/dillodash/latest-release.json` (default `~/.cache/dillodash/`) | The latest dillodash release and its ETag, from the build check at startup and in `config check`. Each check is a conditional request (free when nothing changed); offline, the last answer stands. Written 0600. |
 | `config.toml.bak` beside the config | The previous config, kept whenever `config pull --force` or `config migrate --force` replaces one. |
 | `$TMPDIR/dillodash-*.md`, `*.diff` | A comment being edited in `$EDITOR`, a diff shown in `$PAGER`. Created 0600 and removed afterwards. |
 

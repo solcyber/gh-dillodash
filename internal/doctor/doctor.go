@@ -26,10 +26,14 @@ type Client interface {
 	TokenSource() string
 }
 
-// Run builds the client from the gh login and prints the report; it
-// returns an error when something is broken.
-func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string) error {
+// Run prints the build check, then builds the client from the gh login
+// and prints the report; it returns an error when something is broken.
+func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string, build BuildCheck) error {
 	fmt.Fprintf(w, "dillodash %s\n", version)
+	if build != nil {
+		st, installs := build(ctx)
+		Build(w, st, installs)
+	}
 	fmt.Fprintf(w, "config: %s\n", cfg.Path)
 	var src config.Source
 	var pulled bool

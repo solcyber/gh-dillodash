@@ -169,6 +169,26 @@ type App interface {
 	CurrentView() string
 	DetailKind() string
 	Context() context.Context
+	// StaleFor is what a release action (approve, merge, deploy,
+	// window) says first on this build: the version it needs when this
+	// build lacks its fix, else the gap when a newer release is out;
+	// "" when the build is current (or not a release build).
+	StaleFor(action string) string
+}
+
+// StaleGate runs ahead of a release action: on a stale build it shows
+// StaleFor's line and asks whether to go on with this build; false
+// means stop, and the status line keeps the upgrade line.
+func StaleGate(app App, action string) bool {
+	s := app.StaleFor(action)
+	if s == "" {
+		return true
+	}
+	if app.Confirm(s + "\ngo on with this build anyway?") {
+		return true
+	}
+	app.Notice(s)
+	return false
 }
 
 // IApproved reports a review approval of pr by the viewer that still

@@ -19,6 +19,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/selfupdate"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
@@ -208,6 +209,12 @@ type Model struct {
 	fortress *fortressState
 
 	deployCache deploys.Cache
+
+	// the build check: updater reads the latest release, upd is its
+	// last answer, checking while one is in flight
+	updater  Updater
+	upd      selfupdate.Status
+	checking bool
 }
 
 // Options build a Model.
@@ -218,6 +225,9 @@ type Options struct {
 	Me        string
 	Host      string
 	Version   string
+	// Updater checks for a newer release (nil: no check, as in the demo
+	// and the screenshots).
+	Updater Updater
 }
 
 // New makes the model; Run starts it.
@@ -234,6 +244,8 @@ func New(ctx context.Context, o Options) *Model {
 		host:            o.Host,
 		ctx:             ctx,
 		ver:             o.Version,
+		updater:         o.Updater,
+		upd:             selfupdate.Status{Running: o.Version},
 		fx:              fx.New(),
 		view:            ViewList,
 		detailFrom:      ViewList,

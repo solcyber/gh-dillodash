@@ -66,6 +66,9 @@ type App struct {
 	Editor func(seed string) (string, bool)
 	// Runner scripts RunExternal.
 	Runner func(argv []string) error
+
+	// Stale scripts StaleFor, by action.
+	Stale map[string]string
 }
 
 // New makes an app on the fake client as user.
@@ -214,4 +217,11 @@ func (a *App) OpenDetail(repo model.Repo, number int, kind string, listed any) {
 	a.mu.Lock()
 	a.Opened = append(a.Opened, model.Ref(repo, number, true)+":"+kind)
 	a.mu.Unlock()
+}
+
+// StaleFor answers from the Stale script.
+func (a *App) StaleFor(action string) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.Stale[action]
 }

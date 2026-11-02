@@ -62,10 +62,13 @@ func (m *Model) MarkApproved(pr *model.PR) {
 func (m *Model) Detail() any             { return m.detail }
 func (m *Model) DetailListed() *model.PR { return m.detailListed }
 func (m *Model) DetailKind() string      { return m.detailKind }
-func (m *Model) CurrentView() string     { return m.view }
-func (m *Model) Rows() []workflow.Row    { return m.rows }
-func (m *Model) Refresh(again bool)      { m.refresh(again) }
-func (m *Model) BumpDetail()             { m.detailVer++ }
+func (m *Model) StaleFor(action string) string {
+	return m.upd.Gate(action)
+}
+func (m *Model) CurrentView() string  { return m.view }
+func (m *Model) Rows() []workflow.Row { return m.rows }
+func (m *Model) Refresh(again bool)   { m.refresh(again) }
+func (m *Model) BumpDetail()          { m.detailVer++ }
 func (m *Model) Selected() (workflow.Row, bool) {
 	if m.selected >= 0 && m.selected < len(m.rows) && m.rows[m.selected].Kind != "header" {
 		return m.rows[m.selected], true
@@ -151,8 +154,12 @@ func (a *lockedApp) IApproved(pr *model.PR) bool { defer a.lock()(); return a.m.
 func (a *lockedApp) Detail() any                 { defer a.lock()(); return a.m.detail }
 func (a *lockedApp) DetailListed() *model.PR     { defer a.lock()(); return a.m.detailListed }
 func (a *lockedApp) DetailKind() string          { defer a.lock()(); return a.m.detailKind }
-func (a *lockedApp) CurrentView() string         { defer a.lock()(); return a.m.view }
-func (a *lockedApp) Rows() []workflow.Row        { defer a.lock()(); return a.m.rows }
+func (a *lockedApp) StaleFor(action string) string {
+	defer a.lock()()
+	return a.m.upd.Gate(action)
+}
+func (a *lockedApp) CurrentView() string  { defer a.lock()(); return a.m.view }
+func (a *lockedApp) Rows() []workflow.Row { defer a.lock()(); return a.m.rows }
 func (a *lockedApp) Selected() (workflow.Row, bool) {
 	defer a.lock()()
 	return a.m.Selected()

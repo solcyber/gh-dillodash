@@ -32,6 +32,22 @@
   bumped or rolled release you approved says `bumped — a: release NOW`
   on its chip, and its card's `a:` line says that NOW posts the command
   with no second review (#23).
+- A stale build says so. At startup dillodash reads the latest release
+  (a conditional request, cached in `~/.cache/dillodash`, quiet when
+  offline); when it is newer than the running build, the header's
+  version turns gold (`v1.5.2 → v1.5.4`) and the status line says
+  `dillodash v1.5.2 — v1.5.4 is out: gh extension upgrade dillodash` on
+  every screen (a standalone binary gets its own line). `a`, `M`, `D`
+  and `w` first name what the build lacks — `release NOW on an approved
+  release needs ≥ v1.5.3 — you run v1.5.2: …` — and ask before going on
+  with it, instead of a generic answer that hides the missing fix (#22).
+- `config check` reports the running version against the latest
+  release, and lists every dillodash on the machine with its version:
+  the gh extension, each `dillodash` or `gh-dillodash` on `PATH`, a
+  launcher script as a launcher (never asked its version), and installs
+  of different versions are named (#22).
+- For workflow authors: `workflow.App.StaleFor(action)` and
+  `workflow.StaleGate(app, action)` (#22).
 
 ## [1.5.4]
 
