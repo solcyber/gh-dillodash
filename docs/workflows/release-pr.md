@@ -136,8 +136,8 @@ Without the window workflow, an approving review is just an approval, and
   `release_now_dispatch` can tell the manifest repo, `M` refuses and points
   at `a`: release NOW posts the command and fires the dispatch, and the
   release job merges. Merging by hand is the last resort, for when the
-  dispatch can't fire (it failed this session, or `release_now_dispatch`
-  is off); then `M` first asks you to call it an emergency (the
+  dispatch can't fire (it failed this session, the command has waited
+  five minutes with no run, or `release_now_dispatch` is off); then `M` first asks you to call it an emergency (the
   `/release-now` reason belongs on the PR).
 - `D` on a merged release (its row, or its detail) approves the environment
   deployments waiting on its merge commit, and nothing else: only runs

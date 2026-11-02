@@ -689,6 +689,20 @@ func TestMergeConfirm(t *testing.T) {
 		!logHas(app, "notice", "use a — release NOW posts /release-now") {
 		t.Errorf("M outside the window points at a: %v %v %q", ok, handled, app.Log)
 	}
+	// a command that has waited with no run for unpickedAfter (a restart
+	// forgot the failed dispatch) lets M merge by hand too; a fresh one
+	// does not
+	w, app = newWF(t, true)
+	w.notePosted(mergeableRelease(), outWindow.Add(-time.Minute), true)
+	if ok, handled := w.MergeConfirm(app, mergeableRelease()); ok || !handled || len(app.Menus) != 0 {
+		t.Errorf("a command a minute old: M still points at a: %v", app.Menus)
+	}
+	w, app = newWF(t, true)
+	w.notePosted(mergeableRelease(), outWindow.Add(-6*time.Minute), true)
+	app.Picks = []int{0}
+	if w.MergeConfirm(app, mergeableRelease()); len(app.Menus) != 1 {
+		t.Errorf("a command six minutes old with no run: M offers the emergency merge: %v %q", app.Menus, app.Log)
+	}
 	// once this session's dispatch failed, M merges by hand: a menu
 	// first; cancel merges nothing; NOW then confirms
 	w, app = newWF(t, true)

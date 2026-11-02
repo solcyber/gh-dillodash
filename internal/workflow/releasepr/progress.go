@@ -240,14 +240,25 @@ func (w *Workflow) notePosted(pr *model.PR, now time.Time, told bool) {
 	t.set(w.derive(pr, t, now))
 }
 
-// dispatchFailed reports a release this session posted the command on
-// whose dispatch to the manifest repo failed: only then does M merge it
-// by hand outside the window.
+// unpickedAfter is how long a posted command may wait for its run
+// before M may merge the release by hand: the run usually shows within
+// a minute of the dispatch.
+const unpickedAfter = 5 * time.Minute
+
+// dispatchFailed reports a release whose command is posted but that no
+// run has picked up: this session's dispatch to the manifest repo
+// failed, or the command has sat on the PR for unpickedAfter with no run
+// (posted by hand without the dispatch, or by a session that has since
+// restarted and forgotten its failure). Only then does M merge it by
+// hand outside the window.
 func (w *Workflow) dispatchFailed(pr *model.PR) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	t, ok := w.progress[pr.Ident()]
-	return ok && t.notTold
+	if !ok {
+		return false
+	}
+	return t.notTold || (t.cur.Phase == PhaseDispatched && !t.cur.Since.IsZero() && clock.Now().Sub(t.cur.Since) >= unpickedAfter)
 }
 
 // ---- refresh goroutine ----
