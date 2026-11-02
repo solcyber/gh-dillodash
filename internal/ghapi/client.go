@@ -118,6 +118,11 @@ type ReleaseRepo struct {
 type Client interface {
 	// Whoami is the token's login.
 	Whoami(ctx context.Context) (string, error)
+	// TeamMember reports whether login is an active member of org/team.
+	// Readable is false when the token cannot read the team (a
+	// fine-grained token without the organization's Members read):
+	// then Member says nothing.
+	TeamMember(ctx context.Context, org, team, login string) (TeamMembership, error)
 	// ListOpen reads every repo's open PRs and issues, one aliased
 	// GraphQL request per chunk of four repos, a few in flight at once.
 	// A repo the token cannot see, or a chunk that fails, gets a

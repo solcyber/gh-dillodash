@@ -71,10 +71,13 @@ conductor would refuse posts nothing and says why. Anything else asks y/N,
 then posts the plain command as a comment on the manifest. dillodash
 refreshes 45 seconds after posting and reads the conductor's reply.
 
-dillodash does not check who may run window commands: the conductor does.
-When `team` is set, the menu title names it (`commands count only from
-@org/team`); a command from someone outside it is posted, and the
-conductor's reply refuses it.
+The conductor decides who may run window commands. When `team` is set,
+the menu title names it (`commands count only from @org/team`). With
+`[github] approvers_team` set, dillodash also checks the posting login is
+a member before it posts, and refuses otherwise, naming the login (see
+[release-pr.md](release-pr.md#a-manual-release-night)); without it, a
+command from someone outside the team is posted and the conductor's reply
+refuses it. A bot login is never posted as.
 
 Posting needs the token's Issues read and write, because the manifest is
 an issue.

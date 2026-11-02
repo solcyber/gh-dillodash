@@ -132,8 +132,13 @@ Without the window workflow, an approving review is just an approval, and
   by default), naming the head so a branch that moved after the approval
   is refused by GitHub. It refuses an unapproved, draft, blocked or already
   merged PR. With the window workflow on, inside `release_from`–`end` it
-  asks once ("This DEPLOYS production"); outside the window it first asks
-  you to call it an emergency (the `/release-now` reason belongs on the PR).
+  asks once ("This DEPLOYS production"). Outside the window, while
+  `release_now_dispatch` can tell the manifest repo, `M` refuses and points
+  at `a`: release NOW posts the command and fires the dispatch, and the
+  release job merges. Merging by hand is the last resort, for when the
+  dispatch can't fire (it failed this session, or `release_now_dispatch`
+  is off); then `M` first asks you to call it an emergency (the
+  `/release-now` reason belongs on the PR).
 - `D` on a merged release (its row, or its detail) approves the environment
   deployments waiting on its merge commit, and nothing else: only runs
   whose head is that merge, only environments you are a reviewer of. With
@@ -144,6 +149,58 @@ Without the window workflow, an approving review is just an approval, and
   waiting for you (`web-portal#143: prod now waits for your approval —
   press D on its row`). Approve `stg`, wait for the message, press `D`
   again for `prod`.
+
+## A manual release night
+
+Everything an approver does on a night of manual releases happens in
+dillodash, with no GitHub page and no CLI. `gh dillodash --demo-night`
+replays one offline; these shots are its steps.
+
+![A release night after the freeze: the approved release the window bumped says a: release NOW, the migration holds its 23:12 slot](../shots/night-1-bumped.png)
+
+- **`a` on a release row** in the list is the detail's `a`: no need to
+  open it first. A release the freeze bumped keeps its approval, so `a`
+  offers release NOW alone.
+
+![a on the bumped release: the approval stands, so release NOW is the one choice](../shots/night-2-now.png)
+
+- **Identity before posting.** With `[github] approvers_team =
+  "org/team"`, dillodash checks that the login it posts as is an active
+  member before it posts anything a bot accepts only from an approver: the
+  approving review that queues a release, `/release-now`, the window's
+  `/attend`, `/release` and `/window-cancel`, and `/approve`. A bot login
+  is always refused, team or not. The refusal names the login, and when
+  the token came from `GH_TOKEN` or `GITHUB_TOKEN`, the variable to unset
+  (a token exported for something else in that shell is the usual way to
+  post as the wrong account). When the token cannot read the team (a
+  fine-grained token without the organization's Members read), dillodash
+  warns and posts; `config check` says which.
+- **The lane.** `lane_order` lists the release repos in the order a
+  manual night releases them. When a release in the lane lands, its
+  message names the next approved release in the lane (`next in lane:
+  <repo>#<n> — a on its row: release NOW`), or says to wait while its own
+  deploys are still running. NOW on a release while another in the lane
+  is still on its way asks first.
+
+![The release lands; the status line names the next release in the lane](../shots/night-3-released.png)
+
+- **A slot on the manifest.** release NOW on a release that holds a slot
+  on a manifest (the scheduler's `scheduled` flag, not yet run) asks, in
+  the same flow, whether to post `/window-cancel rel:<repo>#<n>` there, so
+  the window does not reach a release that is merged already.
+
+![release NOW on the migration that holds a slot: the same flow offers the window-cancel of its item](../shots/night-4-cancel.png)
+
+- **Environments.** A release whose deploy waits on an environment ends
+  as `deploy waiting · D`, and its message names the environment. `D` on
+  its row approves it; the next one (`prod` after `stg`) is offered the
+  same way.
+- **The countdown.** With `apply_budget_mins` set, a release in flight
+  counts down on its row (`deploying · 23m left`, then `over by 4m`).
+
+![The migration merged and waits on stg: D on its row approves it](../shots/night-5-stg.png)
+
+![stg, then prod: both releases out, with no keystroke outside dillodash](../shots/night-6-done.png)
 
 ## Live progress
 

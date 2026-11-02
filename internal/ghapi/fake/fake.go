@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,7 +95,11 @@ type Client struct {
 	// FileData is FileContents' answer, keyed "owner/name:path".
 	FileData map[string][]byte
 
-	// Fail makes the named op return the error: whoami, list, pr_detail,
+	// Teams is each "org/team"'s members for TeamMember; a team that is
+	// not in the map is unreadable.
+	Teams map[string][]string
+
+	// Fail makes the named op return the error: whoami, team_member, list, pr_detail,
 	// issue_detail, users, comments, labelled, approve, comment, dispatch,
 	// merge, waiting_runs, repo_waiting_runs, pending, approve_deployments, workflow_runs,
 	// file_runs, jobs, files, diff, compare, tags, org_repos, rulesets,
@@ -117,6 +122,21 @@ type Client struct {
 	Dispatches      []Call
 	// Reads counts every read op by name, for tests that assert caching.
 	Reads map[string]int
+
+	// BeforeOp, when set, runs before an op is served (reads and writes
+	// alike, by the names Fail uses), and AfterCall after a mutating call
+	// is recorded; neither holds the lock, so they may call Mutate. A
+	// demo moves its fixture along with them.
+	BeforeOp  func(op string)
+	AfterCall func(c Call)
+}
+
+// Mutate runs fn with the fake's lock held, so a hook can swap the
+// canned answers between two calls.
+func (f *Client) Mutate(fn func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fn()
 }
 
 var _ ghapi.Client = (*Client)(nil)
@@ -127,6 +147,9 @@ func New(user string) *Client {
 }
 
 func (f *Client) fail(op string) error {
+	if f.BeforeOp != nil {
+		f.BeforeOp(op)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Reads == nil {
@@ -138,8 +161,15 @@ func (f *Client) fail(op string) error {
 
 func (f *Client) record(c Call) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.recordLocked(c)
+	f.mu.Unlock()
+	f.after(c)
+}
+
+func (f *Client) after(c Call) {
+	if f.AfterCall != nil {
+		f.AfterCall(c)
+	}
 }
 
 // recordLocked is record with f.mu held.
@@ -178,6 +208,25 @@ func (f *Client) Whoami(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return f.User, nil
+}
+
+// TeamMember answers from Teams.
+func (f *Client) TeamMember(ctx context.Context, org, team, login string) (ghapi.TeamMembership, error) {
+	if err := f.fail("team_member"); err != nil {
+		return ghapi.TeamMembership{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	members, ok := f.Teams[org+"/"+team]
+	if !ok {
+		return ghapi.TeamMembership{}, nil
+	}
+	for _, m := range members {
+		if strings.EqualFold(m, login) {
+			return ghapi.TeamMembership{Member: true, Readable: true}, nil
+		}
+	}
+	return ghapi.TeamMembership{Readable: true}, nil
 }
 
 // Host is HostName, or github.com.
@@ -328,9 +377,11 @@ func (f *Client) PostComment(ctx context.Context, repo model.Repo, number int, b
 		return 0, err
 	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	id := int64(len(f.CommentsPosted) + 1) // under the same lock as the record: two posts never share an id
-	f.recordLocked(Call{Op: "comment", Repo: repo, Number: number, Body: body, ID: id})
+	c := Call{Op: "comment", Repo: repo, Number: number, Body: body, ID: id}
+	f.recordLocked(c)
+	f.mu.Unlock()
+	f.after(c)
 	return id, nil
 }
 

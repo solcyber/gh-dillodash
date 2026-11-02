@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
@@ -82,6 +83,15 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		kind = w.Kind(pr)
 	}
 	cmd := w.cfg.ReleaseNowCommand
+	// an approving review queues a release only from an approver, and the
+	// command is accepted only from one: refuse before the menu
+	what := "approving " + wh
+	if workflow.IApproved(app, pr) {
+		what = cmd
+	}
+	if !workflow.PostGuard(app, what) {
+		return true
+	}
 	queues := w.cfg.ApprovalQueuesForWindow && w.win != nil && kind != KindHotfix // a hotfix never queues
 	night := w.NightPhrase(app.Now())
 	nowLabel := fmt.Sprintf("release NOW (%s) — real emergencies only", cmd)
@@ -113,6 +123,9 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	path := paths[i]
 	body := ""
 	if path == "now" {
+		if !w.laneWait(app, pr) {
+			return true
+		}
 		var ok bool
 		if body, ok = w.nowBody(app, fmt.Sprintf("approve %s and post that as %s?", wh, me)); !ok {
 			return true
@@ -166,6 +179,9 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 	title := fmt.Sprintf("%s is already approved by you — %s; NOW posts %s without a second review", wh, stands, w.cfg.ReleaseNowCommand)
 	if app.Pick(title, []string{nowLabel}) != 0 {
 		app.Notice("approve cancelled")
+		return true
+	}
+	if !w.laneWait(app, pr) {
 		return true
 	}
 	body, ok := w.nowBody(app, fmt.Sprintf("post that on %s as %s? (no second review: yours stands)", wh, me))
@@ -235,6 +251,62 @@ func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldL
 		app.OK(fmt.Sprintf("%s posted %s as %s", okLead, cmd, me))
 	}
 	app.Launch()
+	w.offerSlotCancel(app, pr)
+}
+
+// offerSlotCancel follows a release NOW on a release that holds a slot
+// on a manifest: the conductor would otherwise reach the slot and find
+// the release merged already, so the same flow offers the cancel of
+// its item (y/N), posted on the manifest like w's.
+func (w *Workflow) offerSlotCancel(app workflow.App, pr *model.PR) {
+	if w.win == nil {
+		return
+	}
+	prov, _ := app.State(WindowName).(workflow.ManifestItemProvider)
+	if prov == nil {
+		return
+	}
+	it, ok := prov.ManifestItem(pr.Repo.Name, pr.Number)
+	if !ok || it.Issue == 0 || (it.Final != nil && *it.Final) || !slotted(it) {
+		return
+	}
+	id := it.ID
+	if !strings.HasPrefix(id, "rel:") {
+		id = fmt.Sprintf("rel:%s#%d", pr.Repo.Name, pr.Number)
+	}
+	text := w.win.CancelCommand + " " + id
+	slot := "its slot"
+	if t, err := time.Parse(time.RFC3339, it.StartUTC); err == nil {
+		slot = "its " + w.win.Local().In(t).Format("15:04") + " slot"
+	}
+	repo := w.manifestRepo(app)
+	if repo.IsZero() {
+		return
+	}
+	if !app.Confirm(fmt.Sprintf("%s also holds %s on manifest #%d (%s): post %s there, so the window does not pick up a merged release?",
+		where(pr), slot, it.Issue, it.Night, text)) {
+		app.Notice(fmt.Sprintf("%s not posted — the window still lists %s", text, where(pr)))
+		return
+	}
+	if !workflow.PostGuard(app, text) {
+		return
+	}
+	if err := app.GH().Comment(app.Context(), repo, it.Issue, text); err != nil {
+		app.Fail(fmt.Sprintf("%s NOT posted on #%d: %s", text, it.Issue, err))
+		return
+	}
+	app.OK(fmt.Sprintf("posted %s on #%d; the conductor replies there within a minute", text, it.Issue))
+	app.RefreshSoon(45 * time.Second)
+}
+
+// slotted reports a manifest item that holds a slot still ahead: the
+// scheduler's scheduled flag, or a status that is not an outcome yet.
+func slotted(it workflow.ManifestItem) bool {
+	if strings.EqualFold(it.Flag, "scheduled") {
+		s := strings.ToLower(strings.TrimSpace(it.Status))
+		return s == "" || strings.HasPrefix(s, "scheduled") || strings.HasPrefix(s, "waiting")
+	}
+	return false
 }
 
 // manifestRepo is where the release-now dispatch goes: the window
@@ -324,6 +396,14 @@ func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handle
 	what := fmt.Sprintf("merge %s (%s -> %s at %s) %s? This DEPLOYS production.", wh, head, base, model.ShortSHA(pr.HeadRefOid), how)
 	if w.InReleaseWindow(app.Now()) {
 		return app.Confirm(what), true
+	}
+	// Outside the window a release goes with release NOW, which posts the
+	// command and tells the manifest repo; merging by hand is the last
+	// resort, for when that dispatch can't fire.
+	if w.cfg.ReleaseNowDispatch && !w.manifestRepo(app).IsZero() && !w.dispatchFailed(pr) {
+		app.Notice(fmt.Sprintf("%s: use a — release NOW posts %s and tells %s; M merges by hand only when that dispatch can't fire",
+			wh, w.cfg.ReleaseNowCommand, w.manifestRepo(app)))
+		return false, true
 	}
 	slot := "the window"
 	if w.win != nil {

@@ -218,14 +218,20 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.allPRs = out.allPRs
 		m.issues = out.issues
 		m.ciClusters = out.ci
+		seq := m.msgSeq
 		m.wf.ApplyAll(m, out.wfStates)
+		// a workflow that spoke while applying (a release landed, or
+		// FAILED) keeps its message over this pass's own
+		spoke := m.msgSeq != seq
 		m.refreshSeq++
 		m.schedulePoll() // the refresh re-derived everything a poll watches
 		if out.hasFortress && m.fortress != nil {
 			m.fortress.data = out.fortress
 		}
 		m.refilter()
-		m.errText = ""
+		if !spoke {
+			m.errText = ""
+		}
 		// the listed PR behind an open detail follows the fresh list, so
 		// cards and the header icon read this refresh's data; one that
 		// left the list keeps its last copy (nothing newer exists)
@@ -251,7 +257,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.lastRefreshWall = clock.Now().Local().Format("15:04:05")
 		m.refreshStamp = fmt.Sprintf("%s|%d|%d", m.lastRefreshWall, len(m.allPRs), len(m.issues))
 		m.noteDeltas()
-		if m.manualPending && m.errText == "" {
+		if m.manualPending && m.errText == "" && !spoke {
 			m.ok("refreshed at " + m.lastRefreshWall)
 		}
 		m.manualPending = false

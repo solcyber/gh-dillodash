@@ -33,6 +33,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/demo"
 	"github.com/solcyber/gh-dillodash/internal/fonts"
 	"github.com/solcyber/gh-dillodash/internal/fx"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
@@ -97,15 +98,27 @@ func setGlyphs(set string) {
 
 // render drives the demo fixture through the shot's scripts.
 func render(s shot, scripts [][]string) ([]*canvas.Canvas, error) {
-	cfg := demo.Config()
-	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
+	o, err := options(s, "dev")
 	if err != nil {
 		return nil, err
 	}
 	cols, rows := s.size()
-	return ui.SnapshotsWith(context.Background(), ui.Options{
-		Config: cfg, GH: demo.Client(), Workflows: wf, Me: demo.Me, Host: "github.com", Version: "dev",
-	}, s.Opts, cols, rows, scripts)
+	return ui.SnapshotsWith(context.Background(), o, s.Opts, cols, rows, scripts)
+}
+
+// options are the dashboard's options for a shot: a fresh fixture (the
+// demo's, or the release night's) and its workflows.
+func options(s shot, version string) (ui.Options, error) {
+	cfg := demo.Config()
+	var gh ghapi.Client = demo.Client()
+	if s.Night {
+		cfg, gh = demo.NightConfig(), demo.NightClient(demo.NightStart).GH
+	}
+	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
+	if err != nil {
+		return ui.Options{}, err
+	}
+	return ui.Options{Config: cfg, GH: gh, Workflows: wf, Me: demo.Me, Host: "github.com", Version: version}, nil
 }
 
 // write paints the frames, stacked with a rule between them, into a PNG.

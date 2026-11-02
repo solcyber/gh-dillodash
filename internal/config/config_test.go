@@ -351,6 +351,7 @@ func TestErrors(t *testing.T) {
 		{"int float", minimal + "ci_recheck_secs = 1.5\n", `[reviews] ci_recheck_secs: expected an integer, got a float`},
 		{"int negative", minimal + "ci_recheck_secs = -1\n", `[reviews] ci_recheck_secs: must not be negative, got -1`},
 		{"string wrong type", minimal + "[github]\nhost = 1\n", `[github] host: expected a string, got an integer`},
+		{"approvers_team", minimal + "[github]\napprovers_team = \"release-approvers\"\n", `[github] approvers_team: "release-approvers" is not "org/team"`},
 		{"host url", minimal + "[github]\nhost = \"https://github.com\"\n", `[github] host: "https://github.com" must be a bare hostname like "github.com"`},
 		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n", `[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30`},
 		{"bool wrong type", minimal + "[workflows.release_pr]\nenabled = \"yes\"\n", `[workflows.release_pr] enabled: expected a boolean (true or false), got a string`},
@@ -632,5 +633,33 @@ func TestIsBotIsExact(t *testing.T) {
 	}
 	if !b.IsBot("al") || !b.IsBot("al[bot]") {
 		t.Error("the login itself, with or without the suffix, is a bot")
+	}
+}
+
+// TestNightKeys (#24): approvers_team takes "org/team" (or "@org/team"),
+// lane_order short names or "owner/name" (by name, first place counts),
+// apply_budget_mins minutes.
+func TestNightKeys(t *testing.T) {
+	c := mustParse(t, minimal+"[github]\napprovers_team = \"@acme/release-approvers\"\n"+
+		"[workflows.release_pr]\nenabled = true\nrepos = [\"acme/web-portal\"]\nlane_order = [\"db-migrations\", \"acme/web-portal\", \"web-portal\"]\napply_budget_mins = 35\n")
+	if c.GitHub.ApproversTeam != "acme/release-approvers" {
+		t.Errorf("team: %q", c.GitHub.ApproversTeam)
+	}
+	if got := c.ReleasePR.LaneOrder; len(got) != 2 || got[0] != "db-migrations" || got[1] != "web-portal" {
+		t.Errorf("lane: %q", got)
+	}
+	if c.ReleasePR.ApplyBudgetMins != 35 {
+		t.Errorf("budget: %d", c.ReleasePR.ApplyBudgetMins)
+	}
+	found := false
+	for _, w := range c.Warnings {
+		found = found || strings.Contains(w, `lane_order: "web-portal" is listed twice`)
+	}
+	if !found {
+		t.Errorf("a repeat warns: %q", c.Warnings)
+	}
+	d := mustParse(t, minimal)
+	if d.GitHub.ApproversTeam != "" || d.ReleasePR != nil {
+		t.Errorf("defaults: no team, no workflow")
 	}
 }

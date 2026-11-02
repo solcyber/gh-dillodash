@@ -41,6 +41,10 @@ type Config struct {
 type GitHubConfig struct {
 	Host  string // "github.com" or a GHES hostname
 	Login string // expected login; "" = whoever gh is signed in as
+	// ApproversTeam is "org/team": before posting a command a bot
+	// validates by its author, dillodash checks the login is a member
+	// ("" = no check beyond the bot rule)
+	ApproversTeam string
 }
 
 // ReviewsConfig is [reviews].
@@ -211,6 +215,13 @@ type ReleasePRConfig struct {
 	DeployStuckSecs         int
 	DeployRefreshSecs       int
 	DeployApprovalComment   string // placeholders {repo} {number} {sha}
+	// LaneOrder is the release repos' order on a manual night (short
+	// names): after one is released, the next one's open release is
+	// offered; empty = no order
+	LaneOrder []string
+	// ApplyBudgetMins is how long a release in flight is expected to
+	// take, for the countdown on its row (0 = no countdown)
+	ApplyBudgetMins int
 }
 
 // DeployComment renders deploy_approval_comment for a merged release.

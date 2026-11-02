@@ -67,6 +67,28 @@ func BotHint(source string) string {
 	return "gh auth switch (or GH_TOKEN=<your token>) to run as yourself"
 }
 
+// approversLine reports the login's membership of [github]
+// approvers_team: the bots accept release, window and plan commands only
+// from its members, and dillodash refuses to post them otherwise.
+func approversLine(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, me string) {
+	team := cfg.GitHub.ApproversTeam
+	if team == "" {
+		return
+	}
+	org, slug, _ := strings.Cut(team, "/")
+	m, err := gh.TeamMember(ctx, org, slug, me)
+	switch {
+	case err != nil:
+		fmt.Fprintf(w, "  approvers: could not check @%s: %s\n", team, err)
+	case !m.Readable:
+		fmt.Fprintf(w, "  approvers: could not read @%s with this token (it needs the organization's Members read); commands are posted unchecked\n", team)
+	case !m.Member:
+		fmt.Fprintf(w, "  approvers: %s is NOT in @%s; dillodash refuses to post /release-now, /release, /attend, /window-cancel and /approve as %s\n", me, team, me)
+	default:
+		fmt.Fprintf(w, "  approvers: %s is in @%s\n", me, team)
+	}
+}
+
 // Report prints everything after the client exists: the token and the
 // login, the source check, every repo's reach and the token's role in
 // it, the budget and the workflows. Every review repo read-only fails
@@ -94,6 +116,7 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 			fmt.Fprintf(w, "  (config expects %s: gh auth switch)", cfg.GitHub.Login)
 		}
 		fmt.Fprintln(w)
+		approversLine(ctx, w, cfg, gh, me)
 	}
 	if pulled {
 		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {

@@ -16,6 +16,7 @@ type shot struct {
 	Steps      []string
 	Expect     []string // text the frame must show: the script landed where it meant to
 	Opts       ui.SnapshotOptions
+	Night      bool // on the release-night fixture (--demo-night) instead of the demo's
 }
 
 // The fixture's list, top to bottom (the cursor starts on the first
@@ -52,6 +53,15 @@ var shots = []shot{
 	{Name: "fortress-chicago", Steps: []string{"d"}, Opts: ui.SnapshotOptions{City: "chicago"}, Expect: []string{"Chicago"}},
 	{Name: "splash", Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 0.9, KeepSplash: true}},
 	{Name: "amos", Steps: []string{"/", "nothing-here"}, Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 2.0}},
+	// a manual release night (--demo-night), each shot one step further:
+	// the first refresh after the splash brings the manifest in (r), the
+	// bumped release is the last row (G)
+	{Name: "night-1-bumped", Night: true, Steps: nightSteps(1), Expect: []string{"#743", "bumped — a: release NOW", "scheduled 23:12"}},
+	{Name: "night-2-now", Night: true, Steps: nightSteps(2), Expect: []string{"already approved by you", "release NOW (/release-now)"}},
+	{Name: "night-3-released", Night: true, Steps: nightSteps(3), Expect: []string{"web-portal#743 released", "next in lane: db-migrations#158"}},
+	{Name: "night-4-cancel", Night: true, Steps: nightSteps(4), Expect: []string{"23:12 slot on manifest #20", "/window-cancel rel:db-migrations#158"}},
+	{Name: "night-5-stg", Night: true, Steps: nightSteps(5), Expect: []string{"deploy waiting · D", "stg (migrate, run 801)"}},
+	{Name: "night-6-done", Night: true, Steps: nightSteps(6), Expect: []string{"approved 1 deployment of db-migrations#158 (prod)"}},
 	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
 	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
 	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},
@@ -84,4 +94,22 @@ func (s shot) glyphSet() string {
 		return "nerd"
 	}
 	return s.Icons
+}
+
+// nightSteps are the keys of the release night up to step n of six: no
+// key outside dillodash, nothing typed but the two reasons.
+func nightSteps(n int) []string {
+	steps := [][]string{
+		{"r", "G"}, // the bumped release, approved
+		{"a"},      // release NOW only: the approval stands
+		{"enter", "bumped from the window for time; the fix is waiting", "enter", "y", "r"}, // posted; released, next in lane
+		{"G", "a", "enter", "next in the lane after the portal release", "enter", "y"},      // NOW on the migration; its slot
+		{"y", "D"},      // the slot cancelled; the migration waits on stg
+		{"y", "D", "y"}, // stg, then prod: released
+	}
+	var out []string
+	for _, s := range steps[:n] {
+		out = append(out, s...)
+	}
+	return out
 }

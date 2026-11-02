@@ -16,6 +16,7 @@
 [github]
 # host = ""                   # GitHub Enterprise Server hostname; unset: $GH_HOST, then gh's default host, then github.com
 # login = ""                  # expected login; warns when gh's active account differs
+# approvers_team = ""         # "org/team": a command a bot validates by its author (/release-now, /release, /attend, /window-cancel, /approve) is posted only by a member
 
 # ============================================================================
 # Reviews — the repos the dashboard lists
@@ -117,6 +118,8 @@ enabled = false
 # deploy_stuck_secs = 2700                  # flag a deploy still running after this long
 # deploy_refresh_secs = 30                  # poll a running deploy this often
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
+# lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, a offers the next
+# apply_budget_mins = 0                     # a release in flight counts down from this many minutes on its row (0 = no countdown)
 
 # ============================================================================
 # Workflow: waiting runs

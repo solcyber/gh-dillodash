@@ -681,9 +681,18 @@ func TestMergeConfirm(t *testing.T) {
 	if ok, handled := w.MergeConfirm(app, &model.PR{Repo: infra, Number: 7}); ok || handled {
 		t.Error("a plain PR is not handled")
 	}
-	// outside the window: a menu first; cancel merges nothing; NOW then confirms
+	// outside the window with the dispatch on: M is the last resort, a
+	// sends it (#24); nothing asked, nothing merged
 	patchNow(t, outWindow)
 	w, app = newWF(t, true)
+	if ok, handled := w.MergeConfirm(app, mergeableRelease()); ok || !handled || len(app.Menus) != 0 || len(app.Questions) != 0 ||
+		!logHas(app, "notice", "use a — release NOW posts /release-now") {
+		t.Errorf("M outside the window points at a: %v %v %q", ok, handled, app.Log)
+	}
+	// once this session's dispatch failed, M merges by hand: a menu
+	// first; cancel merges nothing; NOW then confirms
+	w, app = newWF(t, true)
+	w.notePosted(mergeableRelease(), outWindow, false)
 	app.Picks = []int{0}
 	if ok, handled := w.MergeConfirm(app, mergeableRelease()); ok || !handled {
 		t.Error("cancel merges nothing")
@@ -692,6 +701,7 @@ func TestMergeConfirm(t *testing.T) {
 		t.Errorf("offers cancel first: %q %q", m, app.Questions)
 	}
 	w, app = newWF(t, true)
+	w.cfg.ReleaseNowDispatch = false // no dispatch to fire: M is the way
 	app.Picks, app.Confirms = []int{1}, []bool{true}
 	if ok, _ := w.MergeConfirm(app, mergeableRelease()); !ok || len(app.Menus) != 1 || len(app.Questions) != 1 {
 		t.Errorf("NOW + confirm merges: %v %v", app.Menus, app.Questions)

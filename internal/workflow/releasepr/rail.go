@@ -200,6 +200,9 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 	}
 	segs := []text.Seg{text.S(glyphs.G("capl"), "cap:"+style)}
 	label := w.progressChipText(p, el)
+	if left := w.budgetLeft(p, now, pos < 0); left != "" && !compact {
+		label += " · " + left
+	}
 	if compact {
 		label = strings.TrimRight(strings.TrimSuffix(strings.TrimSpace(w.progressChipText(p, "")), "·"), " ")
 	} else {
@@ -224,6 +227,27 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 	}
 	segs = append(segs, text.S(glyphs.G("capr"), "cap:"+style))
 	return segs
+}
+
+// budgetLeft is the countdown of a release in flight against
+// apply_budget_mins ("12m left", "over by 3m"), or "" with no budget, no
+// start, or a phase that is not running. measure is the widest it gets.
+func (w *Workflow) budgetLeft(p Progress, now time.Time, measure bool) string {
+	if w.cfg.ApplyBudgetMins <= 0 || p.Terminal || p.Started.IsZero() {
+		return ""
+	}
+	switch p.Phase {
+	case "", PhaseScheduled, PhaseWaitingSlot:
+		return ""
+	}
+	if measure {
+		return "over by " + widestClock
+	}
+	left := time.Duration(w.cfg.ApplyBudgetMins)*time.Minute - now.Sub(p.Started)
+	if left < 0 {
+		return "over by " + deploys.FmtSecs(-left)
+	}
+	return deploys.FmtSecs(left) + " left"
 }
 
 // nowOffered reports a release the window left behind (bumped or

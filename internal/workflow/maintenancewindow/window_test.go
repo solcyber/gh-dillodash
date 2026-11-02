@@ -870,3 +870,24 @@ func TestCancelARelease(t *testing.T) {
 	w.DoWindow(app)
 	check(t, "with no manifest the notice says what takes a release out", strings.Contains(app.Last(), "Request changes"))
 }
+
+// TestDoWindowGuard (#24): w refuses to post a window command as
+// someone outside approvers_team, before the confirm.
+func TestDoWindowGuard(t *testing.T) {
+	workflow.ResetMembershipCache()
+	t.Cleanup(workflow.ResetMembershipCache)
+	cfg := testCfg()
+	cfg.GitHub.ApproversTeam = "acme/release-approvers"
+	app, w := newApp(cfg)
+	app.Fake.Teams = map[string][]string{"acme/release-approvers": {"carol"}}
+	app.ViewName, app.DetailItm = "list", nil
+	app.Picks, app.Confirms = []int{0}, []bool{true}
+	open := WindowNights([]*model.Issue{manifestFor(4040, "2026-10-28", "open", nil, nil)}, "alice", cfg.MaintenanceWindow)["2026-10-28"]
+	app.SetState(Name, &State{Nights: map[string]*Night{"2026-10-28": open}, Manifests: map[string]*Manifest{}})
+	saved := clock.Now
+	clock.Now = func() time.Time { return at("2026-10-28T14:00:00Z") }
+	w.DoWindow(app)
+	clock.Now = saved
+	check(t, "w: nothing posted by a non-member", len(app.Fake.CommentsPosted) == 0 && len(app.Questions) == 0)
+	check(t, "w: the refusal names the login and the team", strings.Contains(app.Last(), "/attend not posted: alice is not in @acme/release-approvers"))
+}

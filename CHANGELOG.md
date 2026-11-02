@@ -25,6 +25,18 @@
     only looked at the row's own info.
 - `:` reaches the enrolled release repos, not only the review repos.
 
+- After release NOW on a release the window bumped or rolled, its row
+  follows the command (dispatched, then the run) instead of staying
+  `bumped` (#24).
+- A message a workflow gives while a refresh is applied (a release
+  landed, or FAILED) is no longer replaced by `refreshed at …` or cleared
+  by the same refresh (#24).
+- A merged release whose deploy waits on an environment names it:
+  `merged; its deploy waits on stg — press D on its row` (#24).
+- `M` on a release outside the window points at `a` while the release-now
+  dispatch can fire: merging by hand is the last resort, for when the
+  dispatch failed this session or `release_now_dispatch` is off (#24).
+
 ### Added
 
 - A release the freeze bumped (the manifest item's `bumped` flag) ends
@@ -48,6 +60,30 @@
   of different versions are named (#22).
 - For workflow authors: `workflow.App.StaleFor(action)` and
   `workflow.StaleGate(app, action)` (#22).
+- A manual release night in dillodash alone (#24):
+  - **Identity before posting.** `[github] approvers_team = "org/team"`:
+    before the review that queues a release, `/release-now`, `/attend`,
+    `/release`, `/window-cancel` or `/approve`, dillodash checks the
+    posting login is an active member and refuses otherwise, naming the
+    login and, when the token came from `GH_TOKEN` or `GITHUB_TOKEN`, the
+    variable. A bot login is refused with or without a team. When the
+    token cannot read the team, it warns and posts. `config check` reports
+    the membership. The token needs the organization's Members read for
+    the check.
+  - **`a` on a release row** in the list, without opening it first.
+  - **The lane.** `[workflows.release_pr] lane_order`: when a release in
+    the lane lands, its message names the next approved one (`next in
+    lane: <repo>#<n> — a on its row: release NOW`); NOW on a release
+    while another in the lane is still on its way asks first.
+  - **A slot on the manifest.** release NOW on a release that holds a
+    slot on a manifest offers `/window-cancel rel:<repo>#<n>` in the same
+    flow (y/N).
+  - **The countdown.** `[workflows.release_pr] apply_budget_mins`: a
+    release in flight counts down on its row (`23m left`, `over by 4m`).
+  - **`--demo-night`** replays the night offline: a bumped release out
+    with release NOW, the next in the lane with its slot cancelled, its
+    migration's `stg` and `prod` approved with `D`. The gallery has a shot
+    of each step, and the release-pr doc a section on the night.
 
 ## [1.5.4]
 
