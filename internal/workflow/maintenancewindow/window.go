@@ -437,7 +437,7 @@ func (s *State) ManifestItem(repo string, number int) (workflow.ManifestItem, bo
 		return workflow.ManifestItem{}, false
 	}
 	m := s.Manifests[n]
-	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue}
+	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Flag: it.Flag, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue}
 	if out.Night == "" {
 		out.Night = n
 	}

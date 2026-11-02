@@ -195,3 +195,56 @@ func TestApproveReachesTheWorkflowOnAnApprovedRelease(t *testing.T) {
 		t.Errorf("the release-now comment, exactly: %+v", c)
 	}
 }
+
+// TestGotoReachesAReleaseRepo (#23): : opens a release in a repo that is
+// not a review repo, and a on it (no listed row, so only the state or
+// the repo and branches say it is a release) offers release NOW.
+func TestGotoReachesAReleaseRepo(t *testing.T) {
+	h := newHarness(t)
+	p := withReleasePR(t, h)
+	p.ReviewDecision = "APPROVED"
+	p.Opinions.Nodes = []model.Review{{Author: model.Actor{Login: "alice"}, State: "APPROVED"}}
+	detail := *p
+	h.gh.PRs[p.Ident()] = &detail
+	h.load()
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "web-portal#300", true }
+	h.key(':')
+	h.pump()
+	d, _ := h.m.detail.(*model.PR)
+	if d == nil || d.Number != 300 || d.Repo != portal {
+		t.Fatalf("goto opened %+v (status %q, err %q)", d, h.m.status, h.m.errText)
+	}
+	var menu []string
+	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return -1 }
+	h.key('a')
+	if len(menu) != 1 || !strings.HasPrefix(menu[0], "release NOW") {
+		t.Errorf("the menu offers NOW alone: %q (status %q)", menu, h.m.status)
+	}
+	if strings.Contains(h.m.status, "second review") {
+		t.Errorf("never the core's notice: %q", h.m.status)
+	}
+}
+
+// TestCoreNeverReviewsARelease: when no workflow can place a
+// release-shaped PR, the core says the release state is unread instead
+// of a plain review or "a second review changes nothing".
+func TestCoreNeverReviewsARelease(t *testing.T) {
+	h := newHarness(t)
+	p := withReleasePR(t, h)
+	h.m.cfg.ReleasePR.Auto, h.m.cfg.ReleasePR.Cache = true, "" // discovery on, nothing discovered
+	h.gh.Releases = nil
+	p.ReviewDecision = "APPROVED"
+	p.Opinions.Nodes = []model.Review{{Author: model.Actor{Login: "alice"}, State: "APPROVED"}}
+	h.m.mu.Lock()
+	h.m.showDetail(p, "pr", 0, nil)
+	h.m.mu.Unlock()
+	asked := false
+	h.m.tp.Confirm = func(string) bool { asked = true; return true }
+	h.key('a')
+	if asked || len(h.gh.Approvals) != 0 || len(h.gh.CommentsPosted) != 0 {
+		t.Errorf("nothing posted or asked: asked %v %v %v", asked, h.gh.Approvals, h.gh.CommentsPosted)
+	}
+	if !strings.Contains(h.m.status, "couldn't read release state") {
+		t.Errorf("status: %q", h.m.status)
+	}
+}

@@ -102,6 +102,12 @@ func (m *Model) doApprove(app *lockedApp) {
 	if m.wf.Approve(app, pr, app.DetailListed()) {
 		return
 	}
+	if m.wf.ReleaseShaped(pr) || m.wf.ReleaseShaped(app.DetailListed()) {
+		// a release never gets a plain review from here: its workflow
+		// could not place it (its state is not loaded), so say that
+		app.Notice(fmt.Sprintf("couldn't read release state for %s — press r and retry", where))
+		return
+	}
 	if app.IApproved(pr) {
 		app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
 		return
@@ -508,7 +514,7 @@ func (m *Model) doGoto(app *lockedApp) {
 	repo := m.repos[0]
 	if mm[1] != "" {
 		found := false
-		for _, r := range m.repos {
+		for _, r := range append(append([]model.Repo(nil), m.repos...), m.wf.ExtraRepos()...) {
 			if strings.EqualFold(r.Name, mm[1]) || strings.EqualFold(r.String(), mm[1]) {
 				repo, found = r, true
 				break

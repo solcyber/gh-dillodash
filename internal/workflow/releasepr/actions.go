@@ -44,11 +44,18 @@ func (w *Workflow) EnrichDetail(_ context.Context, _ ghapi.Client, pr, listed *m
 // false for anything that is not a release PR.
 func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	st := w.stateOf(app)
-	info := w.infoFor(pr, listed, st)
-	if info == nil {
-		return false
-	}
+	info, sure := w.classify(pr, listed, st)
 	wh := where(pr)
+	switch sure {
+	case NotRelease:
+		return false
+	case MaybeRelease:
+		// Shaped like a release, but the release repos are not read yet:
+		// never fall through to a plain review (or to "already approved")
+		// on what is probably a release.
+		app.Notice(fmt.Sprintf("couldn't read release state for %s yet — press r and retry", wh))
+		return true
+	}
 	state := pr.State
 	if state == "" {
 		state = "OPEN"
@@ -249,7 +256,11 @@ func (w *Workflow) manifestRepo(app workflow.App) model.Repo {
 // MergeBlock is why M must refuse a release PR, or "" (also "" for a
 // PR that is not a release: the core's own rules apply then).
 func (w *Workflow) MergeBlock(pr *model.PR, me string) string {
-	if pr == nil || InfoOf(pr) == nil {
+	if pr == nil {
+		return ""
+	}
+	_, sure := w.classify(pr, nil, w.Current())
+	if sure == NotRelease {
 		return ""
 	}
 	state := pr.State
@@ -261,6 +272,9 @@ func (w *Workflow) MergeBlock(pr *model.PR, me string) string {
 	}
 	if state != "OPEN" {
 		return "the PR is " + strings.ToLower(state)
+	}
+	if sure == MaybeRelease {
+		return "couldn't read release state yet — press r and retry"
 	}
 	if w.NotARelease(pr) {
 		return w.NotAReleaseWhy(pr)
@@ -287,7 +301,10 @@ func (w *Workflow) MergeBlock(pr *model.PR, me string) string {
 // explicitly (the release-now reason belongs on the PR first). Not
 // handled for other PRs.
 func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handled bool) {
-	if pr == nil || w.infoFor(pr, app.DetailListed(), w.stateOf(app)) == nil {
+	if pr == nil {
+		return false, false
+	}
+	if _, sure := w.classify(pr, app.DetailListed(), w.stateOf(app)); sure != IsRelease {
 		return false, false
 	}
 	wh := where(pr)

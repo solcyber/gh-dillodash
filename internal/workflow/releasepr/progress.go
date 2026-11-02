@@ -50,6 +50,7 @@ const (
 	PhaseUnverifiable = "unverifiable"
 	PhaseNotRun       = "not run"
 	PhaseRolled       = "rolled"
+	PhaseBumped       = "bumped" // the freeze left it out of tonight (the manifest flag); its approval stands
 	PhaseCancelled    = "cancelled"
 	PhaseLost         = "lost track"
 )
@@ -61,7 +62,7 @@ var runPhases = []string{PhaseSetup, PhaseValidating, PhaseMerging, PhaseApprovi
 // terminalPhases end the tracking.
 var terminalPhases = map[string]bool{
 	PhaseReleased: true, PhasePending: true, PhaseFailed: true, PhaseRefused: true, PhaseUnverifiable: true,
-	PhaseNotRun: true, PhaseRolled: true, PhaseCancelled: true, PhaseLost: true,
+	PhaseNotRun: true, PhaseRolled: true, PhaseBumped: true, PhaseCancelled: true, PhaseLost: true,
 }
 
 // Terminal reports a phase that ends the tracking.
@@ -1021,6 +1022,9 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 	ls := strings.ToLower(s)
 	p.Source, p.Detail = "manifest", s
 	switch {
+	case strings.EqualFold(it.Flag, "bumped") && (s == "" || strings.HasPrefix(ls, "bumped")),
+		strings.HasPrefix(ls, "bumped"):
+		p.Phase, p.Terminal = PhaseBumped, true
 	case strings.HasPrefix(ls, "verified"):
 		p.Phase, p.Terminal, p.Outcome = PhaseReleased, true, "verified"
 	case strings.HasPrefix(ls, "failed"):
@@ -1153,7 +1157,7 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 		return "release refused"
 	case PhaseCancelled:
 		return "release cancelled"
-	case PhaseUnverifiable, PhaseNotRun, PhaseRolled, PhaseLost:
+	case PhaseUnverifiable, PhaseNotRun, PhaseRolled, PhaseBumped, PhaseLost:
 		return p.Phase
 	}
 	return p.Phase + " " + el
@@ -1164,7 +1168,7 @@ func progressStyle(p Progress) string {
 	switch p.Phase {
 	case PhaseReleased:
 		return "chip.approved"
-	case PhaseFailed, PhaseRefused, PhaseUnverifiable, PhaseRolled, PhasePending:
+	case PhaseFailed, PhaseRefused, PhaseUnverifiable, PhaseRolled, PhaseBumped, PhasePending:
 		return "chip.rolled"
 	case PhaseNotRun, PhaseCancelled, PhaseLost:
 		return "chip.state"
