@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.6.1]
+
+Polish after 1.6.0: a release night's slots show from the first refresh,
+the restart-first prompt 1.6.0 promised, and release rows that keep what
+matters on a narrow screen.
+
+### Fixed
+
+- With releases on, the maintenance window reads the manifests from the
+  first refresh (and after `R`), so tonight's slots and `w` no longer wait
+  up to a refresh interval; a release that joins the queue mid-session
+  pulls the next refresh in.
+- `a`, `M`, `D` and `w` with a newer release installed ask `restart into
+  vX first?` (1.6.0's notes promised it; the build asked only whether to
+  go on): yes restarts in place, keeping the view and the open PR; no goes
+  on with this build.
+- Release rows size the number column by the `#N` they print, not
+  `repo#N`, so their author and age stay; at 80 columns a release keeps
+  its phase chip (slot, rail, `bumped · a: NOW`) and its branch title is
+  clipped instead.
+- `dillodash update` that can replace no install (a pinned extension,
+  launchers only) says so and exits 1 instead of succeeding silently; its
+  errors name the next step, and the notes excerpt stops at the first
+  section instead of cutting a list item.
+- The help legend fits its box and shows the bumped chip; the release
+  help and the release card say `M` is the last resort, not the way a
+  release merges at its slot.
+- Overlays blank a cell either side, so the list's selection bar no
+  longer shows against the help border.
+- Countdowns under an hour read `starts in 4m`, not `0h04m`.
+
+### Added
+
+- `config check` prints `auto-update: on|off`, and what turned it off
+  (`DILLODASH_AUTO_UPDATE` or `[update] auto`).
+- `docs/keys.md` lists `a` on a release row and `y` outside the list.
+
+### Changed
+
+- `--demo` and `--demo-night` together are refused; `config init` on an
+  existing file names the next step.
+- No `env_followup` setting: `D` on a release row already approves
+  whichever environment its deploy waits on, and the row names it.
+
 ## [1.6.0]
 
 A release night in dillodash alone, and installs that keep themselves

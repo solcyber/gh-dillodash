@@ -287,6 +287,9 @@ Actions read, Metadata read (discovery), and for `M` and `D` Contents and
 Deployments read and write. The release-now dispatch needs Contents read
 and write on the window's `manifest_repo` (a `repository_dispatch` is a
 contents write there); following the release there needs Actions read on
-it (the run's jobs and steps). A repo the token cannot see shrinks the
+it (the run's jobs and steps). With `[github] approvers_team`, organization
+Members read lets dillodash check the posting login is in the team before
+`/release-now` goes out; without it dillodash warns and posts unchecked
+(the bot still refuses a non-member). A repo the token cannot see shrinks the
 section and puts the reason on the warn line; a repo whose read fails keeps
 its last good rows with a warning.

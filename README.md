@@ -48,10 +48,12 @@ dillodash keeps itself up to date: a newer release is downloaded in the
 background, verified against its digest and its build attestation, and
 installed beside the old one; `R` restarts into it where you were.
 `gh dillodash update` does it now and `--rollback` undoes it;
-`[update] auto = false` only warns (the header turns the version gold,
+`[update] auto = false` (or `DILLODASH_AUTO_UPDATE=0`, for one host under
+an org's pulled config) only warns: the header turns the version gold,
 `v1.5.2 → v1.5.4`, and `a`, `M`, `D` and `w` say what this build lacks
-before they run). `config check` lists every dillodash on the machine
-with its version. Remove it with
+before they run. Once a newer release is installed, those keys offer the
+restart first. `config check` lists every dillodash on the machine with
+its version and says whether auto-update is on. Remove it with
 `gh extension remove dillodash` (the config in `~/.config/dillodash` and
 any installed font stay until you delete them). When something looks
 wrong, [docs/troubleshooting.md](docs/troubleshooting.md) lists the
@@ -101,8 +103,15 @@ matching workflow on in the config and dillodash drives it:
 |---|---|---|
 | `terraform_approve` | `a` posts `/approve <plan-id>` from the plan digests on the PR, with the destroy count and the maintenance-window choice; plan cards in the detail view; apply outcomes read back | [docs/workflows/terraform-approve.md](docs/workflows/terraform-approve.md) |
 | `maintenance_window` | a section of PRs queued for a nightly window, grouped by night with the countdown; `w` posts `/attend`, `/release` and `/window-cancel` on the night's manifest issue | [docs/workflows/maintenance-window.md](docs/workflows/maintenance-window.md) |
-| `release_pr` | application releases as PRs into production across many repos, with the staging branch's units by tag, approve-to-queue or `/release-now`, `M` at the slot and `D` for the environment approvals | [docs/workflows/release-pr.md](docs/workflows/release-pr.md) |
+| `release_pr` | application releases as PRs into production across many repos, with the staging branch's units by tag; `a` on the row or in the detail approves to queue or posts `/release-now` (NOW alone on a release you already approved or the window bumped), the lane's next release and the slot to cancel; `D` for the environment approvals; `M` the last resort when the dispatch can't run | [docs/workflows/release-pr.md](docs/workflows/release-pr.md) |
 | `waiting_runs` | a section of Actions runs waiting on an environment approval with no listed PR behind them (a hand-dispatched deploy, an ops run from `main`); `D` approves the environments you review | [docs/workflows/waiting-runs.md](docs/workflows/waiting-runs.md) |
+
+Before any command a bot accepts only from an approver (`/approve`,
+`/release-now`, `/attend`, `/release`, `/window-cancel`), dillodash checks
+who it would post as: a login listed under `[bots]` is refused (a token in
+`GH_TOKEN` or `GITHUB_TOKEN` beats `gh auth login`, and the refusal says
+which one), and with `[github] approvers_team = "org/team"` so is a login
+outside the team.
 
 Each doc specifies the comment formats the bot must emit, so any CI can be
 taught to speak them (`waiting_runs` needs no bot: it reads GitHub's own
