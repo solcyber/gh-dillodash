@@ -627,6 +627,7 @@ func runDemo(ctx context.Context, f flags) error {
 	cfg := demo.Config()
 	var gh ghapi.Client = demo.Client()
 	if f.demoNight {
+		clock.Now = demo.NightClock() // the night reads the same whenever it is replayed
 		cfg, gh = demo.NightConfig(), demo.NightClient(demo.NightStart).GH
 	}
 	if f.icons != "" {

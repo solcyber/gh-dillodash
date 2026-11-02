@@ -88,7 +88,8 @@ into it (#25).
     flow (y/N).
   - **The countdown.** `[workflows.release_pr] apply_budget_mins`: a
     release in flight counts down on its row (`23m left`, `over by 4m`).
-  - **`--demo-night`** replays the night offline: a bumped release out
+  - **`--demo-night`** replays the night offline, on its own clock (it
+    starts at 22:55 ET on a window night whenever it is run): a bumped release out
     with release NOW, the next in the lane with its slot cancelled, its
     migration's `stg` and `prod` approved with `D`. The gallery has a shot
     of each step, and the release-pr doc a section on the night.

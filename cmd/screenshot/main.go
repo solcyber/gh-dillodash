@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -30,6 +31,7 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/demo"
 	"github.com/solcyber/gh-dillodash/internal/fonts"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -106,12 +108,19 @@ func render(s shot, scripts [][]string) ([]*canvas.Canvas, error) {
 	return ui.SnapshotsWith(context.Background(), o, s.Opts, cols, rows, scripts)
 }
 
+// wallNow is the real clock, put back after a night shot.
+var wallNow = clock.Now
+
 // options are the dashboard's options for a shot: a fresh fixture (the
 // demo's, or the release night's) and its workflows.
 func options(s shot, version string) (ui.Options, error) {
 	cfg := demo.Config()
+	clock.Now = wallNow
 	var gh ghapi.Client = demo.Client()
 	if s.Night {
+		// the night is drawn at its own instant, not the wall clock's: a
+		// slot that has passed would read differently
+		clock.Now = func() time.Time { return demo.NightEpoch }
 		cfg, gh = demo.NightConfig(), demo.NightClient(demo.NightStart).GH
 	}
 	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
