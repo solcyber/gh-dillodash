@@ -81,6 +81,9 @@ icons = "unicode"
 theme = "mono"
 motion = "off"
 mascot = "none"
+clock = false
+clock_timezone = "Europe/London"
+clock_tz_label = " UK "
 
 [bots]
 logins = ["Infra-Bot", "github-actions", "infra-bot"]
@@ -168,7 +171,7 @@ approval_comment = "ok {workflow} #{run} ({repo})"
 	if c.Reviews.CIRecheckSecs != 60 || !c.Reviews.Multi() {
 		t.Errorf("reviews = %+v", c.Reviews)
 	}
-	if c.Display != (DisplayConfig{RefreshSecs: 30, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "none"}) {
+	if c.Display != (DisplayConfig{RefreshSecs: 30, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "none", ClockTimezone: "Europe/London", ClockTZLabel: "UK"}) {
 		t.Errorf("display = %+v", c.Display)
 	}
 	if want := []string{"infra-bot", "github-actions"}; !reflect.DeepEqual(c.Bots.Logins, want) {
@@ -360,6 +363,8 @@ func TestErrors(t *testing.T) {
 		{"theme", minimal + "[display]\ntheme = \"dark\"\n", `[display] theme: "dark" is not one of auto, mono`},
 		{"motion", minimal + "[display]\nmotion = \"some\"\n", `[display] motion: "some" is not one of full, off`},
 		{"mascot", minimal + "[display]\nmascot = \"cat\"\n", `[display] mascot: "cat" is not one of sprite, ascii, none`},
+		{"clock tz", minimal + "[display]\nclock_timezone = \"EST5EDT-ish\"\n", `[display] clock_timezone: "EST5EDT-ish" is not an IANA timezone (like "America/New_York")`},
+		{"clock type", minimal + "[display]\nclock = \"on\"\n", `[display] clock: expected a boolean (true or false), got a string`},
 		{"refresh type", minimal + "[display]\nrefresh_secs = \"5m\"\n", `[display] refresh_secs: expected an integer, got a string`},
 		{"bots empty entry", minimal + "[bots]\nlogins = [\"infra-bot\", \" \"]\n", `[bots] logins: entry 2 is empty`},
 		{"bots wrong type", minimal + "[bots]\nlogins = \"infra-bot\"\n", `[bots] logins: expected an array of strings, got a string`},
@@ -526,7 +531,7 @@ func TestOverrides(t *testing.T) {
 	if want := []model.Repo{repo("acme/app"), repo("acme/web")}; !reflect.DeepEqual(c.Reviews.Repos, want) {
 		t.Errorf("--repo replaces the list: %v", c.Reviews.Repos)
 	}
-	if c.Display != (DisplayConfig{RefreshSecs: 5, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite"}) {
+	if c.Display != (DisplayConfig{RefreshSecs: 5, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York"}) {
 		t.Errorf("display = %+v", c.Display)
 	}
 	if !reflect.DeepEqual(c.Warnings, []string{"--refresh: 1 is below the floor of 5, using 5"}) {

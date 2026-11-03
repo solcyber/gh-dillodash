@@ -45,12 +45,21 @@ gray, older dim.
 ## Rows 0 and 1
 
 **The header** is a powerline bar: `dillodash` on blue, the repos on navy,
-then the acting login. On the right are the refresh time, the GraphQL
-budget as a meter (`gql ████ 4,812/5,000`, gold under 20%), the countdown
-to the next refresh as a draining meter, and the version. A narrow
-terminal drops the countdown first, then the budget. Inside a PR the header
-shows its number and title instead, so what you are acting on stays visible
-however far you scroll.
+then the acting login. On the right are the clock, the refresh time, the
+GraphQL budget as a meter (`gql ████ 4,812/5,000`, gold under 20%), the
+countdown to the next refresh as a draining meter, and the version. A
+narrow terminal drops the countdown first, then the budget, the refresh
+time and the clock; the acting login and the version stay. Inside a PR the
+header shows its number and title instead, so what you are acting on stays
+visible however far you scroll.
+
+**The clock** reads `2026-11-03 04:12:33.45 UTC  23:12:33.45 EST`: the UTC
+date and time, then the same instant in a second zone, New York by default
+(`EST`, or `EDT` in summer). `[display] clock_timezone` picks the zone and
+`clock_tz_label` its label; `clock = false` hides it. Its width never
+changes, so nothing beside it shifts as it runs. The hundredths redraw at
+about 30 frames a second; with `motion = "off"` the clock shows whole
+seconds and the dashboard wakes once a second for it instead.
 
 **The summary row** counts what needs you, failing CI, open issues, and the
 workflows' own counts, and shows an active filter as a chip. Inside a PR it

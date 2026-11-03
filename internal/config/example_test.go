@@ -45,7 +45,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		seen[m[1]] = true
 	}
 	want := []string{
-		"host", "login", "approvers_team", "repos", "ci_recheck_secs", "refresh_secs", "icons", "theme", "motion", "mascot", "logins", "auto", "channel",
+		"host", "login", "approvers_team", "repos", "ci_recheck_secs", "refresh_secs", "icons", "theme", "motion", "mascot", "clock", "clock_timezone", "clock_tz_label", "logins", "auto", "channel",
 		"enabled", "digest_bot", "plan_workflow", "gate_context", "gate_done_prefixes", "approve_command",
 		"confirm_destroys_flag", "outside_window_flag", "outside_window_min_reason", "ceremony_window",
 		"manifest_repo", "timezone", "tz_label", "cutoff", "start", "release_from", "end", "queued_label",

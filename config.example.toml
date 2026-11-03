@@ -34,6 +34,9 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # theme = "auto"              # auto | mono
 # motion = "full"             # full | off (a still dashboard)
 # mascot = "sprite"           # sprite | ascii | none
+# clock = true                # the header clock: UTC, then the same instant in clock_timezone
+# clock_timezone = "America/New_York" # IANA zone of the clock's second time
+# clock_tz_label = ""         # label for it, e.g. "ET"; "" = the zone's own (EST/EDT)
 
 # ============================================================================
 # Bots — logins drawn as bots (exact, case-insensitive; "[bot]" suffixes always

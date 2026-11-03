@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -134,6 +135,7 @@ type Model struct {
 	nextRefreshAt   float64
 	lastRefresh     float64
 	lastRefreshWall string
+	clockLoc        *clock.Local  // the header clock's second zone; nil: no clock
 	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
 	ci              *ghapi.CIFallback
 	ciClusters      map[model.Ident]model.CICluster
@@ -279,6 +281,9 @@ func New(ctx context.Context, o Options) *Model {
 	}
 	if m.wf == nil {
 		m.wf, _ = workflow.NewSet(nil)
+	}
+	if o.Config.Display.Clock {
+		m.clockLoc = o.Config.Display.ClockLocal()
 	}
 	return m
 }

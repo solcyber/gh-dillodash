@@ -84,8 +84,8 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   (`v`). `a` approves, `c`/`C` comment, `t` tags someone, `M` merges an
   approved PR, `D` approves the deployments waiting on a merged one.
 - **The summary row** counts what needs you and what is failing; the status
-  line explains every refusal in words; the header shows the GraphQL budget
-  and when the next refresh lands.
+  line explains every refusal in words; the header shows a UTC + local clock,
+  the GraphQL budget and when the next refresh lands.
 - **Fortress mode** (`d`): everything open as a Dwarf Fortress map over
   Manhattan or Chicago. Row is age, lane is repo, shape is what it is.
 

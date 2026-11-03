@@ -246,3 +246,50 @@ func TestShortAge(t *testing.T) {
 		t.Errorf("ShortAge(zero) = %q,%q", label, style)
 	}
 }
+
+func TestDual(t *testing.T) {
+	at := func(iso string, ns int) time.Time {
+		x, err := ParseUTC(iso)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x.Add(time.Duration(ns))
+	}
+	cases := []struct {
+		name   string
+		l      *Local
+		t      time.Time
+		centis bool
+		want   string
+	}{
+		{"winter EST", ny(t, ""), at("2026-11-03T04:12:33Z", 450_000_000), true, "2026-11-03 04:12:33.45 UTC  23:12:33.45 EST"},
+		{"summer EDT", ny(t, ""), at("2026-07-01T16:00:00Z", 0), true, "2026-07-01 16:00:00.00 UTC  12:00:00.00 EDT"},
+		{"label override", ny(t, "ET"), at("2026-07-01T16:00:00Z", 0), true, "2026-07-01 16:00:00.00 UTC  12:00:00.00 ET"},
+		{"truncates, never rounds", ny(t, ""), at("2026-11-03T04:12:59Z", 999_999_999), true, "2026-11-03 04:12:59.99 UTC  23:12:59.99 EST"},
+		{"still: whole seconds", ny(t, ""), at("2026-11-03T04:12:33Z", 450_000_000), false, "2026-11-03 04:12:33 UTC  23:12:33 EST"},
+	}
+	kolkata, err := NewLocal("Asia/Kolkata", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases = append(cases, struct {
+		name   string
+		l      *Local
+		t      time.Time
+		centis bool
+		want   string
+	}{"half-hour zone", kolkata, at("2026-11-03T04:12:33Z", 70_000_000), true, "2026-11-03 04:12:33.07 UTC  09:42:33.07 IST"})
+	for _, c := range cases {
+		if got := c.l.Dual(c.t, c.centis); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+	// the width never changes as the digits run, so the header never jitters
+	l := ny(t, "")
+	w := len(l.Dual(at("2026-11-03T00:00:00Z", 0), true))
+	for _, ns := range []int{1, 9_999_999, 10_000_000, 990_000_000} {
+		if got := len(l.Dual(at("2026-11-03T09:09:09Z", ns), true)); got != w {
+			t.Errorf("width at %dns = %d, want %d", ns, got, w)
+		}
+	}
+}
