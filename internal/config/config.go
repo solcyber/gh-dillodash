@@ -65,6 +65,18 @@ type DisplayConfig struct {
 	Theme       string // auto | mono
 	Motion      string // full | off
 	Mascot      string // sprite | ascii | none
+	// Clock draws the header clock: UTC, then the same instant in
+	// ClockTimezone (labelled ClockTZLabel, or the zone's abbreviation).
+	Clock         bool
+	ClockTimezone string // IANA zone, validated at parse
+	ClockTZLabel  string // "" = derived (EST/EDT)
+}
+
+// ClockLocal is the header clock's second zone with its label (both
+// validated at parse).
+func (d DisplayConfig) ClockLocal() *clock.Local {
+	l, _ := clock.NewLocal(d.ClockTimezone, d.ClockTZLabel)
+	return l
 }
 
 // UpdateConfig is [update]: how dillodash keeps itself current.
@@ -267,7 +279,7 @@ func Default() *Config {
 	return &Config{
 		GitHub:  GitHubConfig{}, // Host "": $GH_HOST, then gh's default host, then github.com
 		Reviews: ReviewsConfig{CIRecheckSecs: 900},
-		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite"},
+		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York"},
 		Bots:    BotsConfig{Logins: []string{"github-actions", "dependabot"}},
 		Update:  UpdateConfig{Auto: true, Channel: "stable"},
 	}

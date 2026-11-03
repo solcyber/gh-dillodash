@@ -52,7 +52,7 @@ func TestMigrateINI(t *testing.T) {
 	if !reflect.DeepEqual(c.Reviews.Repos, []model.Repo{{Owner: "acme", Name: "infra"}}) {
 		t.Errorf("repos = %v", c.Reviews.Repos)
 	}
-	if c.Display != (DisplayConfig{RefreshSecs: 120, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite"}) {
+	if c.Display != (DisplayConfig{RefreshSecs: 120, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York"}) {
 		t.Errorf("display = %+v", c.Display)
 	}
 	if !reflect.DeepEqual(c.Bots.Logins, []string{"github-actions", "dependabot"}) {

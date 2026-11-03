@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0]
+
+A clock on the header row.
+
+### Added
+
+- The header shows the time in UTC and in a second zone:
+  `2026-11-03 04:12:33.45 UTC  23:12:33.45 EST`. The second zone is New
+  York by default, labelled `EST` or `EDT` by the season; `[display]
+  clock_timezone` changes it (any IANA zone), `clock_tz_label` relabels it
+  (`ET`), and `clock = false` hides the clock. Hundredths redraw at about
+  30 frames a second; with `motion = "off"` the clock shows whole seconds
+  and the dashboard wakes once a second instead.
+
+### Changed
+
+- The header keeps the acting login (`as alice`) ahead of the clock, the
+  refresh time and the meters: a narrow terminal drops those first. Only
+  the version outranks the login.
+
 ## [1.6.1]
 
 Polish after 1.6.0: a release night's slots show from the first refresh,

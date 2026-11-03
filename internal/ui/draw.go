@@ -129,10 +129,28 @@ type part struct {
 	segs []text.Seg
 }
 
+// clockSegs is the header clock, "2026-11-03 04:12:33.45 UTC  23:12:33.45
+// EST": hundredths with motion on, whole seconds on a still dashboard.
+func (m *Model) clockSegs() []text.Seg {
+	s := m.clockLoc.Dual(clock.Now(), fx.Motion == "full")
+	utc, local, _ := strings.Cut(s, " UTC  ")
+	j := strings.LastIndex(local, " ")
+	return []text.Seg{
+		text.S("  "+utc, "muted"), text.S(" UTC", "faint"),
+		text.S("  "+local[:j], "text"), text.S(local[j:], "faint"),
+	}
+}
+
+// meSegs is the list header's " as alice".
+func (m *Model) meSegs() []text.Seg {
+	return []text.Seg{text.S(" as ", "faint"), text.S(m.me, "author.me")}
+}
+
 // drawHeader: row 0, powerline style. Left: [ logo dillodash ][ repos ]
 // as me (list view), or [ icon #N ] and the title (inside a PR). Right,
-// by priority as the terminal narrows: the version, the refresh state,
-// the GraphQL budget meter, the draining countdown to the next refresh.
+// by priority as the terminal narrows: the version, the clock, the
+// refresh state, the GraphQL budget meter, the draining countdown to the
+// next refresh.
 func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	refreshing := m.refreshing
 	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
@@ -142,13 +160,16 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	} else if m.detail == nil {
 		parts = append(parts, part{0, []text.Seg{text.S("  "+m.ver, "build")}})
 	}
+	if m.clockLoc != nil {
+		parts = append(parts, part{1, m.clockSegs()})
+	}
 	if refreshing {
-		parts = append(parts, part{1, []text.Seg{text.S("  "+glyphs.SpinnerFrame()+" refreshing", "spin")}})
+		parts = append(parts, part{2, []text.Seg{text.S("  "+glyphs.SpinnerFrame()+" refreshing", "spin")}})
 	} else if m.loaded {
-		parts = append(parts, part{1, []text.Seg{text.S("  "+glyphs.Ico("sync")+m.lastRefreshWall, "muted")}})
+		parts = append(parts, part{2, []text.Seg{text.S("  "+glyphs.Ico("sync")+m.lastRefreshWall, "muted")}})
 	}
 	if backoff > 0 {
-		parts = append(parts, part{1, []text.Seg{text.S(fmt.Sprintf("  held %ds", backoff), "budget.low")}})
+		parts = append(parts, part{2, []text.Seg{text.S(fmt.Sprintf("  held %ds", backoff), "budget.low")}})
 	}
 	if rate := m.gh.LastRate(); rate != nil && rate.Limit > 0 {
 		low := rate.Remaining < rate.Limit/5
@@ -159,14 +180,14 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 		segs := []text.Seg{text.S("  "+glyphs.Ico("budget")+"gql ", st)}
 		segs = append(segs, fx.MeterSegs(float64(rate.Remaining)/float64(rate.Limit), 5, fill, "meter.track")...)
 		segs = append(segs, text.S(fmt.Sprintf(" %s/%s", commas(rate.Remaining), commas(rate.Limit)), st))
-		parts = append(parts, part{2, segs})
+		parts = append(parts, part{3, segs})
 	}
 	if !refreshing && backoff <= 0 && m.loaded {
 		left := max(0, int(m.nextRefreshAt-fx.Now()))
 		segs := []text.Seg{text.S("  next ", "faint")}
 		segs = append(segs, fx.MeterSegs(float64(left)/float64(max(1, m.cfg.Display.RefreshSecs)), 5, "meter.ok", "meter.track")...)
 		segs = append(segs, text.S(fmt.Sprintf(" %d:%02d", left/60, left%60), "faint"))
-		parts = append(parts, part{3, segs})
+		parts = append(parts, part{4, segs})
 	}
 	logo := "hdr.logo.0"
 	if fx.Ambient && theme.Current() >= theme.Color256 {
@@ -214,7 +235,16 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	for len(keep) > 0 && total()+minLeft+2 > w {
 		keep = keep[:len(keep)-1]
 	}
-	// display order: refresh, budget, next, then the version last
+	// "as me" (the login every action posts as) outranks all but the
+	// version: the clock, the refresh state and the meters go first
+	meW := 0
+	if m.detail == nil {
+		meW = text.SegsWidth(m.meSegs())
+	}
+	for len(keep) > 0 && keep[len(keep)-1].prio > 0 && total()+minLeft+meW+2 > w {
+		keep = keep[:len(keep)-1]
+	}
+	// display order: clock, refresh, budget, next, then the version last
 	sort.SliceStable(keep, func(i, j int) bool {
 		ai, aj := keep[i].prio == 0, keep[j].prio == 0
 		if ai != aj {
@@ -232,7 +262,7 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	if m.detail != nil {
 		left = append(left, text.S(text.Ellip(m.detailTitle(), avail-text.SegsWidth(left)-1), "strong"))
 	} else {
-		me := []text.Seg{text.S(" as ", "faint"), text.S(m.me, "author.me")}
+		me := m.meSegs()
 		if text.SegsWidth(left)+text.SegsWidth(me) < avail {
 			left = append(left, me...) // only whole: a dangling "as" read as a glitch
 		}

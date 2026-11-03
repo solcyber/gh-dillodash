@@ -450,6 +450,9 @@ func (p *parser) parseDisplay(top *table, cfg *Config, ov Overrides) {
 	d.Theme = t.choice("theme", d.Theme, ThemeChoices)
 	d.Motion = t.choice("motion", d.Motion, MotionChoices)
 	d.Mascot = t.choice("mascot", d.Mascot, MascotChoices)
+	d.Clock = t.boolean("clock", d.Clock)
+	d.ClockTimezone = t.tz("clock_timezone", d.ClockTimezone)
+	d.ClockTZLabel = strings.TrimSpace(t.str("clock_tz_label", d.ClockTZLabel))
 	t.done()
 
 	if ov.RefreshSecs != nil {

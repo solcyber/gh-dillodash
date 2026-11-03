@@ -153,6 +153,23 @@ func FmtTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04Z") + " · " + Ago(t, Now())
 }
 
+// Dual is the header clock: the UTC date and time, then the same instant's
+// wall clock in l with its label, "2026-11-03 04:12:33.45 UTC  23:12:33.45
+// EST". The width never changes: fields are zero-padded and hundredths are
+// truncated, not rounded, so 59.999 reads 59.99 and never 60.00. Without
+// centis the hundredths are left off ("04:12:33 UTC  23:12:33 EST").
+func (l *Local) Dual(t time.Time, centis bool) string {
+	u, lt := t.UTC(), t.In(l.Loc)
+	hms := func(x time.Time) string {
+		s := fmt.Sprintf("%02d:%02d:%02d", x.Hour(), x.Minute(), x.Second())
+		if centis {
+			s += fmt.Sprintf(".%02d", x.Nanosecond()/1e7)
+		}
+		return s
+	}
+	return fmt.Sprintf("%s %s UTC  %s %s", u.Format("2006-01-02"), hms(u), hms(lt), l.LabelAt(t))
+}
+
 // ShortAge is ("3h", style) for an instant, shaded by freshness the way
 // lsd shades dates: the last hour age.0 (bright), the last day age.1
 // (blue), the last week age.2 (gray), older age.3 (dim). Minutes under an

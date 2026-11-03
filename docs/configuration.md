@@ -55,6 +55,9 @@ it runs whatever it wraps.
 | `theme` | `auto` | `--theme`, `--mono` | `mono` uses no colors, only bold, underline and reverse. `NO_COLOR` in the environment does the same. |
 | `motion` | `full` | `--motion` | `off` is the static dashboard: no splash, wipes, glints, confetti or launch. |
 | `mascot` | `sprite` | | How Amos is drawn: `sprite` (half-block pixel art in his own colors), `ascii` (line art), `none`. |
+| `clock` | `true` | | The header clock: the UTC date and time, then the same instant in `clock_timezone`, `2026-11-03 04:12:33.45 UTC  23:12:33.45 EST`. Hundredths with `motion = "full"`, whole seconds with `off`. `false` hides it. |
+| `clock_timezone` | `America/New_York` | | IANA zone of the clock's second time, e.g. `Europe/London`, `Asia/Tokyo`, `UTC`. |
+| `clock_tz_label` | `""` | | Label for the second time, e.g. `ET`. Empty uses the zone's own abbreviation for the instant, so New York reads `EST` in winter and `EDT` in summer. |
 
 ## `[bots]`
 

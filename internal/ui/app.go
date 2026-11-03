@@ -98,8 +98,17 @@ func (m *Model) retick() tea.Cmd {
 // plays, TickMS while a spinner spins, AmbientMS for ambient motion
 // (a modal's too), else idleWakeMS: the next instant something on the
 // screen changes, which may be a minute away. A static dashboard costs
-// nothing in between.
+// nothing in between. The header clock's hundredths (motion on) hold
+// every view, a modal and the fortress included, at FrameMS.
 func (m *Model) tickMS() int {
+	ms := m.baseTickMS()
+	if m.clockLoc != nil && fx.Motion == "full" {
+		ms = min(ms, fx.FrameMS)
+	}
+	return ms
+}
+
+func (m *Model) baseTickMS() int {
 	if m.modal != nil {
 		if a, ok := m.modal.(interface{ Active() bool }); ok && a.Active() {
 			return fx.FrameMS
@@ -130,7 +139,8 @@ const idleMaxMS = 60000
 // idleWakeMS is how long until the next thing on the screen changes
 // when nothing animates: the refresh falling due, the next whole second
 // of a countdown (the header's next refresh, a rate-limit hold, the
-// retry of a failed load), the toast's fade and expiry; else a minute.
+// retry of a failed load), the toast's fade and expiry, the still header
+// clock's next second; else a minute.
 func (m *Model) idleWakeMS() int {
 	now := fx.Now()
 	next := now + idleMaxMS/1000
@@ -161,6 +171,9 @@ func (m *Model) idleWakeMS() int {
 	if m.status != "" && m.statusKind != "spin" {
 		at(m.statusAt + fx.ToastSecs - 0.8)
 		at(m.statusAt + fx.ToastSecs)
+	}
+	if m.clockLoc != nil { // the still clock's next whole wall second
+		at(now + frac(1-float64(clock.Now().Nanosecond())/1e9))
 	}
 	return max(50, min(int((next-now)*1000)+5, idleMaxMS))
 }
