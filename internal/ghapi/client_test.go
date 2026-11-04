@@ -591,6 +591,11 @@ func TestDetailQueries(t *testing.T) {
 				io.WriteString(w, `{"data":{"repository":{"pullRequest":null}},"errors":[{"message":"Could not resolve to a PullRequest with the number of 404."}]}`)
 				return
 			}
+			if req.Variables["number"] == float64(3544) {
+				io.WriteString(w, `{"data":{"repository":{"pullRequest":{"number":3544,"title":"release","state":"MERGED",
+					"mergedAt":"2026-10-21T12:00:00Z","mergeCommit":{"oid":"m1"},"author":{"login":"bob"}}}}}`)
+				return
+			}
 			io.WriteString(w, `{"data":{"repository":{"pullRequest":{"number":3543,"title":"canary","body":"b","isDraft":false,"reviewDecision":"APPROVED",
 				"baseRefName":"main","headRefName":"feat","headRefOid":"h1","state":"OPEN","additions":1,"deletions":2,"changedFiles":3,
 				"author":{"login":"bob"},"commits":{"nodes":[{"commit":{"committedDate":"2026-10-21T09:00:00Z"}}]},
@@ -620,6 +625,10 @@ func TestDetailQueries(t *testing.T) {
 	pr, err := cl.PRDetail(ctx, infra, 3543)
 	if err != nil || pr.Repo != infra || pr.Number != 3543 || pr.ChangedFiles != 3 || pr.Reviews.Nodes[0].Author.Login != "alice" || pr.Comments.Nodes[0].Body != "hi" {
 		t.Fatalf("PRDetail: %+v %v", pr, err)
+	}
+	merged, err := cl.PRDetail(ctx, infra, 3544)
+	if err != nil || merged.State != "MERGED" || merged.MergeCommit == nil || merged.MergeCommit.Oid != "m1" || merged.MergedAt == nil {
+		t.Fatalf("merged PRDetail keeps its merge commit: %+v %v", merged, err)
 	}
 	if _, err := cl.PRDetail(ctx, infra, 404); err == nil || err.Error() != "#404 is not a pull request in acme/infra" {
 		t.Errorf("missing PR: %v", err)

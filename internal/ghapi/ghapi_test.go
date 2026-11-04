@@ -451,6 +451,14 @@ func TestQueryShapes(t *testing.T) {
 	if strings.Contains(releaseQuery, `"main"`) || strings.Contains(releaseQuery, `"stage"`) {
 		t.Error("release query inlines a branch name")
 	}
+	// a PR merged by someone else (a release job) reaches D through the
+	// detail query alone: every refresh replaces the detail with its
+	// answer, so it must carry the merge commit
+	for _, want := range []string{"mergedAt", "mergeCommit { oid }"} {
+		if !strings.Contains(prDetailQuery, want) {
+			t.Errorf("PR detail query lacks %q", want)
+		}
+	}
 	if !strings.Contains(issuesWithLabelQuery, "labels: [$label]") || strings.Contains(issuesWithLabelQuery, "window-manifest") {
 		t.Error("the label is a variable")
 	}

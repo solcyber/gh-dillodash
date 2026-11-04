@@ -158,6 +158,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       number title body isDraft reviewDecision baseRefName headRefName
       headRefOid state additions deletions changedFiles updatedAt createdAt
+      mergedAt mergeCommit { oid }
       author { login }
       labels(first: 10) { nodes { name } }
       commits(last: 1) { nodes { commit { committedDate } } }
