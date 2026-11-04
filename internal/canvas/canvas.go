@@ -46,6 +46,22 @@ func (c *Canvas) PutRaw(y, x int, glyph, sgr string) {
 	c.cells[y][x] = cell{g: glyph, width: 1, raw: sgr}
 }
 
+// Dim turns rows y0..y1 (inclusive) into a quiet backdrop for what is
+// drawn over them next (a menu, the help): every cell keeps its glyph in
+// style, with the selection and band backgrounds and any raw color
+// dropped, so the box reads as the only thing in front.
+func (c *Canvas) Dim(y0, y1 int, style string) {
+	for y := max(0, y0); y <= y1 && y < c.H; y++ {
+		for x := range c.cells[y] {
+			ce := &c.cells[y][x]
+			ce.style, ce.extra, ce.sel, ce.band = style, 0, false, false
+			if ce.raw != "" {
+				ce.raw, ce.g = "", " "
+			}
+		}
+	}
+}
+
 // Canvas is a W x H grid of cells.
 type Canvas struct {
 	W, H  int

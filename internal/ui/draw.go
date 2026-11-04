@@ -60,6 +60,12 @@ func (m *Model) draw(c *canvas.Canvas) {
 	scenes.Wipe(c, m.fx, h, w)
 	m.drawStatus(c, h, w)
 	m.drawKeys(c, h, w)
+	// a box in front (the help, the last message, a menu) dims what is
+	// behind it, so the list's fragments around it don't compete
+	_, menu := m.modal.(*widgets.Pick)
+	if m.overlay != "" || menu {
+		c.Dim(0, h-1, "fx.k2")
+	}
 	switch m.overlay {
 	case "help":
 		m.drawHelp(c, h, w)
