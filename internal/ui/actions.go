@@ -330,6 +330,13 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	var pr *model.PR
 	if app.CurrentView() == ViewDetail {
 		pr, _ = app.Detail().(*model.PR)
+		// the listed row may know the merge before the detail does (a
+		// release job merged it since the detail was read), or know the
+		// merge commit the detail's answer lacked
+		if l := app.DetailListed(); pr != nil && l != nil && l.Number == pr.Number &&
+			l.State == "MERGED" && mergeSHA(l) != "" && (pr.State != "MERGED" || mergeSHA(pr) == "") {
+			pr = l
+		}
 	} else {
 		// a workflow row with deployments of its own (a waiting run) first
 		if row, ok := app.Selected(); ok && m.wf.DeployRow(app, row) {
@@ -351,7 +358,14 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	repo := m.repoOf(pr)
 	where := m.where(repo, pr.Number)
 	sha := mergeSHA(pr)
-	if pr.State != "MERGED" || sha == "" {
+	if pr.State == "MERGED" && sha == "" {
+		// merged, but this read did not carry the merge commit: never send
+		// the approver to M, which would say "already merged, press D"
+		app.Notice(where + " is merged; re-reading its merge commit, press D again in a moment")
+		app.Refresh(true)
+		return
+	}
+	if pr.State != "MERGED" {
 		app.Notice(where + " is not merged yet (M merges it)")
 		return
 	}

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.1]
+
+### Fixed
+
+- `D` in a pull request's detail finds the deployments waiting on a PR
+  that someone else merged (a release job, a teammate) while the detail
+  was open. The detail query now reads the merge commit, so a refresh no
+  longer drops it. Before, `D` said `not merged` while `M` said `already
+  merged, press D`. A merged PR whose answer still lacks the commit
+  re-reads it instead of pointing at `M`, and an open detail falls back
+  to its listed row's merge commit.
+
 ## [1.7.0]
 
 A clock on the header row.

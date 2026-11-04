@@ -58,3 +58,48 @@ func TestDOnAWaitingRun(t *testing.T) {
 		t.Errorf("o opened %v", h.opened)
 	}
 }
+
+// TestDInDetailAfterAnExternalMerge: a PR merged by someone else (a
+// release job) while its detail is open. After the refresh the detail
+// carries the merge commit, so D in the detail finds the deploy waiting
+// on it instead of saying "not merged" while M says "already merged".
+// A merged answer without the merge commit re-reads rather than sending
+// the approver to M.
+func TestDInDetailAfterAnExternalMerge(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	if h.m.view != ViewDetail {
+		t.Fatalf("view = %s", h.m.view)
+	}
+	id := model.Ident{Repo: infra, Number: 101}
+	sha := strings.Repeat("e", 40)
+
+	// merged, but the answer has no merge commit: re-read, never "not merged"
+	h.gh.Mutate(func() {
+		h.gh.PRs[id].State = "MERGED"
+		h.gh.PRs[id].MergeCommit = nil
+	})
+	h.key('r')
+	h.key('D')
+	if s := h.m.status; strings.Contains(s, "not merged") || !strings.Contains(s, "re-reading its merge commit") {
+		t.Errorf("merged without a sha: status %q", s)
+	}
+
+	// the detail answer carries the merge commit: D reads the deploys on it
+	run := model.WorkflowRun{ID: 77, Name: "migrate", Status: "waiting", HeadSHA: sha, HeadBranch: "main", Event: "push",
+		HTMLURL: "https://github.com/acme/infra/actions/runs/77", CreatedAt: t0}
+	var prod model.PendingDeployment
+	prod.Environment.ID, prod.Environment.Name, prod.CurrentUserCanApprove = 9, "prod", true
+	h.gh.Mutate(func() {
+		h.gh.PRs[id].MergeCommit = &model.MergeCommit{Oid: sha}
+		h.gh.Runs = map[string][]model.WorkflowRun{sha: {run}}
+		h.gh.Pending = map[int64][]model.PendingDeployment{77: {prod}}
+	})
+	h.key('r')
+	h.m.tp.Confirm = func(q string) bool { return true }
+	h.key('D')
+	if got := h.gh.DeployApprovals; len(got) != 1 || got[0].RunID != 77 || got[0].EnvIDs[0] != 9 {
+		t.Errorf("D in the detail did not approve the waiting prod deploy: %+v (status %q)", got, h.m.status)
+	}
+}
