@@ -23,7 +23,7 @@ var (
 	// approveCmdRE is ApproveCmdRE: only a comment the dispatcher would
 	// accept counts as the operative approval.
 	approveCmdRE = ApproveCmdRE
-	// approveRefusedRE is apply-dispatch's reply when it turns an /approve down.
+	// approveRefusedRE is the dispatcher's reply when it turns an /approve down.
 	approveRefusedRE = regexp.MustCompile(`^\*\*/approve (refused|not routed|not dispatched):\*\*`)
 )
 

@@ -29,7 +29,7 @@ var ShotCaptions = map[string]string{
 	"fortress":               "Fortress mode over Manhattan: every repo as a lane of branches and pull requests, the oldest work furthest north",
 	"splash":                 "The splash while the first refresh runs: the logotype cascades in and Amos walks",
 	"amos":                   "Nothing to show: Amos walks the empty list under the stars",
-	"night-1-bumped":         "A release night after the freeze: the approved release the window bumped says a: release NOW, the migration holds its 23:12 slot",
+	"night-1-bumped":         "A release night after the freeze: the approved release the window bumped says a: release NOW, the migration holds its slot nine minutes into the window",
 	"night-2-now":            "a on the bumped release: the approval stands, so release NOW is the one choice",
 	"night-3-released":       "The release lands; the status line names the next release in the lane",
 	"night-4-cancel":         "release NOW on the migration that holds a slot: the same flow offers the window-cancel of its item",

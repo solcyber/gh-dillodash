@@ -374,7 +374,7 @@ func TestPromptDraw(t *testing.T) {
 		t.Errorf("scrolled input = %q", c.Text(23))
 	}
 	// the rows are never wider than the canvas (a long question wraps)
-	lq := NewPrompt("No live plan to /approve on #3543 (acme/15-window-canary: superseded, "+
+	lq := NewPrompt("No live plan to /approve on #3543 (acme/15-canary: superseded, "+
 		"acme/05-net: no changes). Submit a GitHub review approval as alice?", "")
 	c = canvas.New(80, 24)
 	lq.Draw(c, nil)
@@ -522,7 +522,7 @@ func TestConfirm(t *testing.T) {
 	if got := strings.TrimRight(cv.Text(23), " "); got != " post? [y/N]" {
 		t.Errorf("row 23 = %q", got)
 	}
-	longQ := "No live plan to /approve on #3543 (acme/15-window-canary: superseded, " +
+	longQ := "No live plan to /approve on #3543 (acme/15-canary: superseded, " +
 		"acme/05-net: no changes). Submit a GitHub review approval as alice?"
 	cv = canvas.New(80, 24)
 	NewConfirm(longQ).Draw(cv, nil)

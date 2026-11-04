@@ -58,7 +58,7 @@ the day after it is enrolled, or at once after the cache file is deleted.
 - **A release in flight** (released NOW, or on tonight's manifest) shows
   its **rail** in the kind chip: a meter that fills as the release moves
   through the manifest repo's run, with the phase and its clock
-  (`▰▰▰▰▱▱▱ deploying 3/9 · 2m`, `scheduled 23:00`, `released`, `release
+  (`▰▰▰▰▱▱▱ deploying 3/9 · 2m`, `scheduled 16:00`, `rolled · re-cut`, `released`, `release
   FAILED`). See [Live progress](#live-progress).
 - **A merged release** stays listed for `merged_keep_secs` (12 hours) and,
   when nothing is following it, shows its deploy in the second chip: `approve: prod` (an environment you
@@ -156,7 +156,7 @@ Everything an approver does on a night of manual releases happens in
 dillodash, with no GitHub page and no CLI. `gh dillodash --demo-night`
 replays one offline; these shots are its steps.
 
-![A release night after the freeze: the approved release the window bumped says a: release NOW, the migration holds its 23:12 slot](../shots/night-1-bumped.png)
+![A release night after the freeze: the approved release the window bumped says a: release NOW, the migration holds its slot nine minutes into the window](../shots/night-1-bumped.png)
 
 - **`a` on a release row** in the list is the detail's `a`: no need to
   open it first. A release the freeze bumped keeps its approval, so `a`

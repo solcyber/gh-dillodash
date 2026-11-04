@@ -123,6 +123,11 @@ team = "acme/sre"
 attend_command = "/here"
 release_command = "/go"
 cancel_command = "/stop"
+missed_freeze_marker = "NO FREEZE"
+missed_freeze_grace_mins = 10
+missed_freeze_hint = "run it by hand"
+late_skip = "22:10"
+closer = "22:45"
 
 [workflows.release_pr]
 enabled = true
@@ -204,6 +209,7 @@ approval_comment = "ok {workflow} #{run} ({repo})"
 		Cutoff: clock.HM{H: 20}, ReleaseFrom: clock.HM{H: 21, M: 59}, Start: clock.HM{H: 22}, End: clock.HM{H: 22, M: 30},
 		QueuedLabel: "q", ScheduledLabel: "s", RolledLabel: "r", AppliedLabel: "a", FailedLabel: "f", PendingLabel: "p", ManifestLabel: "m", ManifestTitle: "Night {night}",
 		ConductorBot: "infra-bot", Team: "acme/sre", AttendCommand: "/here", ReleaseCommand: "/go", CancelCommand: "/stop",
+		MissedFreezeMarker: "NO FREEZE", MissedFreezeGraceMins: 10, MissedFreezeHint: "run it by hand", LateSkip: &clock.HM{H: 22, M: 10}, Closer: &clock.HM{H: 22, M: 45},
 	}
 	if !reflect.DeepEqual(mw, wantMW) {
 		t.Errorf("maintenance_window =\n %+v\nwant\n %+v", mw, wantMW)
@@ -304,7 +310,7 @@ enabled = true
 	if d := DefaultReleasePR(); !d.Auto || d.Cache != DefaultReleaseCache || d.MergeMethod != "merge" {
 		t.Errorf("DefaultReleasePR = %+v", d)
 	}
-	if d := DefaultMaintenanceWindow(); d.ManifestTitle != "Window {night}" || d.Start != (clock.HM{H: 23}) {
+	if d := DefaultMaintenanceWindow(); d.ManifestTitle != "Window {night}" || d.Start != (clock.HM{H: 16}) || d.Timezone != "UTC" || d.MissedFreezeMarker != "MISSED FREEZE" {
 		t.Errorf("DefaultMaintenanceWindow = %+v", d)
 	}
 	if d := DefaultTerraformApprove(); d.OutsideWindowMinReason != 20 || len(d.GateDonePrefixes) != 2 {
@@ -356,7 +362,9 @@ func TestErrors(t *testing.T) {
 		{"string wrong type", minimal + "[github]\nhost = 1\n", `[github] host: expected a string, got an integer`},
 		{"approvers_team", minimal + "[github]\napprovers_team = \"release-approvers\"\n", `[github] approvers_team: "release-approvers" is not "org/team"`},
 		{"host url", minimal + "[github]\nhost = \"https://github.com\"\n", `[github] host: "https://github.com" must be a bare hostname like "github.com"`},
-		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n", `[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 22:59, 23:00, 23:30`},
+		{"window order", minimal + "[workflows.maintenance_window]\nenabled = true\ncutoff = \"23:10\"\n", `[workflows.maintenance_window] cutoff, release_from, start, end: expected cutoff < release_from < start < end, got 23:10, 15:55, 16:00, 17:00`},
+		{"late_skip order", minimal + "[workflows.maintenance_window]\nenabled = true\nlate_skip = \"18:00\"\n", `[workflows.maintenance_window] late_skip: expected start < late_skip < end, got 16:00, 18:00, 17:00`},
+		{"closer order", minimal + "[workflows.maintenance_window]\nenabled = true\ncloser = \"16:30\"\n", `[workflows.maintenance_window] closer: expected end <= closer, got 17:00, 16:30`},
 		{"bool wrong type", minimal + "[workflows.release_pr]\nenabled = \"yes\"\n", `[workflows.release_pr] enabled: expected a boolean (true or false), got a string`},
 		{"icons", minimal + "[display]\nicons = \"emoji\"\n", `[display] icons: "emoji" is not one of nerd, unicode, ascii`},
 		{"apply_workflow path", minimal + "[workflows.release_pr]\nenabled = true\napply_workflow = \".github/workflows/apply.yml\"\n", `[workflows.release_pr] apply_workflow: ".github/workflows/apply.yml" must be the workflow's file name (apply.yml), not a path`},

@@ -50,7 +50,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		"confirm_destroys_flag", "outside_window_flag", "outside_window_min_reason", "ceremony_window",
 		"manifest_repo", "timezone", "tz_label", "cutoff", "start", "release_from", "end", "queued_label",
 		"scheduled_label", "rolled_label", "applied_label", "failed_label", "pending_label", "manifest_label", "manifest_title", "conductor_bot", "team",
-		"attend_command", "release_command", "cancel_command",
+		"attend_command", "release_command", "cancel_command", "missed_freeze_marker", "missed_freeze_grace_mins", "missed_freeze_hint", "late_skip", "closer",
 		"org", "ruleset", "discover_ttl_secs", "cache", "production_branch", "staging_branch", "release_prefix",
 		"hotfix_prefix", "go_tag_prefix", "hold_tag_prefix", "list_other_prs", "release_now_command",
 		"release_now_min_reason", "release_now_dispatch", "release_now_dispatch_event", "apply_workflow", "apply_run_match",
@@ -97,7 +97,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 	ta := DefaultTerraformApprove()
 	ta.Repos = c.Reviews.Repos
 	ta.CeremonyWindow = c.TerraformApprove.CeremonyWindow // the example shows a window; it is optional
-	if c.TerraformApprove.CeremonyWindow == nil || c.TerraformApprove.CeremonyWindow.Timezone != "America/New_York" {
+	if c.TerraformApprove.CeremonyWindow == nil || c.TerraformApprove.CeremonyWindow.Timezone != "UTC" {
 		t.Errorf("example ceremony window = %+v", c.TerraformApprove.CeremonyWindow)
 	}
 	if got, want := strings.Join(c.TerraformApprove.GateDonePrefixes, "|"), strings.Join(ta.GateDonePrefixes, "|"); got != want {

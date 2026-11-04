@@ -70,21 +70,22 @@ enabled = false
 # confirm_destroys_flag = "--confirm-destroys"     # added when the plan destroys resources
 # outside_window_flag = "--outside-window"         # added when approving outside the window
 # outside_window_min_reason = 20                   # shortest acceptable out-of-window reason
-# ceremony_window = { timezone = "America/New_York", from = "23:00", to = "23:30" }   # all three or none
+# ceremony_window = { timezone = "UTC", from = "16:00", to = "17:00" }   # all three or none
 
 # ============================================================================
 # Workflow: maintenance window
-# Approved PRs queue for a nightly window run by a conductor bot
+# Approved PRs queue for a nightly window run by a conductor bot.
+# The times below are an example, not a recommendation: set your own.
 # ============================================================================
 [workflows.maintenance_window]
 enabled = false
 # manifest_repo = ""                        # where manifest issues live; default: first [reviews] repo
-# timezone = "America/New_York"             # IANA zone of the window clock
+# timezone = "UTC"                          # IANA zone of the window clock
 # tz_label = ""                             # label override such as "ET"; default EST/EDT
-# cutoff = "21:00"                          # last approval that joins tonight's window
-# start = "23:00"                           # window opens
-# release_from = "22:59"                    # earliest /release
-# end = "23:30"                             # window closes
+# cutoff = "12:00"                          # last approval that joins tonight's window
+# start = "16:00"                           # window opens
+# release_from = "15:55"                    # earliest /release
+# end = "17:00"                             # window closes
 # queued_label = "window:queued"            # label while waiting for a night
 # scheduled_label = "window:scheduled"      # label once on a manifest
 # rolled_label = "window:rolled"            # label after rolling to a later night
@@ -92,12 +93,17 @@ enabled = false
 # failed_label = "window:failed"            # and on a failed one
 # pending_label = "window:pending"          # and on one merged whose deploy waits on an environment approval
 # manifest_label = "window-manifest"        # label on manifest issues
-# manifest_title = "Window {night}"         # manifest issue title; {night} is YYYY-MM-DD; add the start time if your bot does
+# manifest_title = "Window {night}"         # manifest issue title; {night} is YYYY-MM-DD, {hhmm} the start (any HH:MM matches)
 # conductor_bot = "github-actions"          # login that runs the window
 # team = ""                                 # "org/team" to mention in hints
 # attend_command = "/attend"                # comment that marks you attending
 # release_command = "/release"              # comment that releases an item
 # cancel_command = "/window-cancel"         # comment that pulls an item from the window
+# missed_freeze_marker = "MISSED FREEZE"    # conductor comment text: the freeze never ran, nothing fires that night
+# missed_freeze_grace_mins = 30             # an open manifest this long past the cutoff is a missed freeze (0 = the comment only)
+# missed_freeze_hint = ""                   # the recovery a missed night shows; default: a generic one
+# late_skip = ""                            # "HH:MM": the run starts no new item after it; default: not shown
+# closer = ""                               # "HH:MM": when the conductor closes the night; default: not shown
 
 # ============================================================================
 # Workflow: release PRs

@@ -10,16 +10,18 @@ commands.
 [workflows.maintenance_window]
 enabled = true
 manifest_repo = "acme/infra"      # where the manifest issues live
-timezone = "America/New_York"
-cutoff = "21:00"                  # last moment to /attend
-start = "23:00"                   # the window opens
-release_from = "22:59"            # /release counts from here
-end = "23:30"
+timezone = "UTC"
+cutoff = "12:00"                  # last moment to /attend; the freeze
+start = "16:00"                   # the window opens
+release_from = "15:55"            # /release counts from here
+end = "17:00"
 ```
 
-Every label, command and time has a key in `config.example.toml`. Every
-time on screen is formatted in the configured zone with its abbreviation
-(`23:00 EDT`); the examples below assume the defaults.
+The times are the shipped example, not a recommendation: set your
+conductor's. Every label, command and time has a key in
+`config.example.toml`. Every time on screen is formatted in the
+configured zone with its abbreviation (`16:00 UTC`); the examples below
+assume the example window.
 
 ## What you see
 
@@ -28,21 +30,34 @@ time on screen is formatted in the configured zone with its abbreviation
 - **The section** `queued for the maintenance window` sits below the pull
   requests. It is grouped by the night each item will run in, the next
   window first. A terraform row shows the status (`queued`, `scheduled
-  23:04 EDT` once the freeze has slotted it, or `rolled: <reason>`), the
+  16:04 UTC` once the freeze has slotted it, or `rolled: <reason>`), the
   stack, and `revertible` or **`attended night needed`** for an item that
   runs only when someone posts `/attend` and `/release` on that night's
   manifest. A release row (with `release_pr` and
   `approval_queues_for_window`) keeps the release workflow's chips:
-  `scheduled 23:04` (no zone) once slotted, `waiting for slot`, then its
-  rail once it runs.
+  `scheduled 16:04` (no zone) once slotted, `waiting for slot`, then its
+  rail once it runs. A release whose head moved after the freeze (a
+  re-cut) reads `rolled · re-cut`: the freeze froze the old head
+  (the item's `head_sha`), so the slot will not run it, and a fresh
+  approval joins a later night; release NOW is the way to ship it
+  tonight.
 - **The night's manifest issue is the first row under its sub-header**
   (chip `manifest <phase>`), never a loose row in `issues`. `enter` opens
   it, `o` opens it in the browser, `w` acts on its night.
 - **The sub-header** names the manifest, counts down to the start
   (`starts in 2h03m`), and shows who attends and who checked in. When a
   held item needs someone, it says so in gold: `needs /attend (w) by
-  21:00 EDT` before the cutoff, `nobody attending: not-revertible items
-  roll` after it, `/release now (w) by 23:10 EDT` from `release_from`.
+  12:00 UTC` before the cutoff, `nobody attending: not-revertible items
+  roll` after it, `/release now (w) by 16:10 UTC` from `release_from`.
+  With `closer` set, a night past its `end` that is not closed yet says
+  `closes at <closer>`, then `closer late`.
+- **A missed freeze.** When the freeze never ran, the conductor fires
+  nothing that night. dillodash shows a gold `missed freeze` chip and the
+  recovery (`missed_freeze_hint`) on the night, and `w` stops offering
+  `/attend` and `/release` there. It tells by the conductor's comment
+  carrying `missed_freeze_marker` (`MISSED FREEZE`), or by the manifest
+  still `open` `missed_freeze_grace_mins` (30) after the cutoff. A
+  `/window-cancel` is still offered.
 - **A queue entry a later push killed goes back to the pull-request list.**
   The queued label stays on a PR until the freeze re-validates it, so
   dillodash compares the queue notice's plan id with the PR's plans: still
@@ -61,7 +76,9 @@ with a manifest: `/attend`, `/release`, `/window-cancel <id>` (only for the
 selected item: `#N` for a terraform PR, `rel:<repo>#<N>` for a release),
 open the manifest issue. Each entry says why it would or would not count
 now, using the conductor's own rules: `/attend` only before the cutoff;
-`/release` only from an attendee, from `release_from` to `end`; a cancel
+`/release` only from an attendee, from `release_from` to `end` (with
+`late_skip` set, it says nothing new starts after it); neither on a
+missed freeze; a cancel
 only before the item starts or while it waits for `/release`. A release
 joins the manifest only at the freeze, and the conductor refuses a cancel
 for a `rel:` id the manifest does not list, so before the cutoff the
@@ -102,23 +119,27 @@ queued:
 
 **The manifest issue**, one per night in `manifest_repo`: labeled
 `manifest_label` (`window-manifest`), titled by `manifest_title` with the
-night's date (`Window {night}` by default; set `manifest_title` to the bot's exact title), and carrying a machine block in
-its body:
+night's date (`Window {night}` by default). `{hhmm}` in the title is the
+window's start, and any `HH:MM` in it, literal or `{hhmm}`, matches any
+time, so a manifest opened before the start time changed is still read.
+It carries a machine block in its body:
 
 ```
 <!-- window-manifest:begin
 {"night": "2026-10-22", "phase": "open", "attendees": ["carol"],
  "items": [{"id": "#42", "repo": "infra", "pr": 42, "flag": "scheduled",
-            "revertible": false, "start_utc": "2026-10-23T03:04:00Z",
-            "release_by_utc": "2026-10-23T03:14:00Z",
-            "status": "waiting for /release until 2026-10-23T03:14:00Z", "reasons": []}]}
+            "revertible": false, "start_utc": "2026-10-22T16:04:00Z",
+            "release_by_utc": "2026-10-22T16:14:00Z", "head_sha": "<40 hex>",
+            "status": "waiting for /release until 2026-10-22T16:14:00Z", "reasons": []}]}
 window-manifest:end -->
 ```
 
 Phases are `open`, `frozen`, `running`, `ran`, `skipped`, `closed`. Item
 ids are `#N` for a PR in the manifest repo and `rel:<repo>#<N>` for a
-release from another repo. When two manifests exist for a night, the lowest
-issue number wins.
+release from another repo. `head_sha`, when present, is the head the
+freeze froze. When two manifests exist for a night, the lowest issue
+number wins. A conductor comment carrying `missed_freeze_marker` marks a
+night the freeze never ran.
 
 **Commands** dillodash posts on the manifest (the names are configurable):
 `/attend`, `/release`, `/window-cancel #N` or `/window-cancel rel:<repo>#<N>`.

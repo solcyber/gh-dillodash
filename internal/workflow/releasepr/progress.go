@@ -941,6 +941,12 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 		q := p
 		if ph, ok := w.fromItem(&q, t.item, now); ok && !((ph == PhaseBumped || ph == PhaseRolled) && !cmdAt.IsZero()) {
 			p = q
+			if (ph == PhaseScheduled || ph == PhaseWaitingSlot) && cmdAt.IsZero() && workflow.HeadMoved(t.item.HeadSHA, pr.HeadRefOid) {
+				// re-cut after the freeze: the freeze froze the old head,
+				// so the slot will not run it; release NOW is the way tonight
+				p.Phase, p.Terminal, p.Detail = PhaseRolled, true, RecutDetail
+				return p
+			}
 			if !p.Terminal && ph != PhaseScheduled && ph != PhaseWaitingSlot {
 				return w.timeout(p, now)
 			}
@@ -1055,6 +1061,10 @@ func failedStep(steps []Step) *Step {
 	}
 	return nil
 }
+
+// RecutDetail is the detail of a release rolled because its head moved
+// after the freeze froze it.
+const RecutDetail = "re-cut after the freeze: the slot runs the frozen head, not this one; release NOW after the window, or approve again for a later night"
 
 // fromItem fills the phase from the manifest item's status on a window
 // night. ok is false when the status says nothing useful.
@@ -1198,7 +1208,12 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 		return "release refused"
 	case PhaseCancelled:
 		return "release cancelled"
-	case PhaseUnverifiable, PhaseNotRun, PhaseRolled, PhaseBumped, PhaseLost:
+	case PhaseRolled:
+		if p.Detail == RecutDetail {
+			return "rolled · re-cut"
+		}
+		return p.Phase
+	case PhaseUnverifiable, PhaseNotRun, PhaseBumped, PhaseLost:
 		return p.Phase
 	}
 	return p.Phase + " " + el

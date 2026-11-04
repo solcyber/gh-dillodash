@@ -268,6 +268,17 @@ func TestDeriveWindowPath(t *testing.T) {
 	if got := w.progressChip(p, slot.Add(-3*time.Hour)); got != "scheduled 23:00" {
 		t.Errorf("chip: %q", got)
 	}
+	// re-cut after the freeze: the item froze another head, so the slot
+	// will not run this one
+	recut := func(head string) Progress {
+		return deriveWith(w, pr, func(tr *track) { it := item(""); it.HeadSHA = head; tr.item = it }, slot.Add(-3*time.Hour))
+	}
+	if p := recut("0000dead"); p.Phase != PhaseRolled || !p.Terminal || p.Detail != RecutDetail || w.progressChip(p, slot) != "rolled · re-cut" {
+		t.Errorf("re-cut: %+v %q", p, w.progressChip(p, slot))
+	}
+	if p := recut(pr.HeadRefOid); p.Phase != PhaseScheduled {
+		t.Errorf("the frozen head is the head: %+v", p)
+	}
 	// the label without an item yet
 	p = deriveWith(w, pr, nil, slot.Add(-3*time.Hour))
 	if p.Phase != PhaseScheduled || p.Source != "label" || w.progressChip(p, slot) != "scheduled" {

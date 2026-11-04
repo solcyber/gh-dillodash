@@ -9,7 +9,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
-const sampleINI = `; pr-dash config
+const sampleINI = `; legacy config
 [defaults]
 repo = acme/infra
 user = alice
@@ -23,12 +23,12 @@ sound = on
 token_command = pass show github/token
 
 [user.infra-bot]
-token_file = ~/.config/pr-dash/infra-bot.token
+token_file = ~/.config/legacy/infra-bot.token
 
 [releases]
 repos = app, web; acme/api
 discover_ttl_secs = 3600
-cache = ~/.cache/pr-dash/release-repos.json
+cache = ~/.cache/legacy/release-repos.json
 
 [colors]
 accent = gold
@@ -72,13 +72,13 @@ func TestMigrateINI(t *testing.T) {
 	if rp.Auto || !reflect.DeepEqual(rp.Repos, wantRepos) || rp.Org != "acme" || rp.DiscoverTTLSecs != 3600 {
 		t.Errorf("release_pr = %+v", rp)
 	}
-	if !strings.HasSuffix(filepath.ToSlash(rp.Cache), "/.cache/pr-dash/release-repos.json") {
+	if !strings.HasSuffix(filepath.ToSlash(rp.Cache), "/.cache/legacy/release-repos.json") {
 		t.Errorf("cache = %q", rp.Cache)
 	}
 
 	// the TOML text itself
 	for _, want := range []string{
-		"# dillodash config, migrated from a pr-dash config.ini.",
+		"# dillodash config, migrated from a legacy config.ini.",
 		"enabled = false on any protocol",
 		"[workflows.terraform_approve]\nenabled = true",
 		"[workflows.maintenance_window]\nenabled = true",

@@ -33,7 +33,7 @@ const (
 func testCfg() *config.Config {
 	cfg := config.Default()
 	cfg.Reviews.Repos = []model.Repo{infra}
-	mw := config.DefaultMaintenanceWindow()
+	mw := wftest.Window()
 	mw.TZLabel = "ET"
 	mw.ManifestTitle = "Window {night} 23:00 ET"
 	mw.ManifestRepo = infra
@@ -77,7 +77,7 @@ func human(login, body, iso string) model.Comment {
 	return model.Comment{Author: model.Actor{Login: login}, CreatedAt: at(iso), Body: body}
 }
 
-var digestA = botC("### plan `nonprod/15-window-canary`\n\nPlan-id: `"+pid+"`", "2026-10-21T16:20:00Z")
+var digestA = botC("### plan `staging/15-canary`\n\nPlan-id: `"+pid+"`", "2026-10-21T16:20:00Z")
 
 func labelled(names ...string) model.Labels {
 	var l model.Labels
@@ -191,7 +191,7 @@ func TestNightMaths(t *testing.T) {
 		NightLabel("2026-10-22", at("2026-10-21T22:00:00Z"), cfg) == "window 2026-10-22 23:00 ET, tomorrow night" &&
 		NightLabel("2026-10-24", at("2026-10-21T22:00:00Z"), cfg) == "window 2026-10-24 23:00 ET, Sat")
 
-	other := config.DefaultMaintenanceWindow()
+	other := wftest.Window()
 	other.Timezone, other.Start, other.Cutoff = "Europe/London", clock.HM{H: 22}, clock.HM{H: 20}
 	other.TZLabel = "UK"
 	check(t, "another zone and start follow the config", NextQueueNight(at("2026-10-21T19:30:00Z"), other) == "2026-10-22" &&
@@ -208,11 +208,11 @@ func TestMarkersAndManifests(t *testing.T) {
 	check(t, "a marker from a human is ignored", ParseMarker([]model.Comment{markerComment("2026-10-21", true, "2026-10-21T16:31:00Z", "mallory")}, cfg) == nil)
 	check(t, "malformed marker ignored", ParseMarker([]model.Comment{{Author: model.Actor{Login: bot}, Body: "<!-- window-queue {not json} -->"}}, cfg) == nil)
 	check(t, "non-dict marker JSON ignored", ParseMarker([]model.Comment{{Author: model.Actor{Login: bot}, Body: "<!-- window-queue [1, 2] -->"}}, cfg) == nil)
-	check(t, "stack from the newest digest", LatestPlanStack([]model.Comment{digestA}, nil) == "nonprod/15-window-canary")
+	check(t, "stack from the newest digest", LatestPlanStack([]model.Comment{digestA}, nil) == "staging/15-canary")
 	nochg := botC("### plan `prod/12-other` — no changes\nPlan ran green.", "2026-10-21T16:25:00Z")
-	check(t, "queued stack: the newest real digest, not a no-changes notice", LatestPlanStack([]model.Comment{digestA, nochg}, nil) == "nonprod/15-window-canary")
+	check(t, "queued stack: the newest real digest, not a no-changes notice", LatestPlanStack([]model.Comment{digestA, nochg}, nil) == "staging/15-canary")
 	check(t, "queued stack: the marker's own stacks first, joined like the conductor",
-		LatestPlanStack([]model.Comment{nochg}, &Marker{Stacks: []string{"nonprod/10-b", "prod/10-a"}}) == "nonprod/10-b + prod/10-a")
+		LatestPlanStack([]model.Comment{nochg}, &Marker{Stacks: []string{"staging/10-b", "prod/10-a"}}) == "staging/10-b + prod/10-a")
 
 	mans := ParseManifests([]*model.Issue{manifestFor(3545, "2026-10-21", "frozen", []map[string]any{{"pr": 3544}}, nil)}, cfg)
 	check(t, "manifest parsed by night", len(mans) == 1 && mans["2026-10-21"] != nil && len(mans["2026-10-21"].Items) == 1 && mans["2026-10-21"].Items[0].PR == 3544)
@@ -251,10 +251,10 @@ func fixtureManifests() map[string]*Manifest {
 func TestPlacementAndRows(t *testing.T) {
 	cfg := testCfg().MaintenanceWindow
 	now := at("2026-10-21T22:00:00Z") // 18:00 EDT, before the cutoff
-	scheduled := qpr(3544, []string{"window:queued", "window:scheduled"}, map[string]any{"night": "2026-10-21", "revertible": true, "queued_at": "2026-10-21T16:31:00Z"}, "nonprod/x")
-	tomorrow := qpr(3600, []string{"window:queued"}, map[string]any{"night": "2026-10-22", "revertible": false, "queued_at": "2026-10-22T02:00:00Z"}, "nonprod/x")
-	rolled := qpr(3500, []string{"window:queued", "window:rolled"}, map[string]any{"night": "2026-10-20", "revertible": true, "queued_at": "2026-10-20T15:00:00Z"}, "nonprod/x")
-	plain := qpr(3543, []string{"window:queued"}, map[string]any{"night": "2026-10-21", "revertible": true, "queued_at": "2026-10-21T16:35:00Z"}, "nonprod/x")
+	scheduled := qpr(3544, []string{"window:queued", "window:scheduled"}, map[string]any{"night": "2026-10-21", "revertible": true, "queued_at": "2026-10-21T16:31:00Z"}, "staging/x")
+	tomorrow := qpr(3600, []string{"window:queued"}, map[string]any{"night": "2026-10-22", "revertible": false, "queued_at": "2026-10-22T02:00:00Z"}, "staging/x")
+	rolled := qpr(3500, []string{"window:queued", "window:rolled"}, map[string]any{"night": "2026-10-20", "revertible": true, "queued_at": "2026-10-20T15:00:00Z"}, "staging/x")
+	plain := qpr(3543, []string{"window:queued"}, map[string]any{"night": "2026-10-21", "revertible": true, "queued_at": "2026-10-21T16:35:00Z"}, "staging/x")
 	manifests := fixtureManifests()
 
 	rows := QueueRows([]*model.PR{tomorrow, rolled, plain, scheduled}, nil, manifests, now, nil, nil, cfg)
@@ -311,7 +311,7 @@ func TestQueuedPlanState(t *testing.T) {
 	c := testCfg()
 	cfg, ta := c.MaintenanceWindow, c.TerraformApprove
 	queuedA := markerComment("2026-10-22", true, "2026-10-22T16:33:40Z", bot)
-	digestB := botC("### plan `prod/09-portal`\n\nPlan-id: `"+pidB+"`\nPlan: 2 to add, 0 to change, 0 to destroy.", "2026-10-22T23:19:44Z")
+	digestB := botC("### plan `prod/09-web`\n\nPlan-id: `"+pidB+"`\nPlan: 2 to add, 0 to change, 0 to destroy.", "2026-10-22T23:19:44Z")
 	digestAold := digestA
 	digestAold.CreatedAt = at("2026-10-22T16:26:18Z")
 	head := func(committed, oid string) *model.PR {
@@ -330,7 +330,7 @@ func TestQueuedPlanState(t *testing.T) {
 	check(t, "no plan in reach: queued", QueuedPlanState(mkA, []model.Comment{queuedA}, hd, ta) == FateQueued)
 	check(t, "a marker with no plan-id: queued", QueuedPlanState(&Marker{Night: "2026-10-22"}, []model.Comment{digestB}, hd, ta) == FateQueued)
 	meta, _ := json.Marshal(map[string]any{"set_id": pidC, "head_sha": "cccccccccccc",
-		"members": []map[string]any{{"stack": "prod/09-portal", "plan_id": pidB, "destroys": 0}}})
+		"members": []map[string]any{{"stack": "prod/09-web", "plan_id": pidB, "destroys": 0}}})
 	setmeta := botC("### plan-set\n<!-- plan-set: "+string(meta)+" -->", "2026-10-22T23:20:00Z")
 	check(t, "queued as the current head's plan-set id: queued", QueuedPlanState(&Marker{PlanID: pidC}, []model.Comment{digestB, setmeta}, hd, ta) == FateQueued)
 
@@ -481,8 +481,11 @@ func TestNightSegs(t *testing.T) {
 	app.PRs = []*model.PR{held}
 	segs := segsText(w.NightSegs(app, night, at("2026-10-21T19:00:00Z")))
 	check(t, "header: a held item with nobody attending asks for /attend", strings.Contains(segs, "needs /attend (w) by 21:00 ET") && strings.Contains(segs, "#3600"))
-	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:30:00Z")))
+	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:20:00Z")))
 	check(t, "header: past the cutoff with nobody, it says items roll", strings.Contains(segs, "nobody attending"))
+	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:30:00Z")))
+	check(t, "header: still open past the cutoff's grace: missed freeze, and the recovery", strings.Contains(segs, "missed freeze") &&
+		strings.Contains(segs, mw.MissedHint()) && !strings.Contains(segs, "nobody attending"))
 	frozen := WindowNights([]*model.Issue{manifestFor(3600, night, "frozen",
 		[]map[string]any{{"pr": 1, "flag": "scheduled", "revertible": false, "start_utc": "2026-10-22T03:00:00Z", "release_by_utc": "2026-10-22T03:05:00Z"}},
 		[]string{"alice"})}, "alice", mw)[night]
@@ -616,7 +619,7 @@ func TestReleases(t *testing.T) {
 }
 
 func TestManifestsReadFromTheFirstRefresh(t *testing.T) {
-	c := &config.Config{MaintenanceWindow: config.DefaultMaintenanceWindow()}
+	c := &config.Config{MaintenanceWindow: wftest.Window()}
 	check(t, "no release workflow: manifests wait for a queued PR", !fromConfig(c).relQueued.Load())
 	c.ReleasePR = config.DefaultReleasePR()
 	check(t, "releases on: the first refresh reads the manifests", fromConfig(c).relQueued.Load())
@@ -649,7 +652,7 @@ func TestRefreshAnnotateApply(t *testing.T) {
 	check(t, "no warnings", len(warns) == 0)
 	info := InfoOf(queued)
 	check(t, "the queued PR is annotated with its marker and stack", info != nil && info.Marker != nil && info.Marker.Night == night &&
-		info.Stack == "nonprod/15-window-canary" && !info.Stale && !info.Reapprove)
+		info.Stack == "staging/15-canary" && !info.Stale && !info.Reapprove)
 	check(t, "the normal PR is left alone", InfoOf(normal) == nil)
 	w.Apply(app, st)
 	got := w.state(app)
@@ -671,7 +674,7 @@ func TestRefreshAnnotateApply(t *testing.T) {
 
 	// a re-planned queue entry: the label stays, the PR needs a fresh approve
 	delete(app.Fake.Fail, "comments")
-	digestB := botC("### plan `prod/09-portal`\n\nPlan-id: `"+pidB+"`", "2026-10-22T23:19:44Z")
+	digestB := botC("### plan `prod/09-web`\n\nPlan-id: `"+pidB+"`", "2026-10-22T23:19:44Z")
 	queued.Commits.Nodes[0].Commit.CommittedDate = at("2026-10-22T23:18:45Z")
 	app.Fake.Comments[queued.Ident()] = []model.Comment{digestA, markerComment("2026-10-22", true, "2026-10-22T16:33:40Z", bot), digestB}
 	st, _, _ = w.Refresh(app.Context(), app.Fake, cfg.Reviews.Repos, prs, nil)
@@ -760,7 +763,7 @@ func TestQueuedRowRendering(t *testing.T) {
 	cfg := testCfg()
 	app, w := newApp(cfg)
 	rk := w.RowKinds()[RowKind]
-	q := qpr(3544, []string{"window:queued"}, map[string]any{"night": night, "revertible": false}, "nonprod/15-window-canary")
+	q := qpr(3544, []string{"window:queued"}, map[string]any{"night": night, "revertible": false}, "staging/15-canary-web-01")
 	InfoOf(q).Status = "scheduled 23:04 ET"
 	rows := []workflow.Row{{Kind: RowKind, Item: q}}
 	for _, width := range []int{40, 60, 80, 120, 200} {
@@ -769,7 +772,7 @@ func TestQueuedRowRendering(t *testing.T) {
 		check(t, fmt.Sprintf("the queued row fits at %d columns", width), 2+text.SegsWidth(segs) <= width-1)
 		if width >= 120 {
 			check(t, "wide: stack and revertibility shown", L["stack"] == 24 && L["rev"] > 0 && strings.Contains(segsText(segs), "attended night needed") &&
-				strings.Contains(segsText(segs), "nonprod/15-window-canary"))
+				strings.Contains(segsText(segs), "staging/15-canary-web-01"))
 		}
 		if width == 40 {
 			_, hasRev := L["rev"]
@@ -901,4 +904,90 @@ func TestDoWindowGuard(t *testing.T) {
 	clock.Now = saved
 	check(t, "w: nothing posted by a non-member", len(app.Fake.CommentsPosted) == 0 && len(app.Questions) == 0)
 	check(t, "w: the refusal names the login and the team", strings.Contains(app.Last(), "/attend not posted: alice is not in @acme/release-approvers"))
+}
+
+// ---- the night's later rules ----
+
+func TestMissedFreeze(t *testing.T) {
+	mw := testCfg().MaintenanceWindow
+	open := WindowNights([]*model.Issue{manifestFor(3600, night, "open", nil, nil)}, "alice", mw)[night]
+	check(t, "before the cutoff: not missed", !MissedFreeze(open, night, at("2026-10-21T23:00:00Z"), mw))
+	check(t, "inside the grace: not missed", !MissedFreeze(open, night, at("2026-10-22T01:29:00Z"), mw))
+	check(t, "open after the grace: missed", MissedFreeze(open, night, at("2026-10-22T01:30:00Z"), mw))
+	frozen := WindowNights([]*model.Issue{manifestFor(3600, night, "frozen", nil, []string{"alice"})}, "alice", mw)[night]
+	check(t, "frozen: the freeze ran", !MissedFreeze(frozen, night, at("2026-10-22T03:00:00Z"), mw))
+	marked := WindowNights([]*model.Issue{manifestFor(3600, night, "open", nil, nil,
+		botC("**MISSED FREEZE**: the manifest is still open; nothing fires tonight.", "2026-10-22T03:00:05Z"))}, "alice", mw)[night]
+	check(t, "the conductor's comment: missed", marked.MissedMarker && MissedFreeze(marked, night, at("2026-10-22T03:01:00Z"), mw))
+	human := WindowNights([]*model.Issue{manifestFor(3600, night, "frozen", nil, []string{"alice"},
+		human("bob", "is this a MISSED FREEZE?", "2026-10-22T03:00:05Z"))}, "alice", mw)[night]
+	check(t, "a person's words are not the conductor's", !human.MissedMarker)
+	none := *mw
+	none.MissedFreezeGraceMins = 0
+	check(t, "grace 0: only the comment counts", !MissedFreeze(open, night, at("2026-10-22T05:00:00Z"), &none) && MissedFreeze(marked, night, at("2026-10-22T05:00:00Z"), &none))
+	closed := *marked
+	closed.Phase = "closed"
+	check(t, "a closed night is over, not missed", !MissedFreeze(&closed, night, at("2026-10-22T05:00:00Z"), mw))
+
+	ok, why := CommandCheck(CmdRelease, marked, night, "alice", at("2026-10-22T03:01:00Z"), nil, mw)
+	check(t, "/release on a missed night: refused with the recovery", !ok && strings.Contains(why, "missed freeze") && strings.Contains(why, mw.MissedHint()))
+	ok, _ = CommandCheck(CmdCancel, marked, night, "alice", at("2026-10-22T03:01:00Z"), nil, mw)
+	check(t, "/window-cancel stays offered", ok)
+	hinted := *mw
+	hinted.MissedFreezeHint = "page the on-call to run it by hand"
+	_, why = CommandCheck(CmdRelease, marked, night, "alice", at("2026-10-22T03:01:00Z"), nil, &hinted)
+	check(t, "the configured hint", strings.Contains(why, "page the on-call"))
+}
+
+func TestCloserAndLateSkip(t *testing.T) {
+	mw := *testCfg().MaintenanceWindow
+	frozen := WindowNights([]*model.Issue{manifestFor(3600, night, "running", nil, []string{"alice"})}, "alice", &mw)[night]
+	check(t, "no closer configured: nothing", Closing(frozen, night, at("2026-10-22T03:40:00Z"), &mw) == "")
+	mw.Closer = &clock.HM{H: 23, M: 46}
+	check(t, "inside the window: nothing", Closing(frozen, night, at("2026-10-22T03:20:00Z"), &mw) == "")
+	check(t, "after the end, before the closer", Closing(frozen, night, at("2026-10-22T03:40:00Z"), &mw) == "closes at 23:46 ET")
+	check(t, "after the closer", Closing(frozen, night, at("2026-10-22T03:50:00Z"), &mw) == "closer late (due 23:46 ET)")
+	ran := *frozen
+	ran.Phase = "closed"
+	check(t, "closed: nothing", Closing(&ran, night, at("2026-10-22T03:50:00Z"), &mw) == "")
+
+	mw.LateSkip = &clock.HM{H: 23, M: 10}
+	ok, why := CommandCheck(CmdRelease, frozen, night, "alice", at("2026-10-22T03:01:00Z"), nil, &mw)
+	check(t, "/release names the late skip", ok && strings.Contains(why, "nothing new starts after 23:10 ET"))
+}
+
+func TestReCutAfterTheFreeze(t *testing.T) {
+	cfg := testCfg().MaintenanceWindow
+	pr := qpr(3544, []string{"window:queued", "window:scheduled"}, map[string]any{"night": "2026-10-21"}, "")
+	pr.HeadRefOid = "bbbb2222cccc3333"
+	mans := func(head string) map[string]*Manifest {
+		return map[string]*Manifest{"2026-10-21": {Night: "2026-10-21", Items: []Item{{PR: 3544, Flag: "scheduled",
+			StartUTC: "2026-10-22T03:04:00Z", HeadSHA: head}}}}
+	}
+	p, _ := Place(pr, mans("aaaa1111"), at("2026-10-22T02:00:00Z"), cfg)
+	check(t, "a head moved after the freeze: rolled, re-cut", p.Status == RecutStatus)
+	p, _ = Place(pr, mans("bbbb2222"), at("2026-10-22T02:00:00Z"), cfg)
+	check(t, "the frozen head (short sha) still: scheduled", p.Status == "scheduled 23:04 ET")
+	p, _ = Place(pr, mans(""), at("2026-10-22T02:00:00Z"), cfg)
+	check(t, "no head on the item: scheduled", p.Status == "scheduled 23:04 ET")
+	it := parseItem(obj{"id": []byte(`"rel:web#3"`), "head_sha": []byte(`"abc123"`)})
+	check(t, "head_sha is parsed", it.HeadSHA == "abc123")
+}
+
+func TestTitleMatchesAnyStartTime(t *testing.T) {
+	mw := *testCfg().MaintenanceWindow
+	mw.ManifestTitle = "Window {night} 22:00 ET"
+	for title, want := range map[string]string{
+		"Window 2026-10-21 22:00 ET": "2026-10-21",
+		"Window 2026-10-21 23:00 ET": "2026-10-21", // a manifest opened before the start moved
+		"Window 2026-10-21 ET":       "",
+		"Window 2026-10-21 23:00 UK": "",
+	} {
+		got, _ := mw.MatchNight(title)
+		check(t, "literal start time: "+title, got == want)
+	}
+	mw.ManifestTitle = "Window {night} {hhmm} ET"
+	check(t, "{hhmm} renders the start", mw.Title("2026-10-21") == "Window 2026-10-21 23:00 ET")
+	got, _ := mw.MatchNight("Window 2026-10-21 01:15 ET")
+	check(t, "{hhmm} matches any HH:MM", got == "2026-10-21")
 }

@@ -2,74 +2,33 @@ package hygiene
 
 // TestNoPrivateTerms walks the repository and fails on anything that
 // belongs to a private deployment rather than to the public tool: a
-// structural pattern (an internal decision-record number, an account id, a
-// secret reference, a token shape, an internal path), or a token whose
-// salted hash is on a denylist the maintainers hold. The plaintext list is
-// not in this repository; a hit prints the file, the line and a hash prefix.
+// structural pattern (a decision-record number, an account id, a secret
+// reference, a token shape), or a term on the maintainers' keyed
+// denylist (denylist.txt, HMAC-SHA256 under $DILLODASH_HYGIENE_KEY). The
+// plaintext list and the key are not in this repository; a hit prints
+// the file, the line and a hash prefix. Text files are read line by
+// line; PNGs by their text chunks, PDFs by their readable text.
+//
+// Without the key the denylist part is skipped (logged); with
+// DILLODASH_HYGIENE_REQUIRED=1, as in CI, a missing key fails.
 
 import (
-	"bufio"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
 
-const salt = "dillodash-private-terms-v1"
-
-var deny = map[string]bool{
-	"612160b5be88ca47ff78ab7e67f58cafa856ba31d3ea76448ae0301d26f50fe9": true,
-	"8ca3745698c44201d628217a759ce609361cbfab42c80d0f13807efc6bbc2697": true,
-	"92ceaea76f72cb3ccba0e4c14ab80114725a7417905806615fb88c7ad8e0966c": true,
-	"5c0c05a221fa99c2625d4310991aa842255e9fe613c095e8a24ede5c53cc1eb3": true,
-	"5bcc96896f974899e1ca272a49c0ffc3668cda1c1bacdb05b6654ad39aacbd2f": true,
-	"7d9a3c08fc59b916bb0f68ec5273d90ab56d1a5c499c67fa41d8133d2171b066": true,
-	"478c49b25ae74762b42bc1c13b7cd4e09762e81fcbdc0aa24fd9ad831b254146": true,
-	"db94351348345a92be56526f2d4c4d13db2f5a6fb74e3f7441f0a7b2e3105c8d": true,
-	"ad7a934b682f807c02ee789fe679272e1d8d8c7419723d63603203b76dcc395e": true,
-	"51b247e15fc9d88407119025726cf0827d66a3c4db24a0b1dc4b5e32c2f5e544": true,
-	"77db3aeab261dafc85e67a6bcf213b9d7761c0636a2fd117989c40adf8c706c2": true,
-	"5fa0bed169ab56796bcd8495deb7afb01a59e33cc791a87bdd5e3f44a9ed2f45": true,
-	"78449b1a6c24ccb61369c9e7b4aebdaac24cc66274bb5c7c7a87bff3ed5be47f": true,
-	"95baad9161b10b7c0486f464e3c61953ccf90c279a065a3cdf22de43504a2875": true,
-	"121be5c148ed16e1fcd0c9780f11ab1f0c2ef35c1b8a663893b89a9d65417f19": true,
-	"57fb926e7536121a90f51619db3d357340ca6d06fe3e1dddea3a859729edf46a": true,
-	"4f143b59ad0d7e53785070a9f895cdb8aa75f9f299a48464420d73505a1beb0c": true,
-	"2943d72ae4a9415f849edae6b3c96a4a7e5b88826ec4ce3424d602ddce46269a": true,
-	"cc9023b349f37fbdc251767d9ca3df6cc3b7163170e0208ca5525e30ee631297": true,
-	"02aec9074339c304c0bdf7bf8445f20505c47675203cba6b845cd6304e493f4d": true,
-	"19330809d67e92a9bb918ffd6195b74db41aaa2d50c267c675d651b36665e1c7": true,
-	"99a414f78e0c5bcf448af29a8c3db4ddf4fb7f3ff1780fe7be9a1dbb108975a4": true,
-	"ed2275fb3e0d4066df3a08de8829b0598c3aded963998e87e8f56eb28de54ec0": true,
-	"fdaeceb5cf17facceb3f4d4b9856177bccb7ba2bdbf43aac725cfa3d6f3b1d18": true,
-	"76e33b3e3944e2697bce6cbd15ca82f2784ea4b3945261a971e884b974a2a3ca": true,
-	"abc63f8c95ff18356ec8168dc51248c6602eb937c01259cf86cf1d286fd947b3": true,
-	"642b33450798235c33d077b7687c38d4c7b0c86f0a52204d24895339daf1f750": true,
-	"adb3c972f850c9baea2e1dfe88e1edf665bd4b7d3f2e17b6e16b3a039c63a98a": true,
-	"50ea22a13467cbd9e250e94a794bca3b26649300aca821ed0759a9d8b024369f": true,
-	"2707042f198c15c5353a06648704ed324f7dca3b0a5665e2f9208072792ce8ea": true,
-	"5f21fd34c1775b10fa6c2cd11a560c6594f80f4de0b11bcdf1c44f895857f35e": true,
-}
-
-var structural = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\badr[ _-]?[0-9]{3,4}\b`),
-	regexp.MustCompile(`op://`),
-	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{22,}`),
-	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{36}\b`),
-}
-
-var accountID = regexp.MustCompile(`\b[0-9]{12}\b`)
-
-var tokenRE = regexp.MustCompile(`[a-z0-9][a-z0-9_.-]*`)
-
-func hashed(s string) string {
-	h := sha256.Sum256([]byte(salt + s))
-	return hex.EncodeToString(h[:])
+// exempt are hits allowed in one file, each with the reason: the hash of
+// the term (as in denylist.txt) and why it must stay.
+var exempt = map[string]map[string]string{
+	// the predecessor tool's config directory: `config migrate` must find
+	// the file there, so the name stays, in this one constant
+	"internal/config/find.go": {
+		"84b3798835d54b9e215f4d1244f8b67912816a226901927a5f58c2ea01867569": "the legacy config directory config migrate reads",
+	},
 }
 
 func repoRoot(t *testing.T) string {
@@ -95,10 +54,12 @@ func files(t *testing.T, root string) []string {
 			continue
 		}
 		switch strings.ToLower(filepath.Ext(f)) {
-		case ".ttf", ".png", ".otf", ".woff", ".woff2", ".ico", ".sum":
+		case ".ttf", ".otf", ".woff", ".woff2", ".ico", ".sum":
 			continue
 		}
-		if strings.HasSuffix(f, "private_terms_test.go") || filepath.Base(f) == ".gitleaks.toml" {
+		// the hash list (hex runs read as account ids) and this file's
+		// own placeholder shapes
+		if strings.HasSuffix(f, "internal/hygiene/denylist.txt") || strings.HasSuffix(f, "private_terms_test.go") || filepath.Base(f) == ".gitleaks.toml" {
 			continue
 		}
 		list = append(list, f)
@@ -106,61 +67,147 @@ func files(t *testing.T, root string) []string {
 	return list
 }
 
+// textOf is what a file says: a text file as it is, a PNG's text chunks,
+// a PDF's readable text; nil for other binaries.
+func textOf(data []byte) (text []byte, binary bool) {
+	if t := PNGText(data); t != nil || bytes.HasPrefix(data, []byte("\x89PNG")) {
+		return t, true
+	}
+	if t := PDFText(data); t != nil {
+		return t, true
+	}
+	if bytes.IndexByte(data, 0) >= 0 {
+		return nil, true
+	}
+	return data, false
+}
+
+// matcher is the denylist matcher, or nil when the key is not set.
+func matcher(t *testing.T) *Matcher {
+	key := os.Getenv(KeyEnv)
+	if strings.TrimSpace(key) == "" {
+		if os.Getenv(RequiredEnv) == "1" {
+			t.Fatalf("%s is not set and %s=1: the denylist can't be checked", KeyEnv, RequiredEnv)
+		}
+		t.Logf("%s is not set: the denylist part is skipped (the structural checks still run)", KeyEnv)
+		return nil
+	}
+	return NewMatcher(Key(key), Denylist())
+}
+
 func TestNoPrivateTerms(t *testing.T) {
 	root := repoRoot(t)
-	seen := map[string]bool{}
+	m := matcher(t)
 	for _, rel := range files(t, root) {
 		data, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil || bytes.IndexByte(data, 0) >= 0 {
-			continue // unreadable or binary
+		if err != nil {
+			continue
 		}
-		sc := bufio.NewScanner(bytes.NewReader(data))
-		sc.Buffer(make([]byte, 1<<20), 1<<20)
-		n := 0
-		for sc.Scan() {
-			n++
-			line := sc.Text()
-			for _, re := range structural {
+		text, binary := textOf(data)
+		if text == nil {
+			continue
+		}
+		where := rel
+		if binary {
+			where += " (embedded text)"
+		}
+		for n, line := range strings.Split(string(text), "\n") {
+			for _, re := range Structural {
 				if re.MatchString(line) {
-					t.Errorf("%s:%d: matches %s", rel, n, re)
+					t.Errorf("%s:%d: matches %s", where, n+1, re)
 				}
 			}
-			for _, m := range accountID.FindAllString(line, -1) {
-				if m != "123456789012" {
-					t.Errorf("%s:%d: 12-digit number %s (an account id?)", rel, n, m)
+			if !binary {
+				for _, id := range AccountID.FindAllString(line, -1) {
+					if id != "123456789012" {
+						t.Errorf("%s:%d: 12-digit number %s (an account id?)", where, n+1, id)
+					}
 				}
 			}
-			lower := strings.ToLower(line)
-			for _, tok := range tokenRE.FindAllString(lower, -1) {
-				if len(tok) < 6 {
-					continue
-				}
-				if seen[tok] {
-					continue
-				}
-				seen[tok] = true
-				if hit := check(tok); hit != "" {
-					t.Errorf("%s:%d: private term (hash %s…)", rel, n, hit[:12])
-				}
+		}
+		if m == nil {
+			continue
+		}
+		for _, h := range m.Text(text) {
+			if why, ok := exempt[filepath.ToSlash(rel)][h.Hash]; ok && why != "" {
+				continue
 			}
+			t.Errorf("%s:%d: private term (hash %s…)", where, h.Line, h.Hash[:12])
 		}
 	}
 }
 
-// check hashes the token and every substring of length 6..40 of it.
-func check(tok string) string {
-	if deny[hashed(tok)] {
-		return hashed(tok)
+// TestMatcher proves the matcher on a test key and list: whole tokens,
+// words inside paths, logins and domains, short terms as whole words
+// only, phrases, embedded long terms, and every hit reported.
+func TestMatcher(t *testing.T) {
+	key := Key("00112233445566778899aabbccddeeff")
+	terms := []string{"acme-internal", "ops", "Release Board", "zebra.example", "kangaroo"}
+	var list []string
+	for _, term := range terms {
+		list = append(list, Hash(key, term))
 	}
-	r := []rune(tok)
-	for l := 6; l <= 40 && l < len(r); l++ {
-		for i := 0; i+l <= len(r); i++ {
-			if h := hashed(string(r[i : i+l])); deny[h] {
-				return h
-			}
+	m := NewMatcher(key, list)
+	hash := func(s string) string { return Hash(key, s) }
+	cases := []struct {
+		line string
+		want []string
+	}{
+		{"see acme-internal for it", []string{hash("acme-internal")}},
+		{"path brain/acme-internal/x and acme-internal again", []string{hash("acme-internal"), hash("acme-internal")}},
+		{"the ops team", []string{hash("ops")}},
+		{"stops and opsy are fine", nil}, // a short term matches only a whole word
+		{"run by org/ops@host", []string{hash("ops")}},
+		{"the release   board met", []string{hash("release board")}},
+		{"mail bob@zebra.example.", []string{hash("zebra.example")}},
+		{"superkangaroos", []string{hash("kangaroo")}}, // a long term inside a word
+		{"KANGAROO", []string{hash("kangaroo")}},
+		{"nothing to see", nil},
+	}
+	for _, c := range cases {
+		got := m.Line(c.line)
+		if strings.Join(got, ",") != strings.Join(c.want, ",") {
+			t.Errorf("%q: got %d hits %v, want %d", c.line, len(got), got, len(c.want))
 		}
 	}
-	return ""
+	other := NewMatcher(Key("another key"), list)
+	if hits := other.Line("acme-internal"); len(hits) != 0 {
+		t.Errorf("another key matched: %v", hits)
+	}
+	if Hash(key, "  Release\tBoard ") != hash("release board") {
+		t.Error("terms are normalized: case and spaces")
+	}
+	if got := m.Text([]byte("a\nkangaroo\nb ops\n")); len(got) != 2 || got[0].Line != 2 || got[1].Line != 3 {
+		t.Errorf("Text lines: %+v", got)
+	}
+}
+
+// TestEmbeddedText reads the text a PNG and a PDF carry.
+func TestEmbeddedText(t *testing.T) {
+	png := []byte("\x89PNG\r\n\x1a\n")
+	chunk := func(typ string, body []byte) []byte {
+		var b bytes.Buffer
+		n := len(body)
+		b.Write([]byte{byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)})
+		b.WriteString(typ)
+		b.Write(body)
+		b.Write([]byte{0, 0, 0, 0}) // crc, not checked
+		return b.Bytes()
+	}
+	png = append(png, chunk("tEXt", []byte("Author\x00alice at kangaroo works"))...)
+	png = append(png, chunk("iTXt", []byte("Comment\x00\x00\x00en\x00\x00made for zebra.example"))...)
+	png = append(png, chunk("IEND", nil)...)
+	text := string(PNGText(png))
+	if !strings.Contains(text, "kangaroo works") || !strings.Contains(text, "made for zebra.example") {
+		t.Errorf("PNG text: %q", text)
+	}
+	if PNGText([]byte("not a png")) != nil {
+		t.Error("not a PNG: no text")
+	}
+	pdf := []byte("%PDF-1.4\n1 0 obj << /Author (Kangaroo Person) >> endobj\n%%EOF")
+	if !strings.Contains(string(PDFText(pdf)), "Kangaroo Person") {
+		t.Errorf("PDF text: %q", PDFText(pdf))
+	}
 }
 
 func TestGitignoreCoversConfig(t *testing.T) {

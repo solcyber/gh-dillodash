@@ -128,12 +128,13 @@ warn with a "did you mean" and are ignored; wrong types, bad choices, bad
 times and malformed repo names are errors. Errors read
 `<path>: [section] key: why`.
 
-## Migrating from pr-dash
+## Migrating a legacy INI config
 
-`gh dillodash config migrate` converts a `~/.config/pr-dash/config.ini`
-(pass `--from PATH` for another location). Token sources are dropped (the
+`gh dillodash config migrate` converts the predecessor tool's
+`config.ini` from its default place under `~/.config` (pass `--from PATH`
+for another location). Token sources are dropped (the
 `gh` login replaces them), `[defaults]` becomes `[reviews]` and
-`[display]`, and pr-dash's three workflows (`terraform_approve`,
+`[display]`, and the legacy tool's three workflows (`terraform_approve`,
 `maintenance_window`, `release_pr`) are written enabled with their
 defaults, headed by a comment telling you to disable the ones your repos
 do not speak. `waiting_runs` is new in dillodash; add its table by hand.

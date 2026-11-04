@@ -71,6 +71,9 @@ type Item struct {
 	Revertible   *bool
 	Reasons      []string
 	Final        *bool // the conductor is done with it (set once terminal)
+	// HeadSHA is the head the freeze froze for a release: a release whose
+	// PR head moved since (a re-cut) does not run that night.
+	HeadSHA string
 }
 
 // Manifest is a night's manifest as its issue carries it.
@@ -200,7 +203,8 @@ func (o obj) has(k string) bool { _, ok := o[k]; return ok }
 func parseItem(o obj) Item {
 	return Item{ID: o.str("id"), Kind: o.str("kind"), Repo: o.str("repo"), PR: o.num("pr"),
 		Flag: o.str("flag"), StartUTC: o.str("start_utc"), ReleaseByUTC: o.str("release_by_utc"),
-		Status: o.str("status"), Revertible: o.boolp("revertible"), Reasons: o.strs("reasons"), Final: o.boolp("final")}
+		Status: o.str("status"), Revertible: o.boolp("revertible"), Reasons: o.strs("reasons"), Final: o.boolp("final"),
+		HeadSHA: o.str("head_sha")}
 }
 
 // ---- markers ----
@@ -437,11 +441,25 @@ func (s *State) ManifestItem(repo string, number int) (workflow.ManifestItem, bo
 		return workflow.ManifestItem{}, false
 	}
 	m := s.Manifests[n]
-	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Flag: it.Flag, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue}
+	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Flag: it.Flag, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue, HeadSHA: it.HeadSHA}
 	if out.Night == "" {
 		out.Night = n
 	}
 	return out, true
+}
+
+// RecutStatus is a scheduled release whose head moved after the freeze:
+// the freeze froze the old head, so the release does not run that night
+// (a re-approval joins a later night; release NOW is the way tonight).
+const RecutStatus = "rolled · re-cut after freeze"
+
+// ReCut reports a manifest item whose frozen head is not the PR's head
+// any more. An item or a PR without a head can't be told: not re-cut.
+func ReCut(it *Item, pr *model.PR) bool {
+	if it == nil || pr == nil {
+		return false
+	}
+	return workflow.HeadMoved(it.HeadSHA, pr.HeadRefOid)
 }
 
 // Placement is where a queued PR sits in the section.
@@ -522,7 +540,9 @@ func Place(pr *model.PR, manifests map[string]*Manifest, now time.Time, cfg *con
 			}
 			status = "scheduled " + local.TAt(t)
 		}
-		if item.Status != "" && item.Status != "scheduled" {
+		if ReCut(item, pr) && (item.Status == "" || item.Status == "scheduled" || waitingRE.MatchString(item.Status)) {
+			status = RecutStatus
+		} else if item.Status != "" && item.Status != "scheduled" {
 			status = text.Ellip(item.Status, 40)
 			if w := waitingRE.FindStringSubmatch(item.Status); w != nil {
 				status = "awaiting " + cfg.ReleaseCommand

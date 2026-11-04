@@ -29,7 +29,7 @@ internal/workflow/<name>    the optional workflows
 internal/fonts              the embedded Nerd Font, its licences and the installer
 internal/doctor             `config check`
 internal/demo               the offline fixture behind --demo and the screenshot
-internal/hygiene            the private-terms test over the whole tree
+internal/hygiene            the keyed denylist, its test over the tree, cmd/scan and cmd/gen-denylist
 cmd/gen-amos                regenerates the Amos sprite from assets/amos.png (rendered from assets/amos-rough.pdf)
 cmd/screenshot              renders docs/screenshot.png and docs/shots/ from the demo fixture
 ```
@@ -56,6 +56,19 @@ Fixtures use a fictional vocabulary: org `acme`, repos `acme/infra`,
 `bob`, `carol`, `mallory`, bot `infra-bot`. Please keep it; real
 organizations, people and incidents do not belong in this repository, and
 a test (`TestNoPrivateTerms`) checks for a denylist the maintainers hold.
+
+The denylist is `internal/hygiene/denylist.txt`: keyed hashes (HMAC-SHA256
+under `DILLODASH_HYGIENE_KEY`), so neither the list nor a guess can be
+checked without the key. Without the key the test runs its structural
+checks only and logs that it skipped the rest; CI holds the key and also
+runs the same check over a pull request's title, body, branch name and
+commit messages (`internal/hygiene/cmd/scan`). Maintainers regenerate the
+list with `internal/hygiene/cmd/gen-denylist`; it is never edited by hand.
+
+Name branches by what they change (`fix/detail-merge-commit`,
+`docs/window-rules`), not by who or what wrote them, and commit with a
+`noreply` address (`<id>+<login>@users.noreply.github.com`): both are
+public for good.
 
 ## Running it against a fake
 

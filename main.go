@@ -94,7 +94,7 @@ usage:
   gh dillodash config init [--config PATH]
                                   write a starter config
   gh dillodash config migrate [--from PATH] [--config PATH] [--force]
-                                  convert a pr-dash config.ini to config.toml
+                                  convert a legacy config.ini to config.toml
   gh dillodash font install|check [--force]
                                   install the bundled Nerd Font (icons = "nerd")
   gh dillodash font license       print the font's licences (also written beside the installed files)
@@ -320,7 +320,7 @@ func loadConfig(f flags) (*config.Config, error) {
 	}
 	if path == "" {
 		if legacy != "" {
-			return nil, exitError{2, fmt.Errorf("no config.toml found; %s is the pr-dash format. Run: gh dillodash config migrate", legacy)}
+			return nil, exitError{2, fmt.Errorf("no config.toml found; %s is the legacy INI format. Run: gh dillodash config migrate", legacy)}
 		}
 		return nil, exitError{2, fmt.Errorf("no config found (looked for %s). Run: gh dillodash config init", config.DefaultPath(os.Getenv))}
 	}
@@ -742,7 +742,7 @@ func configCmd(args []string) error {
 		var src, dst string
 		var force bool
 		if _, err := subFlags("config migrate", args[1:], func(fs *flag.FlagSet) {
-			fs.StringVar(&src, "from", "", "the pr-dash config.ini")
+			fs.StringVar(&src, "from", "", "the legacy config.ini")
 			fs.StringVar(&dst, "config", "", "config path")
 			fs.BoolVar(&force, "force", false, "overwrite an existing config")
 		}); err != nil {
@@ -753,7 +753,7 @@ func configCmd(args []string) error {
 			src = legacy
 		}
 		if src == "" {
-			return exitError{2, errors.New("config migrate: no pr-dash config.ini found; pass --from PATH")}
+			return exitError{2, errors.New("config migrate: no legacy config.ini found; pass --from PATH")}
 		}
 		ini, err := os.ReadFile(src)
 		if err != nil {
