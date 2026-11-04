@@ -261,23 +261,6 @@ func meterRail(p Progress, now time.Time, width int) []text.Seg {
 	return fx.MeterSegs(railFrac(p, now), width, fill, "meter.track")
 }
 
-// headAt recolours the cell at the fill's edge (style "" leaves it).
-func headAt(segs []text.Seg, frac float64, width int, style string) []text.Seg {
-	if style == "" {
-		return segs
-	}
-	cells := cellsOf(segs)
-	i := int(math.Floor(frac * float64(width)))
-	if i >= width {
-		i = width - 1
-	}
-	if i < 0 || i >= len(cells) || frac <= 0 {
-		return segs
-	}
-	cells[i].Style = style
-	return joinCells(cells)
-}
-
 // sweep brightens the cells around a head that crosses the rail once
 // during the effect (t 0..1).
 func sweep(segs []text.Seg, width int, t float64) []text.Seg {
