@@ -256,9 +256,9 @@ func TestApproveAlreadyReviewed(t *testing.T) {
 func TestApprovePlanSetsAndCeremonies(t *testing.T) {
 	cfg := testCfg()
 	nd := []model.Comment{
-		comment(digest("nonprod/15-window-canary", idA, 0, 200, "non-disruptive")),
+		comment(digest("staging/15-canary", idA, 0, 200, "non-disruptive")),
 		comment(digest("prod/07-warehouse", idB, 0, 200, "non-disruptive")),
-		comment(planSet(headSHA, member{"nonprod/15-window-canary", idA, 0}, member{"prod/07-warehouse", idB, 0}))}
+		comment(planSet(headSHA, member{"staging/15-canary", idA, 0}, member{"prod/07-warehouse", idB, 0}))}
 	app, _ := approve(t, cfg, makePR(nd, headSHA), script{confirms: []bool{true}})
 	check(t, "plan-set approve posts the SET id, no picker", eq(posted(app), one(3622, "/approve "+setID)) && len(app.Menus) == 0)
 

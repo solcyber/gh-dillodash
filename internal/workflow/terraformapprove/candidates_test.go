@@ -13,6 +13,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/workflow/wftest"
 )
 
 var infra = model.Repo{Owner: "acme", Name: "infra"}
@@ -42,7 +43,7 @@ func testCfg() *config.Config {
 	ta.DigestBot = "infra-bot"
 	ta.CeremonyWindow = &config.CeremonyWindow{Timezone: "America/New_York", From: clock.HM{H: 23}, To: clock.HM{H: 23, M: 28}}
 	cfg.TerraformApprove = ta
-	mw := config.DefaultMaintenanceWindow()
+	mw := wftest.Window()
 	mw.TZLabel = "ET"
 	mw.ManifestRepo = infra
 	cfg.MaintenanceWindow = mw
@@ -119,7 +120,7 @@ func ceremony(head, window string) string {
 		w = "Window: **disruptive**: executes only when the `/approve` lands inside the maintenance window (23:00 to 23:28 ET)."
 	}
 	return fmt.Sprintf("### ceremony `ceremonies/2026-10-22-tag-queue.sh`\n\nCeremony-id: `%s`\nHead: `%s`\nSummary: tag a queue\n"+
-		"Accounts: `main` = nonprod (123456789012)\n%s\n\nDry-run: **passed**\n\nTo approve: `/approve %s`", cid, head, w, cid)
+		"Accounts: `main` = staging (123456789012)\n%s\n\nDry-run: **passed**\n\nTo approve: `/approve %s`", cid, head, w, cid)
 }
 
 func approveC(pid, iso string) model.Comment { return commentBy("carol", "/approve "+pid, iso) }
@@ -226,16 +227,16 @@ func TestHandRunDigests(t *testing.T) {
 
 	// a combined multi-stack bootstrap digest: two skipped stacks answered
 	// by ONE comment listing both, with "->" glue and no "Plan-id:" label
-	npSkip := "### plan `nonprod/01-baseline` — skipped by CI\nbootstrap tier: apply by hand"
-	pSkip := "### plan `prod/01-baseline` — skipped by CI\nbootstrap tier: apply by hand"
-	combined := "## Bootstrap plan-ids (computed locally)\n\n- **nonprod/01-baseline** -> `" + idA +
-		"`\n- **prod/01-baseline** -> `" + idF + "`\n"
+	npSkip := "### plan `staging/01-base` — skipped by CI\nbootstrap tier: apply by hand"
+	pSkip := "### plan `prod/01-base` — skipped by CI\nbootstrap tier: apply by hand"
+	combined := "## Bootstrap plan-ids (computed locally)\n\n- **staging/01-base** -> `" + idA +
+		"`\n- **prod/01-base** -> `" + idF + "`\n"
 	out = ex(commentAt(npSkip, "2026-06-17T16:00:00Z"), commentAt(pSkip, "2026-06-17T16:01:00Z"),
 		commentAt(combined, "2026-06-17T16:10:00Z"))
 	by := byStack(out)
 	check(t, "combined: two candidates", len(out) == 2)
-	check(t, "combined: nonprod hash attributed", by["nonprod/01-baseline"].PlanID == idA && by["nonprod/01-baseline"].State == StateHandRun)
-	check(t, "combined: prod hash attributed", by["prod/01-baseline"].PlanID == idF && by["prod/01-baseline"].State == StateHandRun)
+	check(t, "combined: staging hash attributed", by["staging/01-base"].PlanID == idA && by["staging/01-base"].State == StateHandRun)
+	check(t, "combined: prod hash attributed", by["prod/01-base"].PlanID == idF && by["prod/01-base"].State == StateHandRun)
 
 	loose := "random mention of foo/bar and a hash `" + strings.Repeat("9", 64) + "`"
 	check(t, "combined: unskipped stack/hash ignored", len(ex(commentAt(loose, "2026-06-17T16:10:00Z"))) == 0)
@@ -245,9 +246,9 @@ func TestHandRunDigests(t *testing.T) {
 
 func twoStacks() []model.Comment {
 	return []model.Comment{
-		comment(digest("nonprod/15-window-canary", idA, 0, 200, "disruptive · NOT revertible")),
+		comment(digest("staging/15-canary", idA, 0, 200, "disruptive · NOT revertible")),
 		comment(digest("prod/07-warehouse", idB, 1, 200, "non-disruptive")),
-		comment(planSet(headSHA, member{"nonprod/15-window-canary", idA, 0}, member{"prod/07-warehouse", idB, 1})),
+		comment(planSet(headSHA, member{"staging/15-canary", idA, 0}, member{"prod/07-warehouse", idB, 1})),
 	}
 }
 
@@ -275,7 +276,7 @@ func TestPlanSets(t *testing.T) {
 		}
 	}
 
-	stale := append(two[:2:2], comment(planSet(oldSHA, member{"nonprod/15-window-canary", idA, 0}, member{"prod/07-warehouse", idB, 1})))
+	stale := append(two[:2:2], comment(planSet(oldSHA, member{"staging/15-canary", idA, 0}, member{"prod/07-warehouse", idB, 1})))
 	check(t, "plan-set for an OLD head is ignored", setOf(ExtractPlanCandidates(makePR(stale, headSHA), cfg)).Set == false)
 
 	one := []model.Comment{comment(digest("prod/09-x", idA, 0, 200, "")), comment(planSet(headSHA, member{"prod/09-x", idA, 0}))}
@@ -283,7 +284,7 @@ func TestPlanSets(t *testing.T) {
 	check(t, "single-member set: the bare plan-id stays the candidate", len(live) == 1 && live[0].PlanID == idA)
 
 	applied := append(append([]model.Comment{}, two...),
-		comment("## Apply SUCCESS — `nonprod/15-window-canary` (member 1/2)\n\nPlan-id: `"+idA+"`"),
+		comment("## Apply SUCCESS — `staging/15-canary` (member 1/2)\n\nPlan-id: `"+idA+"`"),
 		comment("## Window apply VERIFIED — `prod/07-warehouse` (member 2/2)\n\nPlan-id: `"+idB+"`"))
 	check(t, "plan-set applied once every member applied", setOf(ExtractPlanCandidates(makePR(applied, headSHA), cfg)).Applied)
 }
@@ -324,7 +325,7 @@ func TestApplyOutcomes(t *testing.T) {
 	two := twoStacks()
 	ex := func(cs []model.Comment) []Candidate { return ExtractPlanCandidates(makePR(cs, headSHA), cfg) }
 	setThread := append(append([]model.Comment{}, two...), approveC(setID, "2026-10-22T19:00:00Z"),
-		comment("## Apply SUCCESS — `nonprod/15-window-canary` (member 1 of 2)\n\nPlan-id: `"+idA+"`"),
+		comment("## Apply SUCCESS — `staging/15-canary` (member 1 of 2)\n\nPlan-id: `"+idA+"`"),
 		outcome("Apply FAILURE — `prod/07-warehouse` (member 2 of 2)", idB, "Plan-id"))
 	s := setOf(ex(setThread))
 	check(t, "set: a member FAILURE after the set /approve marks the set failed", s.Outcome != "" && strings.Contains(s.Outcome, "FAILED") && !s.Applied)
@@ -361,7 +362,7 @@ func TestApplyOutcomes(t *testing.T) {
 	check(t, "ceremony NOT RUN surfaces", strings.Contains(c.Outcome, "NOT RUN"))
 
 	hist := append(append([]model.Comment{}, two...), approveC(setID, "2026-10-22T19:00:00Z"),
-		outcome("Apply FAILURE — `nonprod/15-window-canary` (member 1 of 2)", idA, "Plan-id"))
+		outcome("Apply FAILURE — `staging/15-canary` (member 1 of 2)", idA, "Plan-id"))
 	check(t, "a failed set is not /approve posted", PlanStateLabel(setOf(ex(hist)), false, cfg) != "/approve posted")
 
 	// the apply workflow's reports are never hand-run digests
@@ -375,9 +376,9 @@ func TestApplyOutcomes(t *testing.T) {
 		check(t, "Apply "+word+": did not run", strings.Contains(c.Outcome, "did not run"))
 	}
 	incomplete := comment("## Plan-set INCOMPLETE (0/2 applied) — apply-gate stays pending\n\nApproved: `" + setID +
-		"` · Run: https://github.com/acme/infra/actions/runs/1\n\n| order | stack | plan-id | result |\n|---|---|---|---|\n| 1 | `nonprod/15-window-canary` | `aaaaaaaaaaaa…` | not run |")
+		"` · Run: https://github.com/acme/infra/actions/runs/1\n\n| order | stack | plan-id | result |\n|---|---|---|---|\n| 1 | `staging/15-canary` | `aaaaaaaaaaaa…` | not run |")
 	s = setOf(ex(append(append([]model.Comment{}, two...), approveC(setID, "2026-10-22T19:00:00Z"),
-		outcome("Apply SKIPPED — `nonprod/15-window-canary` (member 1 of 2)", idA, "Plan-id"), incomplete)))
+		outcome("Apply SKIPPED — `staging/15-canary` (member 1 of 2)", idA, "Plan-id"), incomplete)))
 	check(t, "SKIPPED + INCOMPLETE: the set reads INCOMPLETE", strings.Contains(PlanStateLabel(s, false, cfg), "INCOMPLETE"))
 	s = setOf(ex(append(append([]model.Comment{}, two...), approveC(setID, "2026-10-22T19:00:00Z"), incomplete, approveC(setID, "2026-10-22T20:00:00Z"))))
 	check(t, "a re-posted /approve clears INCOMPLETE", PlanStateLabel(s, false, cfg) == "/approve posted")
@@ -428,9 +429,9 @@ func TestHeadPlanRuns(t *testing.T) {
 func TestVerdictsAndGrammar(t *testing.T) {
 	cfg := testCfg().TerraformApprove
 	v := PlanVerdicts(makePR([]model.Comment{
-		comment(digest("nonprod/15-window-canary", idA, 0, 200, "disruptive · revertible")),
+		comment(digest("staging/15-canary", idA, 0, 200, "disruptive · revertible")),
 		comment(digest("prod/07-warehouse", idB, 0, 200, "non-disruptive")),
-		comment(planSet(headSHA, member{"nonprod/15-window-canary", idA, 0}, member{"prod/07-warehouse", idB, 0}))}, headSHA))[setID]
+		comment(planSet(headSHA, member{"staging/15-canary", idA, 0}, member{"prod/07-warehouse", idB, 0}))}, headSHA))[setID]
 	check(t, "a multi-stack set is never revertible", strings.Contains(v.Verdict, "NOT revertible"))
 	v = PlanVerdicts(makePR([]model.Comment{comment(digest("prod/09-x", idA, 0, 200, "disruptive · revertible")),
 		comment(planSet(headSHA, member{"prod/09-x", idA, 0}))}, headSHA))[setID]

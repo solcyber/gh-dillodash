@@ -480,6 +480,16 @@ func (w *Workflow) NightSegs(app workflow.App, night string, now time.Time) []te
 	}
 	start, until := ReleaseSpan(info, night, w.cfg)
 	segs := []text.Seg{text.S(fmt.Sprintf("  #%d", info.Issue), "faint")}
+	if MissedFreeze(info, night, now, w.cfg) {
+		// the action first: nothing runs tonight, and a narrow screen
+		// clips from the right
+		segs = append(segs, text.S("  ", "text"))
+		segs = append(segs, scenes.Chip("missed freeze", "chip.rolled")...)
+		return append(segs, text.S("  "+w.cfg.MissedHint(), "sum.attn"))
+	}
+	if c := Closing(info, night, now, w.cfg); c != "" {
+		segs = append(segs, text.S("  "+c, "sum.info"))
+	}
 	live := info.Live()
 	switch {
 	case len(info.CheckedIn) > 0:

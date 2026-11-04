@@ -39,11 +39,15 @@ func configHome(env func(string) string) string {
 	return ""
 }
 
+// LegacyDir is the predecessor tool's config directory under ~/.config,
+// whose config.ini `config migrate` converts.
+const LegacyDir = "pr-dash"
+
 // FindPath picks the config file, in order: cliPath (which must exist),
 // $DILLODASH_CONFIG (which must exist), $XDG_CONFIG_HOME/dillodash/
 // config.toml, ~/.config/dillodash/config.toml. path is "" when none of
-// the implicit locations has a file. legacyINI is ~/.config/pr-dash/
-// config.ini when it exists and no TOML was found, so the caller can offer
+// the implicit locations has a file. legacyINI is the legacy INI config
+// (~/.config/<LegacyDir>/config.ini) when it exists and no TOML was found, so the caller can offer
 // MigrateINI. env supplies DILLODASH_CONFIG, XDG_CONFIG_HOME and HOME.
 func FindPath(cliPath string, env func(string) string) (path string, legacyINI string, err error) {
 	if cliPath != "" {
@@ -70,7 +74,7 @@ func FindPath(cliPath string, env func(string) string) (path string, legacyINI s
 		}
 	}
 	if home != "" {
-		if p := filepath.Join(home, ".config", "pr-dash", "config.ini"); isFile(p) {
+		if p := filepath.Join(home, ".config", LegacyDir, "config.ini"); isFile(p) {
 			legacyINI = p
 		}
 	}

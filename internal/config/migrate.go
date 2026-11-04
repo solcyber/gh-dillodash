@@ -10,7 +10,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
-// MigrateINI converts a pr-dash config.ini into dillodash TOML. The old
+// MigrateINI converts a legacy INI config into dillodash TOML. The old
 // format:
 //
 //	[defaults]   repo = owner/name, user, refresh_secs, icons, theme, motion
@@ -50,9 +50,9 @@ func MigrateINI(ini []byte) (toml string, notes []string, err error) {
 
 	var b strings.Builder
 	w := func(format string, args ...any) { fmt.Fprintf(&b, format, args...) }
-	w("# dillodash config, migrated from a pr-dash config.ini.\n")
+	w("# dillodash config, migrated from a legacy config.ini.\n")
 	w("#\n")
-	w("# pr-dash always ran the terraform-approve, maintenance-window and\n")
+	w("# The legacy tool always ran the terraform-approve, maintenance-window and\n")
 	w("# release-PR protocols, so each workflow below is enabled = true. Set\n")
 	w("# enabled = false on any protocol your repos do not speak.\n\n")
 
@@ -186,7 +186,7 @@ func MigrateINI(ini []byte) (toml string, notes []string, err error) {
 	return out, notes, nil
 }
 
-// parseINI is the subset of configparser pr-dash used: [sections],
+// parseINI is the subset of configparser the legacy tool used: [sections],
 // key = value (or key: value), ; and # comment lines, no interpolation,
 // keys lower-cased, later duplicates winning. Inline comments are value
 // text, as in configparser's default.

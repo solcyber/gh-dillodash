@@ -71,7 +71,7 @@ func chip(s, style string) []text.Seg {
 const (
 	PLANSET = "| apply order | stack | plan-id | changes |\n|---|---|---|---:|\n" +
 		"| 1 | prod/10-app-db | `aaaaaaaaaaaa…` | 6 add, 1 change |\n" +
-		"| 2 | nonprod/02-iam | `bbbbbbbbbbbb…` | 1 add |"
+		"| 2 | staging/02-access | `bbbbbbbbbbbb…` | 1 add |"
 	EVIDENCE = "| tier | capacity peak / p99 | 3×5-min fires at ≥ 80% (of the cap) " +
 		"| cpu peak / p99 | fires at ≥ 70% | periods at the cap |\n" +
 		"|---|---|---|---|---|---|\n" +

@@ -91,6 +91,30 @@ type Night struct {
 	Attendees []string
 	CheckedIn []CheckIn
 	Mine      Mine
+	// MissedMarker: the conductor said the freeze never ran (its comment
+	// carries missed_freeze_marker), so nothing fires that night.
+	MissedMarker bool
+}
+
+// MissedFreeze reports a night the freeze never ran for: the
+// conductor's missed-freeze comment, or a manifest still open
+// missed_freeze_grace_mins after the cutoff. Nothing fires on such a
+// night, so release and attend are not offered.
+func MissedFreeze(info *Night, night string, now time.Time, cfg *config.MaintenanceWindowConfig) bool {
+	if info == nil || DonePhases[info.Phase] {
+		return false
+	}
+	if info.MissedMarker {
+		return true
+	}
+	if cfg.MissedFreezeGraceMins <= 0 || (info.Phase != "" && info.Phase != "open") {
+		return false
+	}
+	cutoff, err := WallToUTC(night, cfg.Cutoff, cfg)
+	if err != nil {
+		return false
+	}
+	return !now.Before(cutoff.Add(time.Duration(cfg.MissedFreezeGraceMins) * time.Minute))
 }
 
 // Live reports the night is not over.
@@ -122,6 +146,7 @@ func WindowNights(issues []*model.Issue, me string, cfg *config.MaintenanceWindo
 		var confirmed []string
 		var checked []CheckIn
 		var mine Mine
+		missed := false
 		myLast, lastReleaseBy := "", ""
 		nodes := append([]model.Comment(nil), i.Comments.Nodes...)
 		sort.SliceStable(nodes, func(a, b int) bool { return nodes[a].CreatedAt.Before(nodes[b].CreatedAt) })
@@ -140,6 +165,10 @@ func WindowNights(issues []*model.Issue, me string, cfg *config.MaintenanceWindo
 						}
 					}
 				}
+				continue
+			}
+			if cfg.MissedFreezeMarker != "" && strings.Contains(body, cfg.MissedFreezeMarker) {
+				missed = true
 				continue
 			}
 			if earlyRE.MatchString(body) {
@@ -181,7 +210,7 @@ func WindowNights(issues []*model.Issue, me string, cfg *config.MaintenanceWindo
 			attendees = confirmed
 		}
 		out[night] = &Night{Issue: i.Number, Phase: phase, Items: man.Items,
-			Attendees: uniqLower(attendees), CheckedIn: checked, Mine: mine}
+			Attendees: uniqLower(attendees), CheckedIn: checked, Mine: mine, MissedMarker: missed}
 	}
 	return out
 }
@@ -294,6 +323,9 @@ func CommandCheck(cmd string, info *Night, night, me string, now time.Time, item
 	if DonePhases[phase] {
 		return false, fmt.Sprintf("the night of %s is over (%s)", night, phase)
 	}
+	if cmd != CmdCancel && MissedFreeze(info, night, now, cfg) {
+		return false, fmt.Sprintf("missed freeze: the freeze never ran for the night of %s; %s", night, cfg.MissedHint())
+	}
 	switch cmd {
 	case CmdAttend:
 		cutoff, err := WallToUTC(night, cfg.Cutoff, cfg)
@@ -339,6 +371,9 @@ func CommandCheck(cmd string, info *Night, night, me string, now time.Time, item
 		why := "checks you in now"
 		if !until.IsZero() {
 			why += fmt.Sprintf("; not-revertible items wait for it until %s", local.TAt(until))
+		}
+		if cfg.LateSkip != nil {
+			why += fmt.Sprintf("; nothing new starts after %s", local.T(*cfg.LateSkip))
 		}
 		return true, why
 	case CmdCancel:
@@ -397,6 +432,28 @@ func AttendanceText(info *Night, cfg *config.MaintenanceWindowConfig) string {
 // merge at its slot.
 func InReleaseWindow(now time.Time, cfg *config.MaintenanceWindowConfig) bool {
 	return cfg.Local().InSpan(now, cfg.ReleaseFrom, cfg.End)
+}
+
+// Closing is the night's line once its window has ended and the
+// conductor has not closed it: "closes at 17:15" before the closer,
+// "closer late" after it; "" with no closer configured, or a night
+// that is over or not ended.
+func Closing(info *Night, night string, now time.Time, cfg *config.MaintenanceWindowConfig) string {
+	if cfg.Closer == nil || info == nil || DonePhases[info.Phase] {
+		return ""
+	}
+	end, err := WallToUTC(night, cfg.End, cfg)
+	if err != nil || now.Before(end) {
+		return ""
+	}
+	closer, err := WallToUTC(night, *cfg.Closer, cfg)
+	if err != nil {
+		return ""
+	}
+	if now.Before(closer) {
+		return "closes at " + cfg.Local().T(*cfg.Closer)
+	}
+	return "closer late (due " + cfg.Local().T(*cfg.Closer) + ")"
 }
 
 // Countdown is "starts in 2h03m" for a night whose start is ahead, else "".

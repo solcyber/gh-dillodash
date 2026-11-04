@@ -56,7 +56,7 @@ func newCfg(window bool) *config.Config {
 	rel.ApprovalQueuesForWindow = true
 	cfg.ReleasePR = rel
 	if window {
-		cfg.MaintenanceWindow = config.DefaultMaintenanceWindow()
+		cfg.MaintenanceWindow = wftest.Window()
 	}
 	return cfg
 }

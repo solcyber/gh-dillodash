@@ -30,12 +30,21 @@ var (
 	nightDB    = model.Repo{Owner: "acme", Name: "db-migrations"}
 )
 
-// NightEpoch is when the night demo is: 22:55 ET on a window night,
-// after the 21:00 freeze and five minutes before the 23:00 start, with
-// the migration's slot at 23:12. The shots are drawn at this instant;
-// the interactive replay starts at it and runs forward (NightClock), so
-// the night reads the same whenever the demo runs.
-var NightEpoch = time.Date(2026, 11, 2, 3, 55, 0, 0, time.UTC)
+// NightEpoch is when the night demo is: five minutes before the start
+// of the example window (config.DefaultMaintenanceWindow, 16:00 UTC),
+// after its freeze, on a made-up night, with the migration's slot nine
+// minutes into the window. The shots are drawn at this instant; the
+// interactive replay starts at it and runs forward (NightClock), so the
+// night reads the same whenever the demo runs.
+var NightEpoch = time.Date(2031, 4, 16, 15, 55, 0, 0, time.UTC)
+
+// The night's release numbers and the slot of the migration.
+const (
+	nightAppPR  = 212
+	nightDBPR   = 64
+	nightSlot   = 9 * time.Minute
+	nightBudget = 25
+)
 
 // NightClock is the replay's clock: NightEpoch plus the time since the
 // demo started. Install it as clock.Now.
@@ -46,10 +55,10 @@ func NightClock() func() time.Time {
 
 // Night stages.
 const (
-	NightStart       = iota // web-portal#743 bumped (approved), db-migrations#158 scheduled
-	NightAppPosted          // release NOW posted on #743: dispatched
-	NightAppReleased        // #743 released and deployed; #158 is next in the lane
-	NightDBWaitsStg         // release NOW on #158: merged, its migration waits on stg
+	NightStart       = iota // web-portal#212 bumped (approved), db-migrations#64 scheduled
+	NightAppPosted          // release NOW posted on #212: dispatched
+	NightAppReleased        // #212 released and deployed; #64 is next in the lane
+	NightDBWaitsStg         // release NOW on #64: merged, its migration waits on stg
 	NightDBWaitsProd        // stg approved: it waits on prod
 	NightDBReleased         // prod approved: both released
 	nightStages
@@ -63,7 +72,7 @@ func NightConfig() *config.Config {
 	cfg.GitHub.ApproversTeam = "acme/release-approvers"
 	mw := config.DefaultMaintenanceWindow()
 	mw.ManifestRepo = nightInfra
-	mw.ManifestTitle = "Window {night} 23:00 ET"
+	mw.ManifestTitle = "Window {night} {hhmm} UTC"
 	cfg.MaintenanceWindow = mw
 	rp := config.DefaultReleasePR()
 	rp.Auto = false
@@ -71,7 +80,7 @@ func NightConfig() *config.Config {
 	rp.Org = "acme"
 	rp.ApprovalQueuesForWindow = true
 	rp.LaneOrder = []string{nightApp.Name, nightDB.Name}
-	rp.ApplyBudgetMins = 35
+	rp.ApplyBudgetMins = nightBudget
 	cfg.ReleasePR = rp
 	return cfg
 }
@@ -91,7 +100,7 @@ type Night struct {
 // it along.
 func NightClient(stage int) *Night {
 	n := &Night{GH: fake.New(Me)}
-	n.night, n.start = tonight()
+	n.night, n.start = tonight(NightConfig().MaintenanceWindow)
 	n.GH.Rate = &model.RateLimit{Limit: 5000, Remaining: 4790, ResetAt: clock.Now().Add(41 * time.Minute)}
 	n.GH.Teams = map[string][]string{"acme/release-approvers": {"alice", "carol"}}
 	n.GH.Users = map[model.Repo][]model.Actor{nightInfra: {{Login: "alice"}, {Login: "bob"}, {Login: "carol"}}}
@@ -102,16 +111,19 @@ func NightClient(stage int) *Night {
 	return n
 }
 
-// tonight is the night under way: the window of the New York date six
-// hours ago (so 01:00 is still last night's), and its 23:00 start.
-func tonight() (string, time.Time) {
-	loc, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		loc = time.UTC
+// tonight is the night under way in the configured window: today's,
+// unless its start is more than twelve hours ahead (then the night
+// that started yesterday is still the one under way), and its start.
+func tonight(mw *config.MaintenanceWindowConfig) (string, time.Time) {
+	local := mw.Local()
+	now := clock.Now()
+	day := local.Today(now)
+	start := local.WallToUTC(day, mw.Start)
+	if start.Sub(now) > 12*time.Hour {
+		day = day.AddDate(0, 0, -1)
+		start = local.WallToUTC(day, mw.Start)
 	}
-	d := clock.Now().In(loc).Add(-6 * time.Hour)
-	start := time.Date(d.Year(), d.Month(), d.Day(), 23, 0, 0, 0, loc)
-	return d.Format("2006-01-02"), start.UTC()
+	return day.Format("2006-01-02"), start
 }
 
 // Stage is where the night is.
@@ -164,14 +176,15 @@ func (n *Night) read(op string) {
 // load writes the stage's answers into the fake (its lock held).
 func (n *Night) load(stage int) {
 	gh := n.GH
-	slot := n.start.Add(12 * time.Minute)
-	appSHA, dbSHA := hexID(743)[:40], hexID(158)[:40]
+	slot := n.start.Add(nightSlot)
+	appSHA, dbSHA := hexID(nightAppPR)[:40], hexID(nightDBPR)[:40]
+	branch := "release/" + n.night
 
-	app := pr(nightApp, 743, "release/2026-11-01", "infra-bot", "release/2026-11-01", 5*time.Hour, 1311, 402)
+	app := pr(nightApp, nightAppPR, branch, "infra-bot", branch, 5*time.Hour, 1311, 402)
 	app.ReviewDecision = "APPROVED"
 	app.Opinions.Nodes = []model.Review{{Author: actor(Me), State: "APPROVED", SubmittedAt: at(4 * time.Hour)}}
 	app.Commits = model.Commits{}
-	db := pr(nightDB, 158, "release/2026-11-01", "infra-bot", "release/2026-11-01", 6*time.Hour, 96, 3)
+	db := pr(nightDB, nightDBPR, branch, "infra-bot", branch, 6*time.Hour, 96, 3)
 	db.ReviewDecision = "APPROVED"
 	db.Opinions.Nodes = []model.Review{{Author: actor(Me), State: "APPROVED", SubmittedAt: at(4 * time.Hour)}}
 	db.Labels.Nodes = []model.Label{{Name: "window:scheduled"}}
@@ -214,7 +227,7 @@ func (n *Night) load(stage int) {
 		db.Labels.Nodes = []model.Label{{Name: "window:pending"}}
 		comments[db.Ident()] = []model.Comment{nowCmd("next in the lane after the portal release", 0),
 			outcome("Release merged; the deploy is WAITING on an environment approval", dbSHA, 0)}
-		dbStatus = "cancelled — released early"
+		dbStatus = "cancelled by @" + Me
 		env := "stg"
 		if stage >= NightDBWaitsProd {
 			env = "prod"
@@ -230,20 +243,21 @@ func (n *Night) load(stage int) {
 	}
 
 	appStatus := "bumped"
-	manifest := &model.Issue{Repo: nightInfra, Number: 20, Title: "Window " + n.night + " 23:00 ET", State: "OPEN",
+	manifest := &model.Issue{Repo: nightInfra, Number: 20, Title: NightConfig().MaintenanceWindow.Title(n.night), State: "OPEN",
 		CreatedAt: at(30 * time.Hour), UpdatedAt: at(time.Hour), Author: actor("github-actions")}
 	manifest.Labels.Nodes = []model.Label{{Name: "window-manifest"}}
 	manifest.Body = fmt.Sprintf("Tonight's window.\n\n<!-- window-manifest:begin\n{\"night\": %q, \"phase\": \"frozen\", \"attendees\": [%q], \"items\": ["+
-		"{\"id\": \"rel:%s#743\", \"kind\": \"app\", \"repo\": %q, \"pr\": 743, \"flag\": \"bumped\", \"status\": %q, \"reasons\": [\"does not fit: the estimated apply is over the window\"]}, "+
-		"{\"id\": \"rel:%s#158\", \"kind\": \"app\", \"repo\": %q, \"pr\": 158, \"flag\": \"scheduled\", \"start_utc\": %q, \"status\": %q, \"reasons\": []}"+
+		"{\"id\": \"rel:%s#%d\", \"kind\": \"app\", \"repo\": %q, \"pr\": %d, \"flag\": \"bumped\", \"status\": %q, \"reasons\": [\"does not fit: the estimated apply is over the window\"]}, "+
+		"{\"id\": \"rel:%s#%d\", \"kind\": \"app\", \"repo\": %q, \"pr\": %d, \"flag\": \"scheduled\", \"start_utc\": %q, \"head_sha\": %q, \"status\": %q, \"reasons\": []}"+
 		"]}\nwindow-manifest:end -->",
-		n.night, Me, nightApp.Name, nightApp.Name, appStatus, nightDB.Name, nightDB.Name, slot.Format(time.RFC3339), dbStatus)
+		n.night, Me, nightApp.Name, nightAppPR, nightApp.Name, nightAppPR, appStatus,
+		nightDB.Name, nightDBPR, nightDB.Name, nightDBPR, slot.Format(time.RFC3339), db.HeadRefOid, dbStatus)
 	manifest.Comments.Nodes = []model.Comment{bot("@"+Me+" is attending the night of "+n.night+".", 3*time.Hour)}
 	manifest.Comments.TotalCount = 1
 
 	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{
-		nightApp: {Name: nightApp.Name, PRs: []*model.PR{app}, ProdOid: "aaaa0743", StageOid: "aaaa0743"},
-		nightDB:  {Name: nightDB.Name, PRs: []*model.PR{db}, ProdOid: "bbbb0158", StageOid: "bbbb0158"},
+		nightApp: {Name: nightApp.Name, PRs: []*model.PR{app}, ProdOid: "aaaa0212", StageOid: "aaaa0212"},
+		nightDB:  {Name: nightDB.Name, PRs: []*model.PR{db}, ProdOid: "bbbb0064", StageOid: "bbbb0064"},
 	}
 	gh.Comments = comments
 	gh.Runs = runs

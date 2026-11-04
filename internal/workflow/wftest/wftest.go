@@ -234,3 +234,17 @@ func (a *App) StaleFor(action string) string {
 	defer a.mu.Unlock()
 	return a.Stale[action]
 }
+
+// Window is the window the workflow tests are written against: the
+// defaults with a fixed evening window in New York (cutoff 21:00,
+// release from 22:59, 23:00 to 23:30), so a change of the shipped
+// example window does not move every test's clock.
+func Window() *config.MaintenanceWindowConfig {
+	mw := config.DefaultMaintenanceWindow()
+	mw.Timezone = "America/New_York"
+	mw.Cutoff = clock.HM{H: 21}
+	mw.ReleaseFrom = clock.HM{H: 22, M: 59}
+	mw.Start = clock.HM{H: 23}
+	mw.End = clock.HM{H: 23, M: 30}
+	return mw
+}

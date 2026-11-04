@@ -48,3 +48,40 @@ jobs:
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.21.2
           gitleaks git --no-banner --redact --config .gitleaks.toml .
+      - name: the denylist over the tree (keyed)
+        env:
+          DILLODASH_HYGIENE_KEY: ${{ secrets.DILLODASH_HYGIENE_KEY }}
+          DILLODASH_HYGIENE_REQUIRED: "1"
+        run: go test ./internal/hygiene -count=1 -run TestNoPrivateTerms -v
+      - name: the denylist over the PR's title, body and commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          DILLODASH_HYGIENE_KEY: ${{ secrets.DILLODASH_HYGIENE_KEY }}
+          DILLODASH_HYGIENE_REQUIRED: "1"
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          go build -o "$RUNNER_TEMP/scan" ./internal/hygiene/cmd/scan
+          status=0
+          printf '%s\n' "$PR_TITLE" | "$RUNNER_TEMP/scan" -name "PR title" || status=1
+          printf '%s\n' "$PR_BODY" | "$RUNNER_TEMP/scan" -name "PR body" || status=1
+          printf '%s\n' "$PR_HEAD_REF" | "$RUNNER_TEMP/scan" -name "PR branch" || status=1
+          git log --format='%B' "$BASE..$HEAD" | "$RUNNER_TEMP/scan" -name "commit messages" || status=1
+          exit $status
+      - name: the denylist over the pushed commit messages
+        if: github.event_name == 'push'
+        env:
+          DILLODASH_HYGIENE_KEY: ${{ secrets.DILLODASH_HYGIENE_KEY }}
+          DILLODASH_HYGIENE_REQUIRED: "1"
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            range="$AFTER~1..$AFTER"
+          else
+            range="$BEFORE..$AFTER"
+          fi
+          git log --format='%B' "$range" | go run ./internal/hygiene/cmd/scan -name "commit messages"

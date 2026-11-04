@@ -10,6 +10,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -295,6 +296,21 @@ type ManifestItem struct {
 	ID, Status, Flag, Night, Phase, StartUTC string
 	Final                                    *bool
 	Issue                                    int
+	// HeadSHA is the head the freeze froze ("" = the manifest does not say).
+	HeadSHA string
+}
+
+// HeadMoved reports a frozen head that is not the current one. Either
+// side empty can't be told (false); a short sha matches as a prefix.
+func HeadMoved(frozen, head string) bool {
+	frozen, head = strings.ToLower(strings.TrimSpace(frozen)), strings.ToLower(strings.TrimSpace(head))
+	if frozen == "" || head == "" {
+		return false
+	}
+	if len(frozen) > len(head) {
+		frozen, head = head, frozen
+	}
+	return !strings.HasPrefix(head, frozen)
 }
 
 // ManifestItemProvider is implemented by a window workflow's state: the

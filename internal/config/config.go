@@ -9,7 +9,7 @@
 // missing required key) stop the load, while warnings (unknown keys with a
 // "did you mean", a clamped refresh, a missing enabled = ...) are collected
 // in Config.Warnings for the app to show. FindPath implements the search
-// order and spots a legacy pr-dash config.ini, which MigrateINI converts.
+// order and spots a legacy INI config, which MigrateINI converts.
 package config
 
 import (
@@ -171,6 +171,31 @@ type MaintenanceWindowConfig struct {
 	AttendCommand  string
 	ReleaseCommand string
 	CancelCommand  string
+
+	// The night's later rules, as the conductor runs them.
+	//
+	// MissedFreezeMarker is the text a conductor comment carries when the
+	// run found the manifest still open (the freeze never ran): nothing
+	// fires that night. MissedFreezeGraceMins is how long after the
+	// cutoff an open manifest counts as a missed freeze without that
+	// comment (0 = only the comment). MissedFreezeHint is the recovery
+	// the night shows ("" = a generic one).
+	MissedFreezeMarker    string
+	MissedFreezeGraceMins int
+	MissedFreezeHint      string
+	// LateSkip is when the run stops starting new items; Closer is when
+	// the conductor closes the night. Both are wall clock in the window's
+	// zone, nil = not set (not shown).
+	LateSkip *clock.HM
+	Closer   *clock.HM
+}
+
+// MissedHint is the recovery hint of a missed freeze.
+func (m *MaintenanceWindowConfig) MissedHint() string {
+	if strings.TrimSpace(m.MissedFreezeHint) != "" {
+		return strings.TrimSpace(m.MissedFreezeHint)
+	}
+	return "nothing runs on this night; whoever runs the conductor can start it by hand"
 }
 
 // Local is the window's zone with its label (both validated at parse).
@@ -179,9 +204,10 @@ func (m *MaintenanceWindowConfig) Local() *clock.Local {
 	return l
 }
 
-// Title renders manifest_title for a night ("2026-10-21").
+// Title renders manifest_title for a night ("2026-10-21"): {night} is
+// the night, {hhmm} the window's start.
 func (m *MaintenanceWindowConfig) Title(night string) string {
-	return strings.ReplaceAll(m.ManifestTitle, "{night}", night)
+	return strings.NewReplacer(nightPlaceholder, night, hhmmPlaceholder, m.Start.String()).Replace(m.ManifestTitle)
 }
 
 // MatchNight reads the night (YYYY-MM-DD) out of a manifest issue title
@@ -198,7 +224,35 @@ func (m *MaintenanceWindowConfig) MatchNight(title string) (string, bool) {
 	return sub[1], true
 }
 
-const nightPlaceholder = "{night}"
+const (
+	nightPlaceholder = "{night}"
+	hhmmPlaceholder  = "{hhmm}"
+)
+
+// wallRE is a wall clock written into a title ("22:00").
+var wallRE = regexp.MustCompile(`\b\d{2}:\d{2}\b`)
+
+// titlePart quotes a literal part of manifest_title for the match: a
+// {hhmm} placeholder, and any wall clock written literally, match any
+// HH:MM. A conductor that titles its manifests with the start time
+// keeps matching across a change of that time (a manifest opened under
+// the old title is still read).
+func titlePart(s string) string {
+	var b strings.Builder
+	for i, lit := range strings.Split(s, hhmmPlaceholder) {
+		if i > 0 {
+			b.WriteString(`\d{2}:\d{2}`)
+		}
+		last := 0
+		for _, loc := range wallRE.FindAllStringIndex(lit, -1) {
+			b.WriteString(regexp.QuoteMeta(lit[last:loc[0]]))
+			b.WriteString(`\d{2}:\d{2}`)
+			last = loc[1]
+		}
+		b.WriteString(regexp.QuoteMeta(lit[last:]))
+	}
+	return b.String()
+}
 
 func nightRE(pattern string) *regexp.Regexp {
 	pre, post, ok := strings.Cut(pattern, nightPlaceholder)
@@ -206,7 +260,7 @@ func nightRE(pattern string) *regexp.Regexp {
 		return nil
 	}
 	// a second {night} in the suffix is matched literally; one capture is enough
-	return regexp.MustCompile(`^` + regexp.QuoteMeta(strings.TrimSpace(pre)) + `\s*(\d{4}-\d{2}-\d{2})\s*` + regexp.QuoteMeta(strings.TrimSpace(post)) + `$`)
+	return regexp.MustCompile(`^` + titlePart(strings.TrimSpace(pre)) + `\s*(\d{4}-\d{2}-\d{2})\s*` + titlePart(strings.TrimSpace(post)) + `$`)
 }
 
 // ReleasePRConfig is [workflows.release_pr].
@@ -303,12 +357,13 @@ func DefaultTerraformApprove() *TerraformApproveConfig {
 // DefaultMaintenanceWindow is [workflows.maintenance_window] with every
 // default; ManifestRepo stays zero (= the first review repo).
 func DefaultMaintenanceWindow() *MaintenanceWindowConfig {
+	// an example window, not anyone's real one: set yours in the config
 	return &MaintenanceWindowConfig{
-		Timezone:       "America/New_York",
-		Cutoff:         clock.HM{H: 21, M: 0},
-		Start:          clock.HM{H: 23, M: 0},
-		ReleaseFrom:    clock.HM{H: 22, M: 59},
-		End:            clock.HM{H: 23, M: 30},
+		Timezone:       "UTC",
+		Cutoff:         clock.HM{H: 12, M: 0},
+		Start:          clock.HM{H: 16, M: 0},
+		ReleaseFrom:    clock.HM{H: 15, M: 55},
+		End:            clock.HM{H: 17, M: 0},
 		QueuedLabel:    "window:queued",
 		ScheduledLabel: "window:scheduled",
 		RolledLabel:    "window:rolled",
@@ -321,6 +376,9 @@ func DefaultMaintenanceWindow() *MaintenanceWindowConfig {
 		AttendCommand:  "/attend",
 		ReleaseCommand: "/release",
 		CancelCommand:  "/window-cancel",
+
+		MissedFreezeMarker:    "MISSED FREEZE",
+		MissedFreezeGraceMins: 30,
 	}
 }
 

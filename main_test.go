@@ -130,7 +130,7 @@ func TestSubcommandExitCodes(t *testing.T) {
 		{[]string{"font"}, 2, "install, check or license"},
 		{[]string{"font", "bogus"}, 2, `unknown subcommand "bogus"`},
 		{[]string{"config", "check"}, 2, "no config found"},
-		{[]string{"config", "migrate"}, 2, "no pr-dash config.ini found"},
+		{[]string{"config", "migrate"}, 2, "no legacy config.ini found"},
 		{[]string{"--repo", "x"}, 2, "no config found"},
 	} {
 		err := run(tc.args)

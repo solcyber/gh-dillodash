@@ -24,7 +24,7 @@ func TestFindPath(t *testing.T) {
 	envPath := filepath.Join(t.TempDir(), "env.toml")
 	xdgCfg := filepath.Join(xdg, "dillodash", "config.toml")
 	homeCfg := filepath.Join(home, ".config", "dillodash", "config.toml")
-	legacy := filepath.Join(home, ".config", "pr-dash", "config.ini")
+	legacy := filepath.Join(home, ".config", LegacyDir, "config.ini")
 
 	env := func(m map[string]string) func(string) string {
 		base := map[string]string{"HOME": home}

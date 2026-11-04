@@ -78,7 +78,7 @@ bucket during the nightly load. Scoped to the sixteen functions in
 | stack | plan | destroys |
 |---|---|---|
 | prod/07-warehouse | 3 to add, 1 to change | 0 |
-| nonprod/07-warehouse | 3 to add, 1 to change | 0 |
+| staging/07-warehouse | 3 to add, 1 to change | 0 |
 
 ` + "```hcl" + `
 resource "aws_iam_role_policy" "warehouse_read" {
@@ -97,7 +97,7 @@ var bodies = map[int]string{
 	42: "## Summary\n\nThe quarterly drill: rotate the DKIM signing keys for the mail domain and publish the new selector. " +
 		"The old selector stays published for a week so mail in flight still verifies.\n\n- [x] planned in CI\n- [x] drill runbook followed\n",
 	43: "Automated: the canary's p95 CPU sat above 80% for seven days, so its instance size moves up one step.\n\n" +
-		"| stack | from | to |\n|---|---|---|\n| nonprod/15-window-canary | t3.medium | t3.large |\n\nQueued for the window: the resize restarts the canary.\n",
+		"| stack | from | to |\n|---|---|---|\n| staging/15-canary | t3.medium | t3.large |\n\nQueued for the window: the resize restarts the canary.\n",
 	44: "Work in progress: splitting the network stack into the VPC and the edge, so a change to one stops planning the other.\n\n- [x] VPC\n- [ ] edge\n- [ ] state moves\n",
 	90: "Yesterday's cut for production.\n\n- fix: the signup form loses the referral code (#92)\n- the dashboard's empty state after a password reset (#19)\n",
 	91: "Today's cut for production.\n\n- the billing page's new invoice table\n- faster search on the accounts list\n- dependency updates\n",
@@ -120,7 +120,7 @@ func Config() *config.Config {
 	cfg.TerraformApprove = config.DefaultTerraformApprove()
 	mw := config.DefaultMaintenanceWindow()
 	mw.ManifestRepo = Repos[0]
-	mw.ManifestTitle = "Window {night} 23:00 ET"
+	mw.ManifestTitle = "Window {night} {hhmm} UTC"
 	cfg.MaintenanceWindow = mw
 	rp := config.DefaultReleasePR()
 	rp.Auto = false
@@ -175,20 +175,16 @@ func waitingRuns(gh *fake.Client) {
 	}
 }
 
-// night is the next window night as YYYY-MM-DD: tonight before the 21:00
-// cutoff in New York, else tomorrow.
-func night() (string, time.Time) {
-	loc, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		loc = time.UTC
+// night is the next night of the configured window as YYYY-MM-DD, and
+// its start: today's before the cutoff, else tomorrow's.
+func night(mw *config.MaintenanceWindowConfig) (string, time.Time) {
+	local := mw.Local()
+	now := time.Now()
+	day := local.Today(now)
+	if !now.Before(local.WallToUTC(day, mw.Cutoff)) {
+		day = day.AddDate(0, 0, 1)
 	}
-	now := time.Now().In(loc)
-	day := now
-	if now.Hour() >= 21 {
-		day = now.Add(24 * time.Hour)
-	}
-	start := time.Date(day.Year(), day.Month(), day.Day(), 23, 0, 0, 0, loc)
-	return day.Format("2006-01-02"), start.UTC()
+	return day.Format("2006-01-02"), local.WallToUTC(day, mw.Start)
 }
 
 func hexID(seed int) string {
@@ -263,22 +259,23 @@ func Client() *fake.Client {
 		gh.Diffs[p.Ident()] = "diff --git a/terraform/live/prod/07-warehouse/iam.tf b/terraform/live/prod/07-warehouse/iam.tf\n" + gh.Files[p.Ident()][0].Patch
 	}
 	// workflows: plan digests, a queued PR with its night's manifest, a release repo
-	nightDate, start := night()
+	mw := Config().MaintenanceWindow
+	nightDate, start := night(mw)
 	ta := gh.PRs[infraPRs[0].Ident()]
-	ta.Comments.Nodes = append([]model.Comment{bot(digest("prod/07-warehouse", 1, 0, "non-disruptive"), 12*time.Hour), bot(digest("nonprod/07-warehouse", 2, 0, "non-disruptive"), 12*time.Hour)}, ta.Comments.Nodes...)
+	ta.Comments.Nodes = append([]model.Comment{bot(digest("prod/07-warehouse", 1, 0, "non-disruptive"), 12*time.Hour), bot(digest("staging/07-warehouse", 2, 0, "non-disruptive"), 12*time.Hour)}, ta.Comments.Nodes...)
 	ta.Comments.TotalCount = len(ta.Comments.Nodes)
 	tb := gh.PRs[infraPRs[1].Ident()]
 	tb.Comments.Nodes = append([]model.Comment{bot(digest("prod/03-mail", 3, 1, "disruptive · NOT revertible"), 2*time.Hour)}, tb.Comments.Nodes...)
 	tb.Comments.TotalCount = len(tb.Comments.Nodes)
 	queued := infraPRs[2]
 	queued.Labels.Nodes = append(queued.Labels.Nodes, model.Label{Name: "window:queued"}, model.Label{Name: "window:scheduled"})
-	marker := fmt.Sprintf("<!-- window-queue {\"night\": %q, \"plan_id\": %q, \"stacks\": [\"nonprod/15-window-canary\"], \"queued_at\": %q, \"revertible\": true} -->", nightDate, hexID(4), at(28*time.Hour).UTC().Format(time.RFC3339))
-	qc := []model.Comment{bot(digest("nonprod/15-window-canary", 4, 0, "disruptive · revertible"), 30*time.Hour), bot("Queued for the maintenance window of "+nightDate+".\n\n"+marker, 28*time.Hour)}
+	marker := fmt.Sprintf("<!-- window-queue {\"night\": %q, \"plan_id\": %q, \"stacks\": [\"staging/15-canary\"], \"queued_at\": %q, \"revertible\": true} -->", nightDate, hexID(4), at(28*time.Hour).UTC().Format(time.RFC3339))
+	qc := []model.Comment{bot(digest("staging/15-canary", 4, 0, "disruptive · revertible"), 30*time.Hour), bot("Queued for the maintenance window of "+nightDate+".\n\n"+marker, 28*time.Hour)}
 	gh.Comments = map[model.Ident][]model.Comment{queued.Ident(): qc}
 	qd := gh.PRs[queued.Ident()]
 	qd.Comments.Nodes = append(qc, qd.Comments.Nodes...)
 	qd.Comments.TotalCount = len(qd.Comments.Nodes)
-	manifest := &model.Issue{Repo: infra, Number: 20, Title: "Window " + nightDate + " 23:00 ET", State: "OPEN", CreatedAt: at(30 * time.Hour), UpdatedAt: at(2 * time.Hour), Author: actor("github-actions")}
+	manifest := &model.Issue{Repo: infra, Number: 20, Title: mw.Title(nightDate), State: "OPEN", CreatedAt: at(30 * time.Hour), UpdatedAt: at(2 * time.Hour), Author: actor("github-actions")}
 	manifest.Labels.Nodes = []model.Label{{Name: "window-manifest"}}
 	manifest.Body = fmt.Sprintf("Tonight's window.\n\n<!-- window-manifest:begin\n{\"night\": %q, \"phase\": \"open\", \"attendees\": [\"carol\"], \"items\": [{\"id\": \"#43\", \"repo\": \"infra\", \"pr\": 43, \"flag\": \"scheduled\", \"revertible\": true, \"start_utc\": %q, \"release_by_utc\": %q, \"status\": \"\", \"reasons\": []}]}\nwindow-manifest:end -->", nightDate, start.Add(4*time.Minute).Format(time.RFC3339), start.Add(14*time.Minute).Format(time.RFC3339))
 	manifest.Comments.Nodes = []model.Comment{bot("@carol is attending the night of "+nightDate+".", 3*time.Hour)}

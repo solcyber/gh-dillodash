@@ -226,6 +226,28 @@ func (t *table) hm(key string, def clock.HM) clock.HM {
 	return v
 }
 
+// optHM reads an optional "HH:MM" string: absent or "" is nil.
+func (t *table) optHM(key string) *clock.HM {
+	v, ok := t.get(key)
+	if !ok {
+		return nil
+	}
+	str, ok := v.(string)
+	if !ok {
+		t.errf(key, "expected a string like \"23:00\", got %s", typeName(v))
+		return nil
+	}
+	if strings.TrimSpace(str) == "" {
+		return nil
+	}
+	hm, err := clock.ParseHM(str)
+	if err != nil {
+		t.errf(key, "%q is not HH:MM (00:00-23:59)", str)
+		return nil
+	}
+	return &hm
+}
+
 // tz reads an IANA timezone name.
 func (t *table) tz(key, def string) string {
 	s := t.str(key, def)
@@ -615,6 +637,19 @@ func (p *parser) parseMaintenanceWindow(wt *table, cfg *Config) {
 	w.AttendCommand = t.nonEmpty("attend_command", w.AttendCommand)
 	w.ReleaseCommand = t.nonEmpty("release_command", w.ReleaseCommand)
 	w.CancelCommand = t.nonEmpty("cancel_command", w.CancelCommand)
+	w.MissedFreezeMarker = strings.TrimSpace(t.str("missed_freeze_marker", w.MissedFreezeMarker))
+	w.MissedFreezeGraceMins = t.int("missed_freeze_grace_mins", w.MissedFreezeGraceMins)
+	w.MissedFreezeHint = strings.TrimSpace(t.str("missed_freeze_hint", w.MissedFreezeHint))
+	w.LateSkip = t.optHM("late_skip")
+	w.Closer = t.optHM("closer")
+	if w.LateSkip != nil && !(w.Start.Before(*w.LateSkip) && w.LateSkip.Before(w.End)) {
+		t.errf("late_skip", "expected start < late_skip < end, got %s, %s, %s", w.Start, *w.LateSkip, w.End)
+		w.LateSkip = nil
+	}
+	if w.Closer != nil && w.Closer.Before(w.End) {
+		t.errf("closer", "expected end <= closer, got %s, %s", w.End, *w.Closer)
+		w.Closer = nil
+	}
 	t.done()
 
 	if !enabled {

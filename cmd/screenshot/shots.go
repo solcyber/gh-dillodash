@@ -48,7 +48,7 @@ var shots = []shot{
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 2.3}}}},
 	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j"}, Expect: []string{"waiting approvals", "approve: prod"}},
 	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy run 7101"}},
-	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "nonprod/15-window-canary"}},
+	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},
 	{Name: "fortress-chicago", Steps: []string{"d"}, Opts: ui.SnapshotOptions{City: "chicago"}, Expect: []string{"Chicago"}},
 	{Name: "splash", Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 0.9, KeepSplash: true}},
@@ -56,12 +56,12 @@ var shots = []shot{
 	// a manual release night (--demo-night), each shot one step further:
 	// the first refresh after the splash brings the manifest in (r), the
 	// bumped release is the last row (G)
-	{Name: "night-1-bumped", Night: true, Steps: nightSteps(1), Expect: []string{"#743", "bumped — a: release NOW", "scheduled 23:12"}},
+	{Name: "night-1-bumped", Night: true, Steps: nightSteps(1), Expect: []string{"#212", "bumped — a: release NOW", "scheduled 16:09"}},
 	{Name: "night-2-now", Night: true, Steps: nightSteps(2), Expect: []string{"already approved by you", "release NOW (/release-now)"}},
-	{Name: "night-3-released", Night: true, Steps: nightSteps(3), Expect: []string{"web-portal#743 released", "next in lane: db-migrations#158"}},
-	{Name: "night-4-cancel", Night: true, Steps: nightSteps(4), Expect: []string{"23:12 slot on manifest #20", "/window-cancel rel:db-migrations#158"}},
+	{Name: "night-3-released", Night: true, Steps: nightSteps(3), Expect: []string{"web-portal#212 released", "next in lane: db-migrations#64"}},
+	{Name: "night-4-cancel", Night: true, Steps: nightSteps(4), Expect: []string{"16:09 slot on manifest #20", "/window-cancel rel:db-migrations#64"}},
 	{Name: "night-5-stg", Night: true, Steps: nightSteps(5), Expect: []string{"deploy waiting · D", "stg (migrate, run 801)"}},
-	{Name: "night-6-done", Night: true, Steps: nightSteps(6), Expect: []string{"approved 1 deployment of db-migrations#158 (prod)"}},
+	{Name: "night-6-done", Night: true, Steps: nightSteps(6), Expect: []string{"approved 1 deployment of db-migrations#64 (prod)"}},
 	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
 	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
 	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},
