@@ -696,9 +696,13 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	default:
 		rule = fmt.Sprintf("a: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
 	}
-	out = append(out, scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "muted"), text.S(rule, "muted")}, width, inner)...)
+	ruleLines := scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "faint"), text.S(rule, "faint")}, width, inner)
 	if p, ok := w.progressOf(src); ok {
+		// in flight, the rail and its steps come first and the rule after
 		out = append(out, w.progressCard(app, src, p, width, inner)...)
+		out = append(out, ruleLines...)
+	} else {
+		out = append(out, ruleLines...)
 	}
 	if merged {
 		sha := MergeSHA(src)

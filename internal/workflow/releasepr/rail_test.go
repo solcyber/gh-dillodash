@@ -87,11 +87,19 @@ func TestRailSegsWidth(t *testing.T) {
 	}
 	glyphs.Use(glyphs.Unicode)
 	fx.Motion, fx.Ambient = "off", false
-	if s := text.SegsText(railSegs(ps[4], now, nil, "x", 7, false)); s != "▚▞▚▞▚▞▚" {
-		t.Errorf("a failure is stripes: %q", s)
+	// one pip a phase: done, a solid gold block where it failed, hollow after
+	if segs := railSegs(ps[4], now, nil, "x", 7, false); text.SegsText(segs) != "▮▮▮▮█▯▯" || segs[1].Style != "hazard" {
+		t.Errorf("a failure stops at its phase: %+v", segs)
 	}
-	if segs := railSegs(ps[3], now, nil, "x", 7, false); len(segs) != 1 || segs[0].Style != "meter.ok" || segs[0].Text != "███████" {
-		t.Errorf("released is a full rail: %+v", segs)
+	if segs := railSegs(ps[3], now, nil, "x", 7, false); len(segs) != 1 || segs[0].Style != "meter.ok" || segs[0].Text != "▮▮▮▮▮▮▮" {
+		t.Errorf("released is every pip filled: %+v", segs)
+	}
+	// wider, a stepper: one segment a phase, a gap between them
+	if s := text.SegsText(railSegs(ps[3], now, nil, "x", 27, false)); s != "███ ███ ███ ███ ███ ███ ███" {
+		t.Errorf("the card's rail is one segment a phase: %q", s)
+	}
+	if s := text.SegsText(railSegs(ps[4], now, nil, "x", 27, false)); s != "███ ███ ███ ███ ███ ─── ───" {
+		t.Errorf("a failure fills to its phase and leaves the rest a line: %q", s)
 	}
 	segs := railSegs(ps[2], now, nil, "x", 7, false)
 	if len(segs) < 2 || segs[0].Style != "fx.b5" {

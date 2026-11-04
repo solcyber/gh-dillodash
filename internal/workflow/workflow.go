@@ -165,6 +165,9 @@ type App interface {
 	// RefreshSoon pulls the next refresh in to at most d from now.
 	RefreshSoon(d time.Duration)
 	Width() int
+	// Height is the screen's rows (a card leaves decoration out when
+	// short of them).
+	Height() int
 	// Fx is the effect set, for row renderers (number pulses, glints).
 	Fx() *fx.Fx
 	// EditInEditor runs $EDITOR seeded with text; ok false on cancel.
