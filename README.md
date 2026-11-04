@@ -63,7 +63,7 @@ symptoms.
 
 ![A pull request's detail: the header, the description rendered from markdown, then comments and reviews in order](docs/shots/pr-detail.png)
 
-![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](docs/shots/release-card.png)
+![Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run](docs/shots/release-card.png)
 
 ![When a release lands: the rocket, the fireworks and RELEASED! across the screen](docs/shots/release-launch.png)
 
@@ -94,7 +94,7 @@ now) and backs off by itself when GitHub rate-limits the token.
 
 ## Workflows
 
-![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](docs/shots/release-rail.png)
+![A release in flight on the list: its rail is a pip per phase, filled as it goes, with the phase and its clock](docs/shots/release-rail.png)
 
 If your repositories run a bot that speaks one of these protocols, turn the
 matching workflow on in the config and dillodash drives it:

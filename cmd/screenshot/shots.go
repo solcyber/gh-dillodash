@@ -16,7 +16,8 @@ type shot struct {
 	Steps      []string
 	Expect     []string // text the frame must show: the script landed where it meant to
 	Opts       ui.SnapshotOptions
-	Night      bool // on the release-night fixture (--demo-night) instead of the demo's
+	Night      bool   // on the release-night fixture (--demo-night) instead of the demo's
+	Tier       string // "" = truecolor | "256" | "16" | "mono": the color depth it is drawn at
 }
 
 // The fixture's list, top to bottom (the cursor starts on the first

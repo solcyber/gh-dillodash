@@ -225,9 +225,9 @@ replays one offline; these shots are its steps.
 
 ## Live progress
 
-![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](../shots/release-rail.png)
+![A release in flight on the list: its rail is a pip per phase, filled as it goes, with the phase and its clock](../shots/release-rail.png)
 
-![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
+![Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
 
 ![When a release lands: the rocket, the fireworks and RELEASED! across the screen](../shots/release-launch.png)
 
