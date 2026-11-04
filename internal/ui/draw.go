@@ -64,7 +64,7 @@ func (m *Model) draw(c *canvas.Canvas) {
 	// behind it, so the list's fragments around it don't compete
 	_, menu := m.modal.(*widgets.Pick)
 	if m.overlay != "" || menu {
-		c.Dim(0, h-1, "fx.k2")
+		c.Dim(0, h-1, "fx.k0")
 	}
 	switch m.overlay {
 	case "help":

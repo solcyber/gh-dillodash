@@ -130,6 +130,10 @@ is black on light gray so it keeps its shape. With `NO_COLOR`
 or `--mono` it uses attributes only, and dims only rules and borders, never
 text.
 
+![The release night on a 16-color terminal: ANSI blue and yellow, gray chips black on light gray](shots/tier-16-night.png)
+
+![The list with no color at all (NO_COLOR or --mono): chips in reverse video, what needs a look in bold](shots/tier-mono-list.png)
+
 **High contrast, measured.** Every style that draws text clears WCAG
 4.5:1 against every background it can land on; rules, borders and icons
 clear 3:1. On the navy selection bar and in code bands a dim foreground is

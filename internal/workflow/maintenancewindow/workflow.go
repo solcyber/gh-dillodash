@@ -506,7 +506,7 @@ func (w *Workflow) NightSegs(app workflow.App, night string, now time.Time) []te
 		// the action first: nothing runs tonight, and a narrow screen
 		// clips from the right
 		segs = append(segs, text.S("  ", "text"))
-		segs = append(segs, scenes.Chip("missed freeze", "chip.rolled")...)
+		segs = append(segs, scenes.Chip(glyphs.G("warn")+" missed freeze", "chip.act")...)
 		return append(segs, text.S("  "+w.cfg.MissedHint(), "sum.attn"))
 	}
 	if c := Closing(info, night, now, w.cfg); c != "" {

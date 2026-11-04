@@ -66,6 +66,9 @@ var shots = []shot{
 	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
 	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
 	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},
+	// the color depths below truecolor
+	{Name: "tier-16-night", Night: true, Steps: nightSteps(3), Tier: "16"},
+	{Name: "tier-mono-list", Steps: []string{"j"}, Tier: "mono"},
 }
 
 // heroScripts are the README's picture: the list with the cursor on the

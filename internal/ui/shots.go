@@ -38,4 +38,6 @@ var ShotCaptions = map[string]string{
 	"icons-nerd":             "The list with the bundled Nerd Font's icons",
 	"icons-unicode":          "The same list with icons = \"unicode\": plain Unicode symbols, no font needed",
 	"icons-ascii":            "The same list with icons = \"ascii\": every glyph from the seven-bit set",
+	"tier-16-night":          "The release night on a 16-color terminal: ANSI blue and yellow, gray chips black on light gray",
+	"tier-mono-list":         "The list with no color at all (NO_COLOR or --mono): chips in reverse video, what needs a look in bold",
 }
