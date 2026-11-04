@@ -687,8 +687,10 @@ func QueueRows(prs, releases []*model.PR, manifests map[string]*Manifest, now ti
 			if man := manifests[n]; man != nil && man.Phase != "" {
 				label += " " + man.Phase
 			}
+			// its title repeats the night above it: say what it is for
+			what := fmt.Sprintf("the night's manifest: w posts %s, %s, %s", cfg.AttendCommand, cfg.ReleaseCommand, cfg.CancelCommand)
 			rows = append(rows, workflow.Row{Kind: "issue", Item: issue,
-				Meta: map[string]any{"label": text.Ellip(label, 16), workflow.NightRow: n}})
+				Meta: map[string]any{"label": text.Ellip(label, 16), workflow.NightRow: n, "title": what}})
 		}
 		rows = append(rows, groups[n]...)
 	}

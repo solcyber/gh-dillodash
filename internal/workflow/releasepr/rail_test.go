@@ -88,7 +88,7 @@ func TestRailSegsWidth(t *testing.T) {
 	glyphs.Use(glyphs.Unicode)
 	fx.Motion, fx.Ambient = "off", false
 	// one pip a phase: done, a solid gold block where it failed, hollow after
-	if segs := railSegs(ps[4], now, nil, "x", 7, false); text.SegsText(segs) != "▮▮▮▮█▯▯" || segs[1].Style != "hazard" {
+	if segs := railSegs(ps[4], now, nil, "x", 7, false); text.SegsText(segs) != "▮▮▮▮█──" || segs[1].Style != "hazard" {
 		t.Errorf("a failure stops at its phase: %+v", segs)
 	}
 	if segs := railSegs(ps[3], now, nil, "x", 7, false); len(segs) != 1 || segs[0].Style != "meter.ok" || segs[0].Text != "▮▮▮▮▮▮▮" {

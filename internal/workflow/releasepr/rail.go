@@ -81,8 +81,8 @@ func railFrac(p Progress, now time.Time) float64 {
 // (the head breathes, a sweep plays on "rail:<ident>"); f may be nil.
 //
 // It is drawn per phase. One cell a phase (the row chip) is a row of
-// pips: filled blue for a phase done, gold for the one running, hollow
-// for the rest, and a solid gold block where a release failed. Wider (the
+// pips: filled blue for a phase done, gold for the one running, a thin
+// line for the rest, and a solid gold block where a release failed. Wider (the
 // card) it is a stepper: one segment a phase with a gap between them, so
 // it lines up with the steps listed under it, the running segment filling
 // as its phase goes. Narrower than one cell a phase it is a plain meter.
@@ -198,7 +198,9 @@ func railStyle(p Progress, state string) string {
 
 // pipRail is one pip a phase, the last pip taking the spare cells.
 func pipRail(p Progress, now time.Time, width int) []text.Seg {
-	on, off := glyphs.G("bar_on"), glyphs.G("bar_off")
+	// a phase to come is a thin line, so a release that has not started
+	// reads as a quiet rule, not a row of empty boxes
+	on, off := glyphs.G("bar_on"), glyphs.G("rule")
 	states := phaseStates(p)
 	var cells []text.Seg
 	for i, st := range states {

@@ -364,16 +364,16 @@ func (s *Set) RowKinds() map[string]RowKind {
 }
 
 // HeaderExtra returns the first workflow's extra for a header row.
-func (s *Set) HeaderExtra(app App, row Row, w int) (string, []text.Seg) {
+func (s *Set) HeaderExtra(app App, row Row, w int) ([]text.Seg, []text.Seg) {
 	if s == nil {
-		return "", nil
+		return nil, nil
 	}
 	for _, wf := range s.Items {
-		if c, segs := wf.HeaderExtra(app, row, w); c != "" || len(segs) > 0 {
+		if c, segs := wf.HeaderExtra(app, row, w); len(c) > 0 || len(segs) > 0 {
 			return c, segs
 		}
 	}
-	return "", nil
+	return nil, nil
 }
 
 // SummarySegs concatenates summary chips, a separator between workflows.

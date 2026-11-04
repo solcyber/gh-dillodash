@@ -336,8 +336,20 @@ func (w *Workflow) Sections(app workflow.App, terms []string, me string) []workf
 			manifests = append(manifests, i)
 		}
 	}
-	return QueueRows(queued, rels, st.Manifests, app.Now(), manifests,
+	rows := QueueRows(queued, rels, st.Manifests, app.Now(), manifests,
 		func(i *model.Issue) bool { return w.matchesIssue(i, terms) }, w.cfg)
+	// a night's manifest row draws the night's timeline in its title's
+	// place, read at draw time so the now mark moves
+	for i, r := range rows {
+		night, _ := r.Meta[workflow.NightRow].(string)
+		if r.Kind != "issue" || night == "" {
+			continue
+		}
+		rows[i].Meta[workflow.TitleSegs] = func(room int) []text.Seg {
+			return w.stripSegs(w.state(app).Nights[night], night, app.Now(), room)
+		}
+	}
+	return rows
 }
 
 // revText is a queued row's revertibility column.
@@ -443,18 +455,28 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 // HeaderExtra gives a night sub-header its countdown to the window's
 // start and the attendance: who attends, who checked in, and gold when
 // someone has to act for a not-revertible item.
-func (w *Workflow) HeaderExtra(app workflow.App, row workflow.Row, width int) (string, []text.Seg) {
+func (w *Workflow) HeaderExtra(app workflow.App, row workflow.Row, width int) ([]text.Seg, []text.Seg) {
 	night, _ := row.Meta[workflow.NightRow].(string)
 	if row.Kind != "header" || night == "" {
-		return "", nil
+		return nil, nil
 	}
 	now := app.Now()
-	extra := ""
+	var extra []text.Seg
 	if cd := Countdown(night, now, w.cfg); cd != "" {
-		extra = "  " + glyphs.G("sep") + " " + cd
+		// blue while it is far, gold in the last quarter hour
+		style := "sum.info"
+		if start, err := WallToUTC(night, w.cfg.Start, w.cfg); err == nil && start.Sub(now) <= soonBefore {
+			style = "sum.attn"
+		}
+		extra = []text.Seg{text.S("  "+glyphs.G("sep")+" ", "faint"), text.S(cd, style)}
+	} else if info := w.state(app).Nights[night]; info != nil && info.Live() && InReleaseWindow(now, w.cfg) {
+		extra = []text.Seg{text.S("  "+glyphs.G("sep")+" ", "faint"), text.S("live now", "sum.attn")}
 	}
 	return extra, w.NightSegs(app, night, now)
 }
+
+// soonBefore is when a night's countdown turns gold.
+const soonBefore = 15 * time.Minute
 
 // NightSegs is what a night sub-header adds after its label.
 func (w *Workflow) NightSegs(app workflow.App, night string, now time.Time) []text.Seg {
@@ -743,5 +765,5 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	row = append(row, scenes.Chip("rolled", "chip.rolled")...)
 	row = append(row, sp, text.S(glyphs.Ico("rev")+"revertible", "rev.ok"), sp,
 		text.S(glyphs.Ico("attend")+"attended night needed", "rev.attend"))
-	return [][]text.Seg{row}
+	return [][]text.Seg{row, w.stripLegend()}
 }
