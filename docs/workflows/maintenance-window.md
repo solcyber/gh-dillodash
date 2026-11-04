@@ -43,9 +43,16 @@ assume the example window.
   tonight.
 - **The night's manifest issue is the first row under its sub-header**
   (chip `manifest <phase>`), never a loose row in `issues`. `enter` opens
-  it, `o` opens it in the browser, `w` acts on its night.
+  it, `o` opens it in the browser, `w` acts on its night. In its title's
+  place (the title repeats the night above it) it draws the night's
+  timeline: the window from its start to its end, a mark per slot in run
+  order (a blue dot scheduled, gold running, a blue block done, a gold
+  block failed) and a gold bar for now while the window is open. With no
+  slot yet and the window not open, it says what the row is for.
 - **The sub-header** names the manifest, counts down to the start
-  (`starts in 2h03m`), and shows who attends and who checked in. When a
+  (`starts in 2h03m`: blue, gold in the last quarter hour, `live now` once
+  the window opens; a narrow screen clips the attendance before it), and
+  shows who attends and who checked in. When a
   held item needs someone, it says so in gold: `needs /attend (w) by
   12:00 UTC` before the cutoff, `nobody attending: not-revertible items
   roll` after it, `/release now (w) by 16:10 UTC` from `release_from`.
