@@ -99,6 +99,23 @@ refuses it. A bot login is never posted as.
 Posting needs the token's Issues read and write, because the manifest is
 an issue.
 
+## Reserved stacks
+
+Some conductors also refuse an *immediate* apply to the stacks the
+window owns for a span around it, even a harmless one, unless the command
+carries the outside-window flag. Tell dillodash the span and the stacks:
+
+```toml
+reserved_from = "15:50"           # with reserved_to; a span past midnight wraps
+reserved_to = "17:15"
+reserved_stacks = ["prod/*"]      # path patterns; [] = every stack
+```
+
+Inside the span, `a` on a plan that is not disruptive but goes to a
+reserved stack asks first: wait until `reserved_to` (the first entry), or
+apply now with `outside_window_flag` and a reason, as for a disruptive
+plan. Outside the span, or on another stack, nothing changes.
+
 ## The protocol the conductor must speak
 
 **Labels** on a queued pull request: `queued_label` (default

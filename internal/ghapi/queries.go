@@ -35,7 +35,7 @@ fragment ListRepo on Repository {
       author { login }
       labels(first: 10) { nodes { name } }
       latestOpinionatedReviews(first: 20) {
-        nodes { author { login } state }
+        nodes { databaseId author { login } state }
       }
       commits(last: 1) {
         nodes {
@@ -113,7 +113,7 @@ query($owner: String!, $name: String!, $label: String!, $first: Int!) {
         labels(first: 10) { nodes { name } }
         comments(last: 100) {
           totalCount
-          nodes { author { login } createdAt body }
+          nodes { databaseId author { login } createdAt body }
         }
       }
     }
@@ -124,7 +124,7 @@ const prCommentsQuery = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      comments(last: 100) { nodes { author { login } createdAt body } }
+      comments(last: 100) { nodes { databaseId author { login } createdAt body } }
     }
   }
 }`
@@ -139,7 +139,7 @@ query($owner: String!, $name: String!, $number: Int!) {
       assignees(first: 10) { nodes { login } }
       comments(last: 100) {
         totalCount
-        nodes { author { login } createdAt body }
+        nodes { databaseId author { login } createdAt body }
       }
     }
   }
@@ -163,15 +163,15 @@ query($owner: String!, $name: String!, $number: Int!) {
       labels(first: 10) { nodes { name } }
       commits(last: 1) { nodes { commit { committedDate } } }
       latestOpinionatedReviews(first: 20) {
-        nodes { author { login } state }
+        nodes { databaseId author { login } state }
       }
       comments(last: 100) {
         totalCount
-        nodes { author { login } createdAt body }
+        nodes { databaseId author { login } createdAt body }
       }
       reviews(last: 50) {
         totalCount
-        nodes { author { login } state submittedAt body }
+        nodes { databaseId author { login } state submittedAt body }
       }
     }
   }
@@ -206,7 +206,7 @@ fragment RelPR on PullRequest {
   baseRefName additions deletions
   author { login }
   labels(first: 10) { nodes { name } }
-  latestOpinionatedReviews(first: 20) { nodes { author { login } state submittedAt } }
+  latestOpinionatedReviews(first: 20) { nodes { databaseId author { login } state submittedAt } }
   commits(last: 1) { nodes { commit { committedDate statusCheckRollup {
     state contexts(first: 50) { totalCount nodes { __typename
       ... on CheckRun { name status conclusion }

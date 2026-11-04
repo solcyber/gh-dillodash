@@ -56,6 +56,14 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # channel = "stable"          # published releases only; drafts and prereleases never
 
 # ============================================================================
+# Merge — how M merges, per repo (a repo whose branch rules want linear
+# history needs squash or rebase); unlisted repos use [workflows.release_pr]
+# merge_method, else a merge commit
+# ============================================================================
+[merge]
+# methods = {}                # e.g. { "acme/infra" = "squash" }
+
+# ============================================================================
 # Workflow: terraform approve
 # PRs whose plan digest comes from a bot, approved with a slash command
 # ============================================================================
@@ -104,6 +112,9 @@ enabled = false
 # missed_freeze_hint = ""                   # the recovery a missed night shows; default: a generic one
 # late_skip = ""                            # "HH:MM": the run starts no new item after it; default: not shown
 # closer = ""                               # "HH:MM": when the conductor closes the night; default: not shown
+# reserved_from = ""                        # with reserved_to: the span ("HH:MM") the apply dispatcher refuses an
+# reserved_to = ""                          #   immediate apply to a reserved stack without outside_window_flag; a offers the flag
+# reserved_stacks = []                      # the reserved stacks (patterns like "prod/*"); [] = every stack
 
 # ============================================================================
 # Workflow: release PRs
@@ -149,3 +160,24 @@ enabled = false
 enabled = false
 # repos = []                                # default: every [reviews] repo
 # approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
+
+# ============================================================================
+# Dispatch — the workflows X may run (nothing else is ever dispatched).
+# Each entry is a workflow file run with workflow_dispatch, or a
+# repository_dispatch event; X picks one, asks each input, shows the exact
+# payload, posts it and follows the new run. Needs Actions: write (a
+# workflow) or Contents: write (an event) on the repo. Repeat the table per
+# entry; an example:
+#
+#   [[workflows.dispatch]]
+#   name = "nightly window: dry-run freeze"   # the menu label (unique)
+#   repo = "acme/infra"
+#   workflow = "window.yml"                   # or: event = "window-close"
+#   ref = "main"                              # workflow_dispatch only (default "main")
+#   confirm = "a dry run posts nothing"       # an extra line in the confirm
+#   inputs = [
+#     { name = "phase", type = "choice", options = ["freeze", "run", "all"], default = "freeze" },
+#     { name = "dry_run", type = "boolean", default = true },
+#     { name = "night", type = "string", required = false, description = "YYYY-MM-DD; empty = tonight" },
+#   ]
+# ============================================================================

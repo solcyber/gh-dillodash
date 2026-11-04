@@ -36,6 +36,12 @@ flags, the minimum reason length, the ceremony window.
    at least `outside_window_min_reason` characters and no double quotes.
    The prompt counts down and refuses enter until the reason is long
    enough. Advisory ("shadow") verdicts queue nothing and get no question.
+   A plan that is **not** disruptive but goes to a stack the window
+   reserves (`maintenance_window` `reserved_from`, `reserved_to` and
+   `reserved_stacks`), while the reserved span is on, gets the same
+   choice: the dispatcher refuses a plain `/approve` there until the span
+   ends, so `a` offers to wait (the first entry) or to apply now with the
+   flag and a reason.
 4. Posts the `/approve` comment, then a GitHub approving review (a ruleset
    usually requires one for the eventual merge), best effort. When your
    review already stands on the PR (a plan you queued that the window

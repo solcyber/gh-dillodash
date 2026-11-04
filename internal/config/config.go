@@ -30,12 +30,16 @@ type Config struct {
 	Display  DisplayConfig
 	Bots     BotsConfig
 	Update   UpdateConfig
+	Merge    MergeConfig // [merge]
 	Warnings []string
 
 	TerraformApprove  *TerraformApproveConfig
 	MaintenanceWindow *MaintenanceWindowConfig
 	ReleasePR         *ReleasePRConfig
 	WaitingRuns       *WaitingRunsConfig
+	// Dispatches are the [[workflows.dispatch]] entries X may run; none
+	// means X is off.
+	Dispatches []DispatchConfig
 }
 
 // GitHubConfig is [github].
@@ -188,6 +192,11 @@ type MaintenanceWindowConfig struct {
 	// zone, nil = not set (not shown).
 	LateSkip *clock.HM
 	Closer   *clock.HM
+
+	// Reserved is reserved_from / reserved_to / reserved_stacks: the
+	// span the apply dispatcher refuses an immediate apply to a reserved
+	// stack without the outside-window flag (nil = none).
+	Reserved *ReservedWindow
 }
 
 // MissedHint is the recovery hint of a missed freeze.

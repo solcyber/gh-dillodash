@@ -226,8 +226,13 @@ type Model struct {
 	installTried     string
 	nextBuildCheckAt float64
 	restartQueued    bool
-	restartTo        *Restore
-	restore          *Restore
+	// the config's source (config pull) and a newer blob sha there
+	cfgSource      config.Source
+	cfgNewer       string
+	cfgChecking    bool
+	nextCfgCheckAt float64
+	restartTo      *Restore
+	restore        *Restore
 }
 
 // Options build a Model.

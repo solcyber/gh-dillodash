@@ -239,12 +239,14 @@ func (m *Model) doTag(app *lockedApp) {
 	m.doComment(app, true, "@"+others[i].Login+" ")
 }
 
-// mergeMethod is the merge method M uses.
-func (m *Model) mergeMethod() string {
+// mergeMethod is the merge method M uses on repo: [merge] methods, else
+// [workflows.release_pr] merge_method, else a merge commit.
+func (m *Model) mergeMethod(repo model.Repo) string {
+	def := "merge"
 	if m.cfg.ReleasePR != nil && m.cfg.ReleasePR.MergeMethod != "" {
-		return m.cfg.ReleasePR.MergeMethod
+		def = m.cfg.ReleasePR.MergeMethod
 	}
-	return "merge"
+	return m.cfg.Merge.Method(repo, def)
 }
 
 // doMerge is the M key: merge the open, approved PR, naming its head sha
@@ -287,7 +289,7 @@ func (m *Model) doMerge(app *lockedApp) {
 	if base == "" {
 		base = "the base branch"
 	}
-	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod())
+	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod(repo))
 	ok, handled := m.wf.MergeConfirm(app, pr)
 	if !handled {
 		ok = app.Confirm(what)
@@ -296,7 +298,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice("merge cancelled")
 		return
 	}
-	res, err := m.gh.MergePR(m.ctx, repo, pr.Number, head, "", m.mergeMethod())
+	res, err := m.gh.MergePR(m.ctx, repo, pr.Number, head, "", m.mergeMethod(repo))
 	if err != nil {
 		app.Fail(fmt.Sprintf("merge of %s failed: %s%s", where, err, deploys.TokenHint(err, "Contents", repo)))
 		return

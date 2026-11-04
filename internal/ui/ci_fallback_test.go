@@ -188,8 +188,8 @@ func TestApproveReachesTheWorkflowOnAnApprovedRelease(t *testing.T) {
 	if len(h.gh.Approvals) != 0 {
 		t.Errorf("no second review: %v", h.gh.Approvals)
 	}
-	if len(menu) != 1 || !strings.HasPrefix(menu[0], "release NOW") {
-		t.Errorf("the menu offers NOW alone: %q (status %q)", menu, h.m.status)
+	if len(menu) != 3 || !strings.HasPrefix(menu[0], "release NOW") || !strings.HasPrefix(menu[1], "dismiss my approval") {
+		t.Errorf("the menu offers NOW first, then dismiss or request changes: %q (status %q)", menu, h.m.status)
 	}
 	if c := h.gh.CommentsPosted; len(c) != 1 || c[0].Body != `/release-now "bumped from the window for time"` {
 		t.Errorf("the release-now comment, exactly: %+v", c)
@@ -217,8 +217,8 @@ func TestGotoReachesAReleaseRepo(t *testing.T) {
 	var menu []string
 	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return -1 }
 	h.key('a')
-	if len(menu) != 1 || !strings.HasPrefix(menu[0], "release NOW") {
-		t.Errorf("the menu offers NOW alone: %q (status %q)", menu, h.m.status)
+	if len(menu) != 3 || !strings.HasPrefix(menu[0], "release NOW") || !strings.HasPrefix(menu[1], "dismiss my approval") {
+		t.Errorf("the menu offers NOW first, then dismiss or request changes: %q (status %q)", menu, h.m.status)
 	}
 	if strings.Contains(h.m.status, "second review") {
 		t.Errorf("never the core's notice: %q", h.m.status)

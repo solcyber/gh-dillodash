@@ -198,6 +198,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.updater != nil && fx.Now() >= m.nextBuildCheckAt {
 			m.checkBuild(true)
 		}
+		if m.cfg != nil && m.cfg.Path != "" && fx.Now() >= m.nextCfgCheckAt {
+			m.checkConfig()
+		}
 		if m.restartQueued && m.modal == nil && !m.action {
 			return m, m.restartNow()
 		}
@@ -208,6 +211,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyPoll(msg.out)
 	case buildCheckMsg:
 		m.applyBuildCheck(msg.st)
+	case configCheckMsg:
+		m.applyConfigCheck(msg)
 	case buildInstallMsg:
 		m.applyBuildInstall(msg.res)
 	case showModalMsg:
@@ -499,6 +504,21 @@ func doShowAll(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 
 func doDeploys(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	m.runAction(func() { m.doDeployApprove(app) })
+	return nil
+}
+
+func doRuns(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doRuns(app) })
+	return nil
+}
+
+func doDispatch(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doDispatch(app) })
+	return nil
+}
+
+func doConfigPull(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doConfigPull(app) })
 	return nil
 }
 

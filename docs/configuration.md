@@ -65,6 +65,52 @@ it runs whatever it wraps.
 |---|---|---|
 | `logins` | `["github-actions", "dependabot"]` | Authors drawn as bots (dimmed, blue) in the list and the timeline. The match is exact (case-insensitive), with or without a `[bot]` suffix, and a login ending in `[bot]` always counts. Add your own automation account. The signed-in login may not be one of these: dillodash refuses to post as a bot, and `config check` fails. |
 
+## `[merge]`
+
+`methods` names the merge method `M` uses per repo, `{ "acme/infra" =
+"squash" }`: a repo whose branch rules want a linear history refuses a
+merge commit. A repo not listed merges with `[workflows.release_pr]
+merge_method`, else as a merge commit. Each value is `merge`, `squash` or
+`rebase`.
+
+## `[[workflows.dispatch]]`
+
+The workflows `X` may run, one table per entry; nothing else is ever
+dispatched, and `X` stays out of the bar while none is listed.
+
+```toml
+[[workflows.dispatch]]
+name = "nightly window: dry-run freeze"   # the menu label, unique
+repo = "acme/infra"
+workflow = "window.yml"                   # workflow_dispatch on this file
+ref = "main"                              # the ref it runs on (default "main")
+confirm = "a dry run posts nothing"       # an extra line in the confirm
+inputs = [
+  { name = "phase", type = "choice", options = ["freeze", "run", "all"], default = "freeze" },
+  { name = "dry_run", type = "boolean", default = true },
+  { name = "night", description = "YYYY-MM-DD; empty = tonight" },
+]
+
+[[workflows.dispatch]]
+name = "close a night by hand"
+repo = "acme/infra"
+event = "window-close"                    # a repository_dispatch event instead
+inputs = [{ name = "night", required = true }]
+```
+
+Set exactly one of `workflow` and `event`. An input's `type` is `string`
+(the default), `boolean`, `choice` (with `options`) or `number`; a
+`default` must fit its type, and `required` refuses an empty answer. `X`
+asks the inputs in order (a choice or a boolean as a menu with the default
+first, so enter takes it), shows the exact request (`POST
+repos/acme/infra/actions/workflows/window.yml/dispatches {...}`) with the
+`confirm` line, and sends it as you. An empty optional input is left out,
+so the workflow's own default applies. `workflow_dispatch` inputs travel
+as strings; an event's `client_payload` keeps booleans and numbers typed.
+After a `workflow_dispatch` the status line finds the new run (yours, of
+that file, since the dispatch) and follows it to its conclusion. The token
+needs Actions write for a workflow and Contents write for an event.
+
 ## `[workflows.*]`
 
 Each workflow is off unless its table exists with `enabled = true`. A table
@@ -84,7 +130,11 @@ accepts only the `{repo}` and `{number}` placeholders, and
 `release_pr.approval_queues_for_window`
 needs `maintenance_window` enabled; `release_pr.org` is required when the
 review repos span several owners; times are `HH:MM`, zones are IANA
-names, and the window's `cutoff < release_from < start < end` on one day.
+names, and the window's `cutoff < release_from < start < end` on one day;
+`maintenance_window.reserved_from` and `reserved_to` come together; a
+`[[workflows.dispatch]]` entry sets exactly one of `workflow` and `event`,
+has a unique `name`, and its inputs' defaults fit their types; `[merge]
+methods` names `owner/name` repos with `merge`, `squash` or `rebase`.
 
 And as warnings: `maintenance_window.manifest_repo` defaults to the first
 review repo when there are several; `release_pr.progress_poll_secs` has a
@@ -94,6 +144,14 @@ would match every release of a repo; `release_now_dispatch`,
 `maintenance_window`, whose `manifest_repo` runs the release.
 
 ## Installing the config from a repo
+
+A pulled config stays current by itself in the dashboard too: about once
+an hour it compares the installed file's blob sha with its source's. When
+the repo has a newer file, the status line says `config outdated: <repo>
+has a newer <path> (P pulls it and restarts)`, and `P` in the list pulls
+it (refusing one that does not validate, as `config pull` does) and
+restarts into it, keeping your place. A config somebody edited on the
+dashboard host is never compared or replaced.
 
 An organization can keep its config in a repository its members can read
 (private is fine: the fetch goes through the `gh` token) and install it

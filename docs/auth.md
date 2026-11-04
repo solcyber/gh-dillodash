@@ -37,17 +37,20 @@ with one), create it with:
 | Metadata | Read (added automatically); `release_pr` discovery reads the org's repos and rulesets with it |
 | Commit statuses | Read, only if some CI posts classic statuses; harmless to include |
 
-Merging and approving deployments need more, on the repos where you use
-`M` and `D`:
+Merging, approving deployments and acting on runs need more, on the repos
+where you use `M`, `D`, `x` and `X`:
 
 | Setting | Value |
 |---|---|
 | Contents | **Read and write**: `M` merges through GitHub's merge endpoint; the release-now dispatch on the window's manifest repo is a contents write there too |
-| Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge or on a waiting run |
+| Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge or on a waiting run; `x` rejects one |
+| Actions | **Read and write**: `x` re-runs and cancels a run (reading its log is Actions read); `X` runs a listed workflow with `workflow_dispatch` |
+| Contents | **Read and write** on a repo `X` fires a `repository_dispatch` event on |
+| Pull requests | **Read and write** (as above): request changes and dismissing your own approval are review writes too |
 | Members (organization) | **Read**, only with `[github] approvers_team`: dillodash checks the posting login is in the team before it posts a release, window or plan command; without it dillodash warns and posts unchecked |
 
 Without them GitHub answers `403 Resource not accessible by personal access
-token`, and `M`/`D` name the permission to add.
+token`, and `M`, `D`, `x` and `X` name the permission to add.
 
 Updates read `solcyber/gh-dillodash`'s releases on github.com with the
 `gh` login for github.com (any token, or none: the repository is public)

@@ -115,12 +115,17 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			title = fmt.Sprintf("%s is a release — an approving review lets M merge it", wh)
 		}
 	}
+	labels, paths = append(labels, changesLabel), append(paths, "changes")
 	i := app.Pick(title, labels)
 	if i < 0 || i >= len(paths) {
 		app.Notice("approve cancelled")
 		return true
 	}
 	path := paths[i]
+	if path == "changes" {
+		w.requestChanges(app, pr, wh)
+		return true
+	}
 	body := ""
 	if path == "now" {
 		if !w.laneWait(app, pr) {
@@ -169,6 +174,17 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 // release already on its way has nothing left to post.
 func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel string, queues bool) bool {
 	if w.inFlight(pr) {
+		// on its way, unless nobody picked the command up: then the only
+		// thing left is to tell the manifest repo about it
+		if id, at, ok := w.unpicked(pr, app.Now()); ok {
+			title := fmt.Sprintf("%s: the %s posted %s ago has no run — the manifest repo was never told", wh, w.cfg.ReleaseNowCommand, ago(app.Now().Sub(at)))
+			if app.Pick(title, []string{fmt.Sprintf("fire %s for that comment (no new comment, no review)", w.cfg.ReleaseNowDispatchEvent)}) != 0 {
+				app.Notice("dispatch cancelled")
+				return true
+			}
+			w.refire(app, pr, wh, id)
+			return true
+		}
 		app.Notice(fmt.Sprintf("%s is approved by you and already on its way — nothing to post.", wh))
 		return true
 	}
@@ -177,7 +193,15 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 		stands += " and queues it"
 	}
 	title := fmt.Sprintf("%s is already approved by you — %s; NOW posts %s without a second review", wh, stands, w.cfg.ReleaseNowCommand)
-	if app.Pick(title, []string{nowLabel}) != 0 {
+	switch app.Pick(title, []string{nowLabel, dismissLabel, changesLabel}) {
+	case 0:
+	case 1:
+		w.dismissMine(app, pr, wh)
+		return true
+	case 2:
+		w.requestChanges(app, pr, wh)
+		return true
+	default:
 		app.Notice("approve cancelled")
 		return true
 	}
@@ -191,6 +215,21 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 	w.postNow(app, pr, body, wh+":", wh+":", wh+":")
 	app.Refresh(true)
 	return true
+}
+
+// The review choices a offers beside approve and NOW.
+const (
+	changesLabel = "request changes — takes it out of the window, with a reason"
+	dismissLabel = "dismiss my approval — takes it out of the queue; a approves it again to re-queue"
+)
+
+// ago is a short duration ("3m", "1h05m").
+func ago(d time.Duration) string {
+	d = d.Round(time.Minute)
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // nowBody asks for the release-now reason and confirms the exact
@@ -232,6 +271,7 @@ func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldL
 		app.Fail(fmt.Sprintf("%s %s NOT posted: %s", failLead, cmd, err))
 		return
 	}
+	w.noteComment(pr, app.Now(), id)
 	// The comment lives in the release repo, whose events never reach
 	// the manifest repo's workflows, so tell them: a repository_dispatch
 	// naming the comment. The receiving side re-derives everything from
@@ -389,9 +429,9 @@ func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handle
 		base = w.cfg.ProductionBranch
 	}
 	how := "as a merge commit"
-	switch w.cfg.MergeMethod {
+	switch method := app.Config().Merge.Method(pr.Repo, w.cfg.MergeMethod); method {
 	case "squash", "rebase":
-		how = "with a " + w.cfg.MergeMethod
+		how = "with a " + method
 	}
 	what := fmt.Sprintf("merge %s (%s -> %s at %s) %s? This DEPLOYS production.", wh, head, base, model.ShortSHA(pr.HeadRefOid), how)
 	if w.InReleaseWindow(app.Now()) {

@@ -105,6 +105,21 @@ and a PR that is not a release, then offers:
   its way, `a` says so and posts nothing. Before 1.5.3 the core refused `a`
   on any PR you had approved, so an approved release could only be
   released now by posting the comment and firing the dispatch by hand.
+- **Request changes**, always the last entry: a request-changes review
+  with a reason of at least ten characters. The conductor's freeze skips a
+  release that is not approved, so this is how a release comes out of
+  tonight's window before the freeze, with no comment on the manifest.
+- **Dismiss my approval**, after NOW on a release you approved: dismisses
+  your approving review (by its id, read from the row or the PR) with a
+  message. Withdrawn, the release leaves the queue; `a` approves it again,
+  and so queues it again, whenever it should go (after a `/window-cancel`,
+  say).
+- **A command nobody picked up.** A `/release-now` posted from the PR page
+  fires no dispatch, and a dispatch can fail. When the command has waited
+  two minutes with no run (at once when this session's dispatch failed),
+  `a` on the release offers one thing: fire the `release-now` dispatch for
+  **that** comment (its id is the payload), with no second comment and no
+  review. `M` stays the last resort after five minutes.
 - **From anywhere.** The same menu comes up whether the release was
   opened from its row under `releases`, from its row under a night
   (scheduled, bumped or rolled), from `:` (`repo#N` reaches the enrolled
@@ -144,6 +159,12 @@ Without the window workflow, an approving review is just an approval, and
   whose head is that merge, only environments you are a reviewer of. With
   nothing to approve it says what the deploy is doing instead. The
   approval carries `deploy_approval_comment`.
+- `x` on a release (its row, or its detail) lists its runs: the release
+  run in the manifest repo, then the runs on its merge (or head) commit.
+  Pick one to re-run its failed jobs or every job, cancel it, reject the
+  deployment it waits on (a second choice with its own prompt and confirm;
+  `D` only ever approves), or read a job's log in `$PAGER`. Every write
+  asks first.
 - While a deploy waits or runs dillodash refreshes every
   `deploy_refresh_secs` and says once per environment when one starts
   waiting for you (`web-portal#143: prod now waits for your approval —
@@ -284,7 +305,7 @@ sweeps and the card still redraws on every poll.
 On every release repo the token needs Pull requests read and write (the
 review), Issues read and write (the `/release-now` comment), Contents read,
 Actions read, Metadata read (discovery), and for `M` and `D` Contents and
-Deployments read and write. The release-now dispatch needs Contents read
+Deployments read and write; for `x`, Actions read and write. The release-now dispatch needs Contents read
 and write on the window's `manifest_repo` (a `repository_dispatch` is a
 contents write there); following the release there needs Actions read on
 it (the run's jobs and steps). With `[github] approvers_team`, organization

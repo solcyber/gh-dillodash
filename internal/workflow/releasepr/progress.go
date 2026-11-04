@@ -155,10 +155,11 @@ type track struct {
 	repo   model.Repo
 	number int
 
-	firstSeen   time.Time // when the tracker noticed it
-	nowPostedAt time.Time // this session posted the command then
-	commentsAt  time.Time // pr.UpdatedAt when comments were last read
-	comments    []model.Comment
+	firstSeen    time.Time // when the tracker noticed it
+	nowPostedAt  time.Time // this session posted the command then
+	nowCommentID int64     // and the comment's id (or the one a re-fired dispatch named)
+	commentsAt   time.Time // pr.UpdatedAt when comments were last read
+	comments     []model.Comment
 
 	run      *model.WorkflowRun
 	job      *model.WorkflowJob
@@ -238,6 +239,14 @@ func (w *Workflow) notePosted(pr *model.PR, now time.Time, told bool) {
 	t := w.trackFor(pr, true, now)
 	t.nowPostedAt, t.notTold = now, !told
 	t.set(w.derive(pr, t, now))
+}
+
+// noteComment records the id of the command comment this session
+// posted, for a dispatch fired again later.
+func (w *Workflow) noteComment(pr *model.PR, now time.Time, id int64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.trackFor(pr, true, now).nowCommentID = id
 }
 
 // unpickedAfter is how long a posted command may wait for its run
