@@ -504,7 +504,7 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 // HelpRows are the workflow's help lines.
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
-		{"runs", "D  on a waiting run: approve the environments you review   o  open the run on GitHub"},
+		{"runs", "D  on a waiting run: approve the environments you review   x  reject, cancel or read its log   o  open the run on GitHub"},
 	}
 }
 
@@ -638,4 +638,25 @@ func plural(n int, noun string) string {
 		return "1 " + noun
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// RunTargets offers the selected waiting run to x (re-run, cancel,
+// reject, logs).
+func (w *Workflow) RunTargets(app workflow.App) []workflow.RunTarget {
+	if app.CurrentView() != "list" {
+		return nil
+	}
+	row, ok := app.Selected()
+	if !ok || row.Kind != RowRun {
+		return nil
+	}
+	it, ok := row.Item.(*Item)
+	if !ok {
+		return nil
+	}
+	why := "waits"
+	if envs := it.Envs(); len(envs) > 0 {
+		why = "waits on " + strings.Join(envs, ", ")
+	}
+	return []workflow.RunTarget{{Repo: it.Repo, Run: it.Run, Why: why}}
 }

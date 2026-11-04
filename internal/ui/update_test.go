@@ -116,7 +116,7 @@ func TestStaleBuildGatesApproveOnARelease(t *testing.T) {
 	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return -1 }
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "", false }
 	h.key('a')
-	if len(menu) != 1 || !strings.HasPrefix(menu[0], "release NOW") {
+	if len(menu) != 3 || !strings.HasPrefix(menu[0], "release NOW") {
 		t.Errorf("after the gate: %q", menu)
 	}
 }

@@ -428,6 +428,27 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		} else {
 			note += fmt.Sprintf("\nWindow: %s — this %s queues the apply for %s %s window.", verdict.Verdict, cmd, night, start)
 		}
+	case !cand.Ceremony && !disruptive && w.window != nil && w.window.Reserved.Covers(w.window.Local(), now, cand.Stack):
+		// A harmless plan, but to a stack the window reserves, inside the
+		// span the dispatcher refuses an immediate apply there: a plain
+		// command would only be refused. Waiting is the normal path; the
+		// flag, with a reason, is the deliberate one.
+		r := w.window.Reserved
+		span := w.window.Local().Span(r.From, r.To)
+		i := app.Pick(fmt.Sprintf("%s is reserved for the maintenance window and it is inside %s — a plain %s is REFUSED until %s",
+			cand.Stack, span, cmd, r.To),
+			[]string{fmt.Sprintf("cancel — re-run 'a' after %s", r.To),
+				fmt.Sprintf("apply NOW, outside the window (%s) — real emergencies only", cfg.OutsideWindowFlag)})
+		if i != 1 {
+			app.Notice("approve cancelled")
+			return true
+		}
+		reason, ok := reasonPrompt(" with the command")
+		if !ok || len([]rune(reason)) < cfg.OutsideWindowMinReason || strings.Contains(reason, `"`) {
+			app.Notice("approve cancelled")
+			return true
+		}
+		outside = fmt.Sprintf(` %s="%s"`, cfg.OutsideWindowFlag, reason)
 	}
 
 	// Build the command. The validator requires --confirm-destroys=N

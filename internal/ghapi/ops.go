@@ -227,6 +227,29 @@ func (c *GitHub) MergePR(ctx context.Context, repo model.Repo, number int, sha, 
 	return res, err
 }
 
+// RequestChanges posts a REQUEST_CHANGES review; GitHub refuses one
+// with an empty body.
+func (c *GitHub) RequestChanges(ctx context.Context, repo model.Repo, number int, body string) error {
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("pulls/%d/reviews", number)),
+		map[string]any{"event": "REQUEST_CHANGES", "body": body}, nil)
+}
+
+// DismissReview dismisses a review with a message.
+func (c *GitHub) DismissReview(ctx context.Context, repo model.Repo, number int, reviewID int64, message string) error {
+	return c.restJSON(ctx, http.MethodPut, repoPath(repo, fmt.Sprintf("pulls/%d/reviews/%d/dismissals", number, reviewID)),
+		map[string]any{"message": message, "event": "DISMISS"}, nil)
+}
+
+// DispatchWorkflow fires workflow_dispatch on a workflow file (its file
+// name or id) at ref. GitHub answers 204.
+func (c *GitHub) DispatchWorkflow(ctx context.Context, repo model.Repo, file, ref string, inputs map[string]any) error {
+	if inputs == nil {
+		inputs = map[string]any{}
+	}
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, "actions/workflows/"+url.PathEscape(file)+"/dispatches"),
+		map[string]any{"ref": ref, "inputs": inputs}, nil)
+}
+
 // ---- Actions -----------------------------------------------------------
 
 type runsPage struct {
@@ -315,6 +338,37 @@ func (c *GitHub) ApproveDeployments(ctx context.Context, repo model.Repo, runID 
 	path := repoPath(repo, fmt.Sprintf("actions/runs/%d/pending_deployments", runID))
 	return c.restJSON(ctx, http.MethodPost, path,
 		map[string]any{"environment_ids": envIDs, "state": "approved", "comment": comment}, nil)
+}
+
+// RejectDeployments rejects the run's pending deployments to envIDs.
+func (c *GitHub) RejectDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error {
+	if envIDs == nil {
+		envIDs = []int64{}
+	}
+	path := repoPath(repo, fmt.Sprintf("actions/runs/%d/pending_deployments", runID))
+	return c.restJSON(ctx, http.MethodPost, path,
+		map[string]any{"environment_ids": envIDs, "state": "rejected", "comment": comment}, nil)
+}
+
+// RerunRun re-runs every job of a run.
+func (c *GitHub) RerunRun(ctx context.Context, repo model.Repo, runID int64) error {
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("actions/runs/%d/rerun", runID)), map[string]any{}, nil)
+}
+
+// RerunFailedJobs re-runs a run's failed jobs.
+func (c *GitHub) RerunFailedJobs(ctx context.Context, repo model.Repo, runID int64) error {
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("actions/runs/%d/rerun-failed-jobs", runID)), map[string]any{}, nil)
+}
+
+// CancelRun cancels a run.
+func (c *GitHub) CancelRun(ctx context.Context, repo model.Repo, runID int64) error {
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("actions/runs/%d/cancel", runID)), nil, nil)
+}
+
+// JobLogs is a job's log: GitHub answers with a redirect to a signed
+// URL, which the HTTP client follows (and drops the token for).
+func (c *GitHub) JobLogs(ctx context.Context, repo model.Repo, jobID int64) (string, error) {
+	return c.restRaw(ctx, repoPath(repo, fmt.Sprintf("actions/jobs/%d/logs", jobID)), acceptJSON)
 }
 
 // ---- REST reads --------------------------------------------------------

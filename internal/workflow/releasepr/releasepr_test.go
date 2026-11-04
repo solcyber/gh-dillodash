@@ -232,8 +232,9 @@ func TestApproveAlreadyApprovedOffersNowOnly(t *testing.T) {
 		t.Fatal("an approved release PR is still handled")
 	}
 	want := `/release-now "` + reason + `"`
-	if m := app.Menus[0]; len(m) != 2 || !strings.HasPrefix(m[1], "release NOW") || !strings.Contains(m[0], "already approved by you") {
-		t.Errorf("the menu offers NOW alone and says why: %q", m)
+	if m := app.Menus[0]; len(m) != 4 || !strings.HasPrefix(m[1], "release NOW") || !strings.HasPrefix(m[2], "dismiss my approval") ||
+		!strings.HasPrefix(m[3], "request changes") || !strings.Contains(m[0], "already approved by you") {
+		t.Errorf("the menu offers NOW (no second review), dismiss and request changes, and says why: %q", m)
 	}
 	if len(app.Fake.Approvals) != 0 {
 		t.Errorf("no second review: %v", app.Fake.Approvals)
@@ -271,8 +272,8 @@ func TestApproveAlreadyApprovedThisSession(t *testing.T) {
 	if len(app.Fake.Approvals) != 1 || len(comments(app)) != 1 {
 		t.Errorf("one review, then the command alone: %v %q", app.Fake.Approvals, comments(app))
 	}
-	if m := app.Menus[1]; len(m) != 2 || !strings.HasPrefix(m[1], "release NOW") {
-		t.Errorf("the second a offers NOW alone: %q", m)
+	if m := app.Menus[1]; len(m) != 4 || !strings.HasPrefix(m[1], "release NOW") {
+		t.Errorf("the second a offers NOW first, and no second review: %q", m)
 	}
 
 	// A new head is a new release: the old approval no longer counts.
@@ -281,7 +282,7 @@ func TestApproveAlreadyApprovedThisSession(t *testing.T) {
 	app.Approved[pr.Ident()] = "oldsha"
 	app.Picks, app.Confirms = []int{0}, []bool{true}
 	w.Approve(app, pr, nil)
-	if len(app.Fake.Approvals) != 1 || len(app.Menus[0]) != 3 {
+	if len(app.Fake.Approvals) != 1 || len(app.Menus[0]) != 4 {
 		t.Errorf("a moved head is approved afresh, with both paths: %v %q", app.Fake.Approvals, app.Menus[0])
 	}
 }
@@ -1226,7 +1227,7 @@ func TestDetailCards(t *testing.T) {
 	if card = flat(w.DetailCards(app, stuck, nil, 80)); !strings.Contains(card, "run 77 has gone longer than 45 minutes") {
 		t.Errorf("a stuck run is called out:\n%s", card)
 	}
-	if rows := w.HelpRows(); len(rows) != 3 || rows[0][0] != "releases" || !strings.Contains(rows[0][1], "/release-now") || !strings.Contains(rows[2][1], "rail") {
+	if rows := w.HelpRows(); len(rows) != 4 || rows[0][0] != "releases" || !strings.Contains(rows[0][1], "/release-now") || !strings.Contains(rows[2][1], "rail") {
 		t.Errorf("help rows: %v", rows)
 	}
 	if rows := w.LegendRows(); len(rows) != 3 || !strings.Contains(text.SegsText(rows[1]), "deploying") ||

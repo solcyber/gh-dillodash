@@ -59,6 +59,12 @@ func (m *Model) MarkApproved(pr *model.PR) {
 	m.approvedByMe[pr.Ident()] = pr.HeadRefOid
 	m.detailVer++
 }
+
+// UnmarkApproved forgets the instant "approved by me" mark.
+func (m *Model) UnmarkApproved(pr *model.PR) {
+	delete(m.approvedByMe, pr.Ident())
+	m.detailVer++
+}
 func (m *Model) Detail() any             { return m.detail }
 func (m *Model) DetailListed() *model.PR { return m.detailListed }
 func (m *Model) DetailKind() string      { return m.detailKind }
@@ -154,7 +160,8 @@ func (a *lockedApp) LocalApproved(pr *model.PR) bool {
 	defer a.lock()()
 	return a.m.localApproved(pr)
 }
-func (a *lockedApp) MarkApproved(pr *model.PR) { defer a.lock()(); a.m.MarkApproved(pr) }
+func (a *lockedApp) MarkApproved(pr *model.PR)   { defer a.lock()(); a.m.MarkApproved(pr) }
+func (a *lockedApp) UnmarkApproved(pr *model.PR) { defer a.lock()(); a.m.UnmarkApproved(pr) }
 
 // IApproved reports whether I approved pr's current head (lock taken).
 func (a *lockedApp) IApproved(pr *model.PR) bool { defer a.lock()(); return a.m.iApproved(pr) }

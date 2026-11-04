@@ -151,6 +151,9 @@ type App interface {
 	Issues() []*model.Issue
 	LocalApproved(pr *model.PR) bool
 	MarkApproved(pr *model.PR)
+	// UnmarkApproved forgets a this-session approval (the review was
+	// dismissed); the next refresh brings GitHub's word.
+	UnmarkApproved(pr *model.PR)
 	Detail() any // *model.PR or *model.Issue, or nil
 	DetailListed() *model.PR
 	Selected() (Row, bool)
@@ -269,6 +272,23 @@ type DeployProvider interface {
 // goroutine, so it may prompt and call GitHub.
 type RowDeployer interface {
 	DeployRow(app App, row Row) (handled bool)
+}
+
+// RunTarget is an Actions run the x key may act on (re-run, cancel,
+// reject a deployment it waits on, read a job's log), and why it is on
+// offer ("the release run", "waits on prod").
+type RunTarget struct {
+	Repo model.Repo
+	Run  model.WorkflowRun
+	Why  string
+}
+
+// RunProvider is implemented by a workflow whose selected row or open
+// item carries Actions runs of its own (a release's run in another repo,
+// a waiting run): x offers them ahead of the runs on the PR's own
+// commit. It runs on the action goroutine and may read GitHub.
+type RunProvider interface {
+	RunTargets(app App) []RunTarget
 }
 
 // Poller is a workflow with items in flight that are cheaper to watch

@@ -89,6 +89,7 @@ func NewSet(ctx *Context, items ...Workflow) (*Set, error) {
 var coreKeys = map[string]bool{
 	"list:/": true, "list::": true, "list:A": true, "list:D": true, "list:G": true, "list:d": true, "list:g": true, "list:j": true,
 	"list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:y": true, "list:R": true,
+	"list:x": true, "list:X": true, "list:P": true, "detail:x": true, "detail:X": true,
 	"detail:/": true, "detail:C": true, "detail:D": true, "detail:G": true, "detail:M": true, "detail:N": true, "detail:a": true, "detail:c": true,
 	"detail:f": true, "detail:g": true, "detail:h": true, "detail:j": true, "detail:k": true, "detail:m": true, "detail:n": true, "detail:o": true,
 	"detail:q": true, "detail:r": true, "detail:t": true, "detail:v": true, "detail:y": true, "detail:R": true,
@@ -532,6 +533,21 @@ func (s *Set) DeployRow(app App, row Row) bool {
 		}
 	}
 	return false
+}
+
+// RunTargets is every workflow's runs for the selection or the open
+// item (RunProvider), in workflow order.
+func (s *Set) RunTargets(app App) []RunTarget {
+	if s == nil {
+		return nil
+	}
+	var out []RunTarget
+	for _, w := range s.Items {
+		if p, ok := w.(RunProvider); ok {
+			out = append(out, p.RunTargets(app)...)
+		}
+	}
+	return out
 }
 
 // DeployComment returns the first workflow's deployment comment, or "".

@@ -103,3 +103,37 @@ func TestDInDetailAfterAnExternalMerge(t *testing.T) {
 		t.Errorf("D in the detail did not approve the waiting prod deploy: %+v (status %q)", got, h.m.status)
 	}
 }
+
+// TestDApprovePathIsUnchanged: D on a merged PR with one deploy that
+// waits on you asks one y/N question and approves on y. It never shows
+// a menu first (reject lives under x, with its own confirm).
+func TestDApprovePathIsUnchanged(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	id := model.Ident{Repo: infra, Number: 101}
+	sha := strings.Repeat("f", 40)
+	run := model.WorkflowRun{ID: 88, Name: "deploy", Status: "waiting", HeadSHA: sha, HeadBranch: "main", Event: "push", CreatedAt: t0}
+	var prod model.PendingDeployment
+	prod.Environment.ID, prod.Environment.Name, prod.CurrentUserCanApprove = 3, "prod", true
+	h.gh.Mutate(func() {
+		h.gh.PRs[id].State = "MERGED"
+		h.gh.PRs[id].MergeCommit = &model.MergeCommit{Oid: sha}
+		h.gh.Runs = map[string][]model.WorkflowRun{sha: {run}}
+		h.gh.Pending = map[int64][]model.PendingDeployment{88: {prod}}
+	})
+	h.key('r')
+	var asked []string
+	h.m.tp.Pick = func(title string, _ []string) int { t.Errorf("D showed a menu: %q", title); return -1 }
+	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return true }
+	h.key('D')
+	if len(asked) != 1 || !strings.HasPrefix(asked[0], "approve 1 deployment of #101 on merge ") {
+		t.Errorf("one approve question: %q", asked)
+	}
+	if got := h.gh.DeployApprovals; len(got) != 1 || got[0].RunID != 88 {
+		t.Errorf("approved: %+v", got)
+	}
+	if len(h.gh.CallsFor("reject_deployments")) != 0 {
+		t.Error("D never rejects")
+	}
+}

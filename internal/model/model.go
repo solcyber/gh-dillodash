@@ -70,6 +70,9 @@ func (l Labels) Has(name string) bool {
 
 // Comment is an issue or PR comment.
 type Comment struct {
+	// ID is the comment's database id (what a REST call or a dispatch
+	// payload names it by); 0 when the query did not read it.
+	ID        int64     `json:"databaseId"`
 	Author    Actor     `json:"author"`
 	CreatedAt time.Time `json:"createdAt"`
 	Body      string    `json:"body"`
@@ -83,6 +86,9 @@ type Comments struct {
 
 // Review is a PR review.
 type Review struct {
+	// ID is the review's database id (what a dismissal names); 0 when
+	// the query did not read it.
+	ID          int64     `json:"databaseId"`
 	Author      Actor     `json:"author"`
 	State       string    `json:"state"`
 	SubmittedAt time.Time `json:"submittedAt"`

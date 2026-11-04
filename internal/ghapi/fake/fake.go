@@ -18,7 +18,7 @@ import (
 
 // Call is one recorded mutation.
 type Call struct {
-	Op      string // approve, comment, merge, approve_deployments, dispatch
+	Op      string // approve, request_changes, dismiss_review, comment, merge, approve_deployments, reject_deployments, dispatch, dispatch_workflow, rerun, rerun_failed, cancel_run
 	Repo    model.Repo
 	Number  int
 	Body    string         // review/comment body, or the deployment comment
@@ -29,7 +29,9 @@ type Call struct {
 	EnvIDs  []int64        // approve_deployments
 	Event   string         // dispatch: the event type
 	Payload map[string]any // dispatch: the client payload
-	ID      int64          // comment: the id handed back (1, 2, ... per fake)
+	ID      int64          // comment: the id handed back (1, 2, ... per fake); dismiss_review: the review id
+	File    string         // dispatch_workflow: the workflow file
+	Ref     string         // dispatch_workflow: the ref
 }
 
 // Client is the fake. Fill the maps, then hand it to the UI; every
@@ -100,11 +102,16 @@ type Client struct {
 	Teams map[string][]string
 
 	// Fail makes the named op return the error: whoami, team_member, list, pr_detail,
-	// issue_detail, users, comments, labelled, approve, comment, dispatch,
-	// merge, waiting_runs, repo_waiting_runs, pending, approve_deployments, workflow_runs,
-	// file_runs, jobs, files, diff, compare, tags, org_repos, rulesets,
-	// fortress, releases.
+	// issue_detail, users, comments, labelled, approve, request_changes,
+	// dismiss_review, comment, dispatch, dispatch_workflow, merge,
+	// waiting_runs, repo_waiting_runs, pending, approve_deployments,
+	// reject_deployments, rerun, rerun_failed, cancel_run, job_logs,
+	// workflow_runs, file_runs, jobs, files, diff, compare, tags,
+	// org_repos, rulesets, fortress, releases.
 	Fail map[string]error
+
+	// JobLog is JobLogs' answer per job id.
+	JobLog map[int64]string
 
 	// Merge is MergePR's answer when it succeeds (zero: sha "m3rge"+sha[:3],
 	// merged true).
@@ -120,6 +127,8 @@ type Client struct {
 	Merges          []Call
 	DeployApprovals []Call
 	Dispatches      []Call
+	// RunActions are the re-run, re-run-failed and cancel calls.
+	RunActions []Call
 	// Reads counts every read op by name, for tests that assert caching.
 	Reads map[string]int
 
@@ -184,8 +193,10 @@ func (f *Client) recordLocked(c Call) {
 		f.Merges = append(f.Merges, c)
 	case "approve_deployments":
 		f.DeployApprovals = append(f.DeployApprovals, c)
-	case "dispatch":
+	case "dispatch", "dispatch_workflow":
 		f.Dispatches = append(f.Dispatches, c)
+	case "rerun", "rerun_failed", "cancel_run":
+		f.RunActions = append(f.RunActions, c)
 	}
 }
 
@@ -392,6 +403,79 @@ func (f *Client) Dispatch(ctx context.Context, repo model.Repo, eventType string
 	}
 	f.record(Call{Op: "dispatch", Repo: repo, Event: eventType, Payload: payload})
 	return nil
+}
+
+// RequestChanges records a REQUEST_CHANGES review.
+func (f *Client) RequestChanges(ctx context.Context, repo model.Repo, number int, body string) error {
+	if err := f.fail("request_changes"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "request_changes", Repo: repo, Number: number, Body: body})
+	return nil
+}
+
+// DismissReview records a review dismissal.
+func (f *Client) DismissReview(ctx context.Context, repo model.Repo, number int, reviewID int64, message string) error {
+	if err := f.fail("dismiss_review"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "dismiss_review", Repo: repo, Number: number, ID: reviewID, Body: message})
+	return nil
+}
+
+// DispatchWorkflow records a workflow_dispatch.
+func (f *Client) DispatchWorkflow(ctx context.Context, repo model.Repo, file, ref string, inputs map[string]any) error {
+	if err := f.fail("dispatch_workflow"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "dispatch_workflow", Repo: repo, File: file, Ref: ref, Payload: inputs})
+	return nil
+}
+
+// RejectDeployments records a deployment rejection.
+func (f *Client) RejectDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error {
+	if err := f.fail("reject_deployments"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "reject_deployments", Repo: repo, RunID: runID, EnvIDs: append([]int64(nil), envIDs...), Body: comment})
+	return nil
+}
+
+// RerunRun records a re-run.
+func (f *Client) RerunRun(ctx context.Context, repo model.Repo, runID int64) error {
+	if err := f.fail("rerun"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "rerun", Repo: repo, RunID: runID})
+	return nil
+}
+
+// RerunFailedJobs records a re-run of the failed jobs.
+func (f *Client) RerunFailedJobs(ctx context.Context, repo model.Repo, runID int64) error {
+	if err := f.fail("rerun_failed"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "rerun_failed", Repo: repo, RunID: runID})
+	return nil
+}
+
+// CancelRun records a cancel.
+func (f *Client) CancelRun(ctx context.Context, repo model.Repo, runID int64) error {
+	if err := f.fail("cancel_run"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "cancel_run", Repo: repo, RunID: runID})
+	return nil
+}
+
+// JobLogs serves JobLog.
+func (f *Client) JobLogs(ctx context.Context, repo model.Repo, jobID int64) (string, error) {
+	if err := f.fail("job_logs"); err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.JobLog[jobID], nil
 }
 
 // MergePR records the merge and answers Merge.

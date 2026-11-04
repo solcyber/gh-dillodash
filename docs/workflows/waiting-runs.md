@@ -88,6 +88,13 @@ approved one since the refresh), then:
 The approval goes through your own `gh` token, the same as every other
 action: GitHub checks that you are a reviewer of the environment.
 
+## `x`
+
+`x` on a run row offers what the Actions page would: **reject** the
+environments it waits on that you review (a reason prompt, then a confirm;
+the run fails there and deploys nothing), **cancel** it, or read a job's
+log in `$PAGER`. `D` keeps approving and nothing else.
+
 ## Refresh and failures
 
 Every refresh reads one page (50) of each repo's waiting runs
@@ -100,5 +107,6 @@ keeps the last rows.
 ## Permissions
 
 On every repo in `repos` the token needs Actions read (the runs and their
-pending deployments) and, for `D`, Deployments read and write. See
+pending deployments) and, for `D` and `x`'s reject, Deployments read and
+write; `x`'s cancel needs Actions read and write. See
 [auth.md](../auth.md).

@@ -14,10 +14,14 @@
 | list | esc | clear the filter (Esc never quits: a stray escape from an Alt chord must not close the dashboard) |
 | list | `A` | toggle PRs approved by others (issues are always all shown) |
 | list | `D` | approve the deployments waiting on the selected merged PR, or on the selected waiting run (the bar shows it while `release_pr` or `waiting_runs` is on) |
+| list | `x` | the Actions runs of the selected row (a release's run, a waiting run, the runs on a PR's commit): re-run the failed jobs or every job, cancel, reject the deployment it waits on, or read a job's log in `$PAGER` |
+| list, detail | `X` | run a workflow the config lists under `[[workflows.dispatch]]`: pick it, fill its inputs, confirm the exact payload; the status line follows the new run (the bar shows it while one is listed) |
+| list | `P` | pull the newer config from the repo it was pulled from (`config pull`) and restart into it, keeping your place (the bar shows it while the header says the config is outdated) |
 | list | `d` | fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits |
 | detail | `a` | approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm |
 | detail | `M` | merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first |
 | detail | `D` | approve the environment deployments waiting on the open merged PR |
+| detail | `x` | the Actions runs of the open PR (its head's, or its merge's once merged, and a release's run): re-run, cancel, reject the deployment it waits on, or read a job's log in `$PAGER` |
 | detail | `c` / `C` | comment inline / in `$EDITOR` |
 | detail | `t` | tag someone: pick a repo user, `$EDITOR` opens seeded with the mention, posts as a comment |
 | detail | `f` | changed files |

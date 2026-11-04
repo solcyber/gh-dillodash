@@ -181,6 +181,11 @@ func (a *App) MarkApproved(pr *model.PR) {
 	a.Approved[pr.Ident()] = pr.HeadRefOid
 	a.mu.Unlock()
 }
+func (a *App) UnmarkApproved(pr *model.PR) {
+	a.mu.Lock()
+	delete(a.Approved, pr.Ident())
+	a.mu.Unlock()
+}
 func (a *App) Detail() any             { return a.DetailItm }
 func (a *App) DetailListed() *model.PR { return a.Listed }
 func (a *App) DetailKind() string      { return a.Kind }

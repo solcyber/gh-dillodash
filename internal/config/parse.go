@@ -402,6 +402,7 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseDisplay(top, cfg, ov)
 	p.parseBots(top, cfg)
 	p.parseUpdate(top, cfg)
+	p.parseMerge(top, cfg)
 
 	// [repos."owner/name"] is reserved for per-repo settings
 	if _, ok := top.get("repos"); ok {
@@ -413,6 +414,7 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseMaintenanceWindow(wt, cfg)
 	p.parseReleasePR(wt, cfg)
 	p.parseWaitingRuns(wt, cfg)
+	p.parseDispatch(wt, cfg)
 	wt.done()
 
 	top.done()
@@ -650,6 +652,7 @@ func (p *parser) parseMaintenanceWindow(wt *table, cfg *Config) {
 		t.errf("closer", "expected end <= closer, got %s, %s", w.End, *w.Closer)
 		w.Closer = nil
 	}
+	p.parseReserved(t, w)
 	t.done()
 
 	if !enabled {

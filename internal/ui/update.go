@@ -241,7 +241,7 @@ func (m *Model) persistentLine() (string, bool) {
 	if m.installErr != "" && !m.upd.Pending() {
 		lead = m.installErr + "; " + m.upd.Hint()
 	}
-	return joinNonEmpty("; ", lead, m.warn), m.installErr != "" && !m.upd.Pending()
+	return joinNonEmpty("; ", lead, m.configBanner(), m.warn), m.installErr != "" && !m.upd.Pending()
 }
 
 // pendingRestart reports whether R waits in the bar.

@@ -585,8 +585,9 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
 		{"releases", fmt.Sprintf("a  on a release's row or in its detail: approve (queues it for the window) or approve + %s; on one already approved (or bumped by the window) %s alone, no second review", w.cfg.ReleaseNowCommand, w.cfg.ReleaseNowCommand)},
-		{"", "D  approve its deployments (row or detail)   M  last resort: merge by hand when the release-now dispatch can't run (the release job merges at the slot)"},
+		{"", "D  approve its deployments (row or detail)   x  its runs: re-run, cancel, reject a deploy, read a log   M  last resort: merge by hand when the release-now dispatch can't run (the release job merges at the slot)"},
 		{"", "a release in flight shows its rail on the row and its steps, clocks and run in the detail; it says when it lands, and which release is next in the lane"},
+		{"", "a  also: request changes (takes it out of the window), dismiss your approval (a again re-queues), or fire the dispatch for a posted command nobody picked up"},
 	}
 }
 
@@ -732,8 +733,8 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 			if len(stuck) > 0 {
 				mins := int(w.deploy.Stuck().Minutes()) // the threshold detection used
 				out = append(out, scenes.CardLines([]text.Seg{text.S(glyphs.Ico("warn"), "toast.warn"),
-					text.S(fmt.Sprintf("run %s has gone longer than %d minutes: check it in %s's Actions and cancel + re-run it if it hangs",
-						strings.Join(stuck, ", "), mins, pr.Repo.Name), "toast.warn")}, width, inner)...)
+					text.S(fmt.Sprintf("run %s has gone longer than %d minutes: x reads its log, and cancels and re-runs it if it hangs",
+						strings.Join(stuck, ", "), mins), "toast.warn")}, width, inner)...)
 			}
 		}
 	}

@@ -151,6 +151,15 @@ type Client interface {
 	// MergePR merges only if the head is still sha (GitHub refuses
 	// otherwise). method is merge, squash or rebase ("" = merge).
 	MergePR(ctx context.Context, repo model.Repo, number int, sha, title, method string) (MergeResult, error)
+	// RequestChanges posts a REQUEST_CHANGES review; GitHub requires a
+	// body (pull requests write).
+	RequestChanges(ctx context.Context, repo model.Repo, number int, body string) error
+	// DismissReview dismisses one review (its database id) with a
+	// message (pull requests write; your own review, or as an admin).
+	DismissReview(ctx context.Context, repo model.Repo, number int, reviewID int64, message string) error
+	// DispatchWorkflow fires workflow_dispatch on a workflow file at ref
+	// with the inputs (actions write). GitHub answers 204 and no run id.
+	DispatchWorkflow(ctx context.Context, repo model.Repo, file, ref string, inputs map[string]any) error
 
 	// WaitingRuns is the workflow runs on headSHA waiting on an environment.
 	WaitingRuns(ctx context.Context, repo model.Repo, headSHA string) ([]model.WorkflowRun, error)
@@ -160,6 +169,17 @@ type Client interface {
 	RepoWaitingRuns(ctx context.Context, repo model.Repo) ([]model.WorkflowRun, error)
 	PendingDeployments(ctx context.Context, repo model.Repo, runID int64) ([]model.PendingDeployment, error)
 	ApproveDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error
+	// RejectDeployments rejects the run's pending deployments to envIDs:
+	// the run fails at that environment.
+	RejectDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error
+	// RerunRun re-runs every job of a finished run; RerunFailedJobs only
+	// its failed and cancelled jobs (and what depends on them). CancelRun
+	// cancels a queued, waiting or running run (actions write).
+	RerunRun(ctx context.Context, repo model.Repo, runID int64) error
+	RerunFailedJobs(ctx context.Context, repo model.Repo, runID int64) error
+	CancelRun(ctx context.Context, repo model.Repo, runID int64) error
+	// JobLogs is one job's log as plain text (actions read).
+	JobLogs(ctx context.Context, repo model.Repo, jobID int64) (string, error)
 	// WorkflowRuns is every run on headSHA, newest first.
 	WorkflowRuns(ctx context.Context, repo model.Repo, headSHA string) ([]model.WorkflowRun, error)
 	// WorkflowFileRuns is the runs of one workflow file (apply.yml) with

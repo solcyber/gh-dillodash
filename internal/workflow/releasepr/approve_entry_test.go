@@ -89,9 +89,11 @@ func TestApproveOffersNowFromEveryEntry(t *testing.T) {
 			}
 			labels := app.Menus[0][1:]
 			switch {
-			case mine && (len(labels) != 1 || !strings.HasPrefix(labels[0], "release NOW (/release-now)")):
-				t.Errorf("%s: exactly release NOW, got %q", name, labels)
-			case !mine && (len(labels) != 2 || !strings.HasPrefix(labels[0], "queue it") || !strings.HasPrefix(labels[1], "release NOW")):
+			case mine && (len(labels) != 3 || !strings.HasPrefix(labels[0], "release NOW (/release-now)") ||
+				!strings.HasPrefix(labels[1], "dismiss my approval") || !strings.HasPrefix(labels[2], "request changes")):
+				t.Errorf("%s: release NOW, then dismiss or request changes (never a second review), got %q", name, labels)
+			case !mine && (len(labels) != 3 || !strings.HasPrefix(labels[0], "queue it") || !strings.HasPrefix(labels[1], "release NOW") ||
+				!strings.HasPrefix(labels[2], "request changes")):
 				t.Errorf("%s: queue and NOW, got %q", name, labels)
 			}
 			for _, l := range app.Log {
