@@ -610,12 +610,12 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	rail = append(rail, text.S(" deploying 3/9 · 2m", "chip.queued"), text.S(glyphs.G("capr"), "cap:chip.queued"))
 	rail = append(rail, text.S(" a release in flight: its rail fills from setup to finishing", "muted"))
 	ends := []text.Seg{text.S(text.Pad("", 10), "section")}
-	ends = append(ends, scenes.Chip("released", "chip.approved")...)
+	ends = append(ends, scenes.Chip(markOK()+"released", "chip.released")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("release FAILED", "chip.rolled")...)
+	ends = append(ends, scenes.Chip(markErr()+"release FAILED", "chip.fail")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("bumped — a: release NOW", "chip.rolled")...)
-	ends = append(ends, text.S(" its approval stands", "muted"))
+	ends = append(ends, scenes.Chip("bumped — a: release NOW", "chip.act")...)
+	ends = append(ends, text.S(" yours to act on", "muted"))
 	return [][]text.Seg{row, rail, ends}
 }
 

@@ -1223,7 +1223,7 @@ func TestDetailCards(t *testing.T) {
 	}
 	stuck := mergedRelease()
 	stuck.Repo, stuck.Number = portal, 135
-	stuck.Set(ExtDeploy, deploys.State{SHA: mergedSHA, Phase: "stuck", Text: "stuck? 9h43m", Runs: []deploys.Row{{Name: "Deploy", What: "in progress 9h43m - stuck?", Style: "chip.rolled", RunID: 77}}})
+	stuck.Set(ExtDeploy, deploys.State{SHA: mergedSHA, Phase: "stuck", Text: "stuck? 9h43m", Runs: []deploys.Row{{Name: "Deploy", What: "in progress 9h43m - stuck?", Style: deploys.Chip["stuck"], RunID: 77}}})
 	if card = flat(w.DetailCards(app, stuck, nil, 80)); !strings.Contains(card, "run 77 has gone longer than 45 minutes") {
 		t.Errorf("a stuck run is called out:\n%s", card)
 	}

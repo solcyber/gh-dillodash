@@ -279,8 +279,11 @@ func TestColor16Tier(t *testing.T) {
 		if r := resolve("chip.mine", false, false, Color16); r.fg != ansi.White || r.bg != ansi.Blue || !r.bold {
 			t.Errorf("16-color: blue chips are bold white on blue: %+v", r)
 		}
-		if r := resolve("chip.draft", false, false, Color16); r.bg != ansi.Black || r.reverse {
-			t.Errorf("16-color: gray chips are plain text: %+v", r)
+		if r := resolve("chip.draft", false, false, Color16); r.fg != ansi.Black || r.bg != ansi.White || r.reverse {
+			t.Errorf("16-color: gray chips are black on light gray: %+v", r)
+		}
+		if r := resolve("chip.changes", false, false, Color16); r.fg != ansi.Black || r.bg != ansi.Yellow {
+			t.Errorf("16-color: a gray chip with gold text is a gold chip: %+v", r)
 		}
 		if r := resolve("text", true, false, Color16); !r.reverse {
 			t.Error("16-color: the selected row is reversed")
@@ -294,8 +297,8 @@ func TestColor16Tier(t *testing.T) {
 		if r := resolve("cap:chip.mine", false, false, Color16); r.fg != ansi.Blue {
 			t.Errorf("16-color: a blue chip's cap is blue: %+v", r)
 		}
-		if r := resolve("cap:chip.draft", false, false, Color16); r.fg != ansi.Black {
-			t.Errorf("16-color: a gray chip's cap vanishes: %+v", r)
+		if r := resolve("cap:chip.draft", false, false, Color16); r.fg != ansi.White || r.bg != ansi.Black {
+			t.Errorf("16-color: a gray chip's cap is light gray: %+v", r)
 		}
 	})
 }

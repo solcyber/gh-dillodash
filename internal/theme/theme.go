@@ -211,7 +211,12 @@ var Styles = map[string]Spec{
 	"chip.await.glint2": sp(K, White, b), "chip.changes": sp(Gold, G2, b),
 	"chip.mine": sp(White, BlueBG, 0), "chip.approved": sp(K, Blue3, 0),
 	"chip.draft": sp(G6, G2, 0), "chip.queued": sp(Blue4, Steel, 0),
-	"chip.sched": sp(White, BlueBG, b), "chip.rolled": sp(K, Gold2, 0),
+	"chip.sched": sp(White, Steel, b), "chip.rolled": sp(K, Gold2, 0),
+	// a release's ends: released (done, palest blue), merged, a gold
+	// "act now" (a deploy waits on you, bumped with NOW offered) and a
+	// darker gold "it broke"
+	"chip.released": sp(K, Blue4, b), "chip.merged": sp(K, Blue2, 0),
+	"chip.act": sp(K, Gold, b), "chip.fail": sp(K, Ochre, b),
 	"chip.label": sp(G6, G2, 0), "chip.key": sp(White, BlueBG, b),
 	"chip.err": sp(K, Gold, b), "chip.state": sp(K, G5, b),
 	"chip.rev.approved": sp(White, BlueBG, b), "chip.rev.changes": sp(K, Gold, b),
@@ -323,7 +328,7 @@ func set(names ...string) map[string]bool {
 
 // MonoBold is the styles whose meaning is "look here": bold in mono, gold
 // elsewhere.
-var MonoBold = set("chip.await", "chip.changes", "chip.err", "ci.fail", "failnames",
+var MonoBold = set("chip.await", "chip.changes", "chip.err", "chip.act", "chip.fail", "ci.fail", "failnames",
 	"tf.destroy", "tf.replace", "plan.destroy", "destroys.n",
 	"approve.refused", "verdict.notrev", "rev.attend", "sum.attn",
 	"budget.low", "chip.rev.changes", "chip.plan.warn", "hint.bad",
@@ -565,14 +570,21 @@ func resolve(name string, sel, band bool, tier Tier) resolved {
 		case chip && IsBlue(s.BG):
 			r.fg, r.bg = ansi.White, ansi.Blue
 			r.bold = true
+		case chip && IsGold(s.FG):
+			// a gray chip with gold text ("changes requested") means look
+			// here: it keeps that as a gold chip
+			r.fg, r.bg = ansi.Black, ansi.Yellow
+		case chip:
+			// other gray chips: black on the light gray of ANSI white, so
+			// the chip keeps its shape and its caps (plain text used to
+			// lose both)
+			r.fg, r.bg = ansi.Black, ansi.White
 		default:
-			// gray chips: there is no gray background in 8 colors, so
-			// plain text (the caps disappear, the label stays readable)
 			r.fg, r.bg = f, ansi.Black
 			r.bold = fb || s.Attr&text.Bold != 0
 			r.underline = s.Attr&text.Underline != 0
 			r.dim = fd
-			r.reverse = sel && !chip
+			r.reverse = sel
 		}
 	default: // mono: attributes only
 		switch {
@@ -620,10 +632,10 @@ func resolveCap(name string, sel bool, tier Tier) resolved {
 		switch {
 		case IsBlue(s.BG):
 			r.fg = ansi.Blue
-		case IsGold(s.BG):
+		case IsGold(s.BG), IsGold(s.FG):
 			r.fg = ansi.Yellow
 		default:
-			r.fg = ansi.Black
+			r.fg = ansi.White
 		}
 		r.bg = ansi.Black
 	}

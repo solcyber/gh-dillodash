@@ -153,7 +153,7 @@ func TestProgressCardTimeline(t *testing.T) {
 	tr.run, tr.job = run, job
 	merged.State = "MERGED"
 	merged.MergeCommit = &model.MergeCommit{Oid: mergedSHA}
-	merged.Set(ExtDeploy, deploys.State{Phase: "done", Runs: []deploys.Row{{Style: "chip.approved"}, {Style: "chip.approved"}}})
+	merged.Set(ExtDeploy, deploys.State{Phase: "done", Runs: []deploys.Row{{Style: deploys.Chip["done"]}, {Style: deploys.Chip["done"]}}})
 	clock.Now = func() time.Time { return utcS(3, 2, 30) }
 	tr.cur = w.derive(merged, tr, clock.Now())
 	w.mu.Unlock()

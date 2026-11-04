@@ -205,7 +205,7 @@ func TestDeriveNowPath(t *testing.T) {
 	// deploying counts the app repo's runs on the merge
 	merged := mergedRelease()
 	merged.Repo, merged.Number = portal, 42
-	merged.Set(ExtDeploy, deploys.State{Phase: "running", Runs: []deploys.Row{{Style: "chip.approved"}, {Style: "chip.approved"}, {Style: "chip.queued"}}})
+	merged.Set(ExtDeploy, deploys.State{Phase: "running", Runs: []deploys.Row{{Style: deploys.Chip["done"]}, {Style: deploys.Chip["done"]}, {Style: "chip.queued"}}})
 	p = deriveWith(w, merged, func(tr *track) { tr.nowPostedAt, tr.run, tr.job = t0, run, jobAt(8, jobStart, 1) }, t0.Add(5*time.Minute))
 	if p.Phase != PhaseDeploying || p.DeployDone != 2 || p.DeployTotal != 3 || p.MergeSHA != mergedSHA {
 		t.Errorf("deploying: %+v", p)
@@ -344,7 +344,7 @@ func TestDeployPending(t *testing.T) {
 	if p.Phase != PhasePending || !p.Terminal || p.Outcome != "deploy_pending" || p.Detail != "migrate.yml waits on prod-migrations" || p.MergeSHA != mergedSHA {
 		t.Fatalf("held: %+v", p)
 	}
-	if got := w.progressChip(p, t0); got != "deploy waiting · D" || progressStyle(p) != "chip.rolled" {
+	if got := w.progressChip(p, t0); got != "deploy waiting · D" || progressStyle(p) != "chip.act" {
 		t.Errorf("chip %q %s", got, progressStyle(p))
 	}
 	if f := railFrac(p, t0); f <= float64(PhaseIndex(PhaseDeploying))/float64(len(runPhases)) || f >= 1 {
@@ -616,10 +616,11 @@ func TestProgressChipAndStyle(t *testing.T) {
 		{Progress{Phase: PhaseDeploying, Since: since}, "deploying 2m", "chip.queued"},
 		{Progress{Phase: PhaseVerifying, Since: now.Add(-40 * time.Second)}, "verifying 40s", "chip.queued"},
 		{Progress{Phase: PhaseWaitingSlot}, "waiting for slot", "chip.sched"},
-		{Progress{Phase: PhaseReleased, Terminal: true}, "released", "chip.approved"},
-		{Progress{Phase: PhasePending, Terminal: true}, "deploy waiting · D", "chip.rolled"},
-		{Progress{Phase: PhaseFailed, Terminal: true}, "release FAILED", "chip.rolled"},
-		{Progress{Phase: PhaseRefused, Terminal: true}, "release refused", "chip.rolled"},
+		{Progress{Phase: PhaseReleased, Terminal: true}, markOK() + "released", "chip.released"},
+		{Progress{Phase: PhasePending, Terminal: true}, "deploy waiting · D", "chip.act"},
+		{Progress{Phase: PhaseBumped, Terminal: true}, "bumped", "chip.act"},
+		{Progress{Phase: PhaseFailed, Terminal: true}, markErr() + "release FAILED", "chip.fail"},
+		{Progress{Phase: PhaseRefused, Terminal: true}, markErr() + "release refused", "chip.fail"},
 		{Progress{Phase: PhaseRolled, Terminal: true}, "rolled", "chip.rolled"},
 		{Progress{Phase: PhaseCancelled, Terminal: true}, "release cancelled", "chip.state"},
 		{Progress{Phase: PhaseLost, Terminal: true}, "lost track", "chip.state"},
