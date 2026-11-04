@@ -431,7 +431,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		app.Fail(fmt.Sprintf("approved %d of %d; failed: %s", done, len(mine), strings.Join(failed, "; ")))
 	} else {
 		names := envNames(mine)
-		app.OK(fmt.Sprintf("approved %s of %s (%s); dillodash watches for the next", plural(done, "deployment"), where, strings.Join(names, ", ")))
+		app.OK(fmt.Sprintf("approved %s of %s (%s); dillodash says when the next environment waits", plural(done, "deployment"), where, strings.Join(names, ", ")))
 		app.Celebrate(false)
 	}
 	app.Refresh(true)

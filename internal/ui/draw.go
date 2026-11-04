@@ -572,6 +572,24 @@ func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 	c.PutSegs(h-1, 0, append(segs, help...), 0, false, false)
 }
 
+// helpKeySegs styles a packed help line ("j/k move   enter open"): each
+// entry's first word is its key, in blue.
+func helpKeySegs(line string) []text.Seg {
+	var out []text.Seg
+	for i, e := range strings.Split(line, "   ") {
+		if i > 0 {
+			out = append(out, text.S("   ", "text"))
+		}
+		k, rest, ok := strings.Cut(e, " ")
+		if !ok || k == "" {
+			out = append(out, text.S(e, "text"))
+			continue
+		}
+		out = append(out, text.S(k, "md.inline"), text.S(" "+rest, "text"))
+	}
+	return out
+}
+
 // drawHelp paints the help overlay.
 func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 	label := func(t string) text.Seg { return text.S(text.Pad(t, 10), "section") }
@@ -586,20 +604,37 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 	// the key table's groups, the workflows' rows after detail, each
 	// wrapped to the box so a narrow terminal gets more rows, not less
 	textW := max(20, min(w-2, 92)-14)
-	addLines := func(name string, lines []string) {
+	// keys: each packed entry's key in blue, its words in the text color
+	addKeys := func(name string, lines []string) {
 		for i, line := range lines {
 			l := name
 			if i > 0 {
 				l = ""
 			}
-			rows = append(rows, []text.Seg{label(l), text.S(line, "text")})
+			rows = append(rows, append([]text.Seg{label(l)}, helpKeySegs(line)...))
+		}
+	}
+	// a workflow's prose row: wrapped, its continuation lines indented
+	addProse := func(name, body string) {
+		for i, line := range widgets.Wrap(body, textW-2) {
+			if i > 0 {
+				rows = append(rows, []text.Seg{label(""), text.S("  "+line, "text")})
+				continue
+			}
+			// a row that leads with its key ("D  on a waiting run") shows
+			// the key in blue, as the key table does
+			if k, rest, ok := strings.Cut(line, " "); ok && k != "" && text.Width(k) <= 3 {
+				rows = append(rows, []text.Seg{label(name), text.S(k, "md.inline"), text.S(" "+rest, "text")})
+				continue
+			}
+			rows = append(rows, []text.Seg{label(name), text.S(line, "text")})
 		}
 	}
 	for _, g := range helpGroups() {
-		addLines(g.label, packEntries(g.entries, textW))
+		addKeys(g.label, packEntries(g.entries, textW))
 		if g.label == "detail" {
 			for _, kv := range m.wf.HelpRows() {
-				addLines(kv[0], widgets.Wrap(kv[1], textW))
+				addProse(kv[0], kv[1])
 			}
 		}
 	}

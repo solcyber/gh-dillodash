@@ -148,17 +148,30 @@ func TestSplashAmos(t *testing.T) {
 			t.Error("line art drawn alongside the sprite")
 		}
 	}
-	// a terminal too short for the sprite falls back to the line art
+	// a terminal too short for the sprite gets the small one, in color
 	c = canvas.New(100, 20)
 	if !splash(c, f, 20, 100, SplashInfo{ReposText: "acme/infra"}, theme.TrueColor) {
 		t.Fatal("splash ended on 100x20")
+	}
+	half, art := 0, false
+	for r := 0; r < 20; r++ {
+		half += strings.Count(c.Text(r), "▀") + strings.Count(c.Text(r), "▄")
+		art = art || strings.Contains(c.Text(r), strings.TrimSpace(glyphs.Armadillo[0]))
+	}
+	if half == 0 || art {
+		t.Errorf("the short terminal draws the small sprite, not the line art (%d half blocks, line art %v)", half, art)
+	}
+	// at 16 colors there is no sprite: the line art
+	c = canvas.New(100, 20)
+	if !splash(c, f, 20, 100, SplashInfo{ReposText: "acme/infra"}, theme.Color16) {
+		t.Fatal("splash ended on 100x20 at 16 colors")
 	}
 	found := false
 	for r := 0; r < 20; r++ {
 		found = found || strings.Contains(c.Text(r), strings.TrimSpace(glyphs.Armadillo[0]))
 	}
 	if !found {
-		t.Error("no line art on the short terminal")
+		t.Error("no line art at 16 colors")
 	}
 }
 

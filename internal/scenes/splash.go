@@ -40,6 +40,17 @@ func splash(c *canvas.Canvas, f *fx.Fx, h, w int, info SplashInfo, tier theme.Ti
 	aw := artWidth(art)
 	sprite := useAmos(tier, h, w, len(art)+7)
 	mw, mh := artWidth(glyphs.Armadillo), len(glyphs.Armadillo)
+	// too short for the full sprite: the small one, in color, rather than
+	// the gray line art beside a pixel wordmark
+	mini := !sprite && MiniAmos(tier)
+	if mini {
+		ow, oh := amos.Size(amos.Options{Mini: true})
+		if h >= len(art)+oh+7 && w >= ow+4 {
+			mw, mh = ow, oh
+		} else {
+			mini = false
+		}
+	}
 	if sprite {
 		mw, mh = amos.Width(), amos.Height()
 	}
@@ -99,8 +110,8 @@ func splash(c *canvas.Canvas, f *fx.Fx, h, w int, info SplashInfo, tier theme.Ti
 		c.PutSegs(y+mh-2, max(0, bx-4), []text.Seg{text.S(trail, "fx.k2"), text.S(ball, "fx.b6")}, 0, false, false)
 	} else {
 		frame := int(el*4) % 2
-		if sprite {
-			paintAmos(c, y, ax, amos.Options{Frame: frame})
+		if sprite || mini {
+			paintAmos(c, y, ax, amos.Options{Frame: frame, Mini: mini})
 		} else {
 			art := glyphs.Armadillo
 			if frame == 1 {
