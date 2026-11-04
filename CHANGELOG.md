@@ -1,5 +1,91 @@
 # Changelog
 
+## [1.8.0]
+
+The whole release night from the dashboard: review choices, runs,
+dispatches and the window's newer rules. Plus the graphics pass and a
+keyed hygiene check.
+
+### Added
+
+- `a` on a release offers **request changes**, with a reason: it takes the
+  release out of the window. On a release you approved it also offers
+  **dismiss my approval**; `a` again re-queues it. Both come after the
+  existing entries, so enter and the numbers do what they did.
+- A `/release-now` that no run picked up (its dispatch failed, or it was
+  posted from the PR page) gets the dispatch for that same comment from
+  `a` after two minutes: no second comment, no review.
+- `x` acts on the runs of the selected row or the open PR (a release's run,
+  a waiting run, the runs on its commit): re-run the failed jobs or every
+  job, cancel, reject the deployment it waits on (its own confirm), or read
+  a job's log in `$PAGER`. `D` still only approves.
+- `X` runs a workflow the config lists under `[[workflows.dispatch]]`
+  (`workflow_dispatch` on a file, or a `repository_dispatch` event): typed
+  inputs, the exact request in the confirm, then the status line follows
+  the new run. Nothing unlisted is ever dispatched.
+- `[merge] methods` sets `M`'s merge method per repo.
+- `maintenance_window` `reserved_from`, `reserved_to` and `reserved_stacks`:
+  inside that span, `a` on a harmless plan to a reserved stack offers to
+  wait, or to apply with the outside-window flag and a reason.
+- A config installed with `config pull` is compared with its source about
+  once an hour; when the repo has a newer one the status line says so, and
+  `P` pulls it and restarts into it, keeping your place.
+- **Missed freeze.** A night whose freeze never ran (the conductor's
+  `missed_freeze_marker` comment, or a manifest still open
+  `missed_freeze_grace_mins` after the cutoff) shows `missed freeze` and
+  `missed_freeze_hint`; `w` offers no `/attend` or `/release` there.
+- **Re-cut after the freeze.** A release whose head moved since the freeze
+  recorded it reads `rolled · re-cut` instead of `scheduled`.
+- `manifest_title` takes `{hhmm}`, and any `HH:MM` in it matches any time,
+  so a night opened under an earlier start time is still found.
+- `late_skip` and `closer`: the night line says `closes at …`, then
+  `closer late`.
+- The hygiene check is keyed: `internal/hygiene/denylist.txt` holds
+  HMAC-SHA256 hashes under `DILLODASH_HYGIENE_KEY`, `cmd/gen-denylist`
+  regenerates it from a list kept outside the repository, and `cmd/scan`
+  checks PR titles, bodies, branch names and commit messages in CI. It
+  also reads PNG text chunks and PDF text, phrases and short whole words,
+  and reports every hit.
+- `cmd/screenshot -tier 256|16|mono` draws a shot at that color depth; new
+  shots `tier-16-night` and `tier-mono-list`.
+
+### Changed
+
+- The default window is a labelled example in UTC; set your own times.
+- Both demos follow the configured window, and the release-night demo is a
+  made-up night.
+- The stuck-run line on a release card points at `x` instead of the
+  Actions page.
+- The legacy migration messages say "legacy config.ini".
+- Release chips keep one meaning each: `✓ released` (pale blue) and
+  `merged` no longer share the approved chip; `scheduled` sits on steel;
+  what you act on now (`deploy waiting · D`, `bumped — a: release NOW`,
+  `missed freeze`) is bold gold; a failure (`✗ release FAILED`, `✗ release
+  refused`) is a darker gold.
+- A release's rail is drawn per run phase: a pip per phase on its row
+  (done blue, running gold, a line to come, a gold block where it failed),
+  and a stepper of one segment per phase on its card, lined up with the
+  steps.
+- The release card fits every step at 24 rows: Amos walks the rail from 32
+  rows, the rule line follows the steps while a release is in flight, the
+  `T+` clock is bold and the apply budget counts down beside it.
+- A night's manifest row draws the night's timeline in its title's place:
+  the window as a rule, a mark per slot, a gold now mark while it is open.
+- The night countdown is blue, gold in its last quarter hour, `live now`
+  once the window opens, and stays on a narrow screen.
+- Menus, the help and the message box dim the screen behind them; a y/N
+  question sits under a gold rule.
+- The summary row drops its zero counts first on a narrow screen and ends
+  in an ellipsis; stage rows show go/hold/untagged as small chips.
+- At 16 colors a gray chip is black on light gray and keeps its caps.
+- A short screen's splash shows the small Amos in color; the help shows
+  keys in blue.
+
+### Fixed
+
+- The message after approving deployments says what dillodash does next,
+  instead of stopping mid-sentence.
+
 ## [1.7.1]
 
 ### Fixed
