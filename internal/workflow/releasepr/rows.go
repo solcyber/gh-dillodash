@@ -549,6 +549,9 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 		}
 	}
 	if text.Width(head)+text.SegsWidth(chips) > room {
+		head = fmt.Sprintf("%s%d ahead ", ge, u.Units) // the short form keeps the chips
+	}
+	if text.Width(head)+text.SegsWidth(chips) > room {
 		style := "rev.ok"
 		if u.Hold > 0 || u.Untagged > 0 {
 			style = "rev.attend"
