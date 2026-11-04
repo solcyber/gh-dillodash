@@ -59,6 +59,7 @@ type App struct {
 	RowList   []workflow.Row
 	Sel       int
 	WidthN    int
+	HeightN   int // 0: 40 rows
 	Bumps     int
 	Opened    []string
 
@@ -205,9 +206,17 @@ func (a *App) Refresh(again bool) {
 }
 func (a *App) RefreshSoon(d time.Duration) { a.mu.Lock(); a.Soon = append(a.Soon, d); a.mu.Unlock() }
 func (a *App) Width() int                  { return a.WidthN }
-func (a *App) Fx() *fx.Fx                  { return a.Effects }
-func (a *App) Context() context.Context    { return context.Background() }
-func (a *App) BumpDetail()                 { a.mu.Lock(); a.Bumps++; a.mu.Unlock() }
+
+// Height is HeightN, or 40 rows when unset (a tall screen).
+func (a *App) Height() int {
+	if a.HeightN == 0 {
+		return 40
+	}
+	return a.HeightN
+}
+func (a *App) Fx() *fx.Fx               { return a.Effects }
+func (a *App) Context() context.Context { return context.Background() }
+func (a *App) BumpDetail()              { a.mu.Lock(); a.Bumps++; a.mu.Unlock() }
 func (a *App) EditInEditor(seed string) (string, bool, error) {
 	if a.Editor == nil {
 		return seed, true, nil

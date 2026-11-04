@@ -571,6 +571,17 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 			segs = append(segs, text.S(text.Pad(age, aw)+" ", st))
 		}
 		room := w - 3 - text.SegsWidth(segs)
+		// a workflow may draw the title's place (a night's timeline on
+		// its manifest row), or say what the row is for instead
+		if f, ok := row.Meta[workflow.TitleSegs].(func(int) []text.Seg); ok {
+			if ts := f(room); len(ts) > 0 && text.SegsWidth(ts) <= room {
+				return append(segs, ts...)
+			}
+		}
+		if t, ok := row.Meta["title"].(string); ok && t != "" {
+			segs = append(segs, text.S(text.Ellip(t, room), "faint"))
+			return segs
+		}
 		segs = append(segs, text.S(text.Ellip(item.Title, room), "title"))
 		return segs
 	}
@@ -615,13 +626,16 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 			text.S(glyphs.Ico("clock"), "subsection"),
 		}
 		room := w - 2 - text.SegsWidth(segs)
-		if text.Width(label+extra)+text.SegsWidth(more) > room {
-			extra = "" // the countdown goes first on a narrow screen
+		// on a narrow screen the attendance and the rest are clipped
+		// first; the countdown goes only when the label alone fills it
+		if text.Width(label)+text.SegsWidth(extra) > room {
+			extra = nil
 		}
-		more = text.ClipSegs(more, max(0, room-text.Width(label)))
+		more = text.ClipSegs(more, max(0, room-text.Width(label)-text.SegsWidth(extra)))
 		segs = append(segs, text.S(text.Ellip(label, room), "subsection"))
+		segs = append(segs, extra...)
 		segs = append(segs, more...)
-		segs = append(segs, text.S(extra, "faint"), text.S(" ", "text"))
+		segs = append(segs, text.S(" ", "text"))
 	} else {
 		name, count := splitHeaderCount(txt)
 		icon := "pr"

@@ -25,8 +25,8 @@ const RefreshEvery = 30 * time.Second
 
 // Chip is the chip style per phase.
 var Chip = map[string]string{
-	"waiting": "chip.await", "failed": "chip.rolled", "stuck": "chip.rolled",
-	"running": "chip.queued", "done": "chip.approved", "cancelled": "chip.state",
+	"waiting": "chip.await", "failed": "chip.fail", "stuck": "chip.fail",
+	"running": "chip.queued", "done": "chip.released", "cancelled": "chip.state",
 	"none": "chip.state",
 }
 
@@ -146,14 +146,14 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 				if age > stuckFor {
 					stuckFor = age
 				}
-				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, FmtSecs(age)), "chip.rolled", r.ID})
+				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, FmtSecs(age)), Chip["stuck"], r.ID})
 			} else {
 				phases["running"] = true
 				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s", status, FmtSecs(age)), "chip.queued", r.ID})
 			}
 		case r.Conclusion == "success" || r.Conclusion == "skipped" || r.Conclusion == "neutral":
 			phases["done"] = true
-			st.Runs = append(st.Runs, Row{name, r.Conclusion, "chip.approved", r.ID})
+			st.Runs = append(st.Runs, Row{name, r.Conclusion, Chip["done"], r.ID})
 		case r.Conclusion == "cancelled":
 			phases["cancelled"] = true
 			st.Runs = append(st.Runs, Row{name, r.Conclusion, "chip.state", r.ID})
@@ -166,7 +166,7 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 			if what == "" {
 				what = "?"
 			}
-			st.Runs = append(st.Runs, Row{name, what, "chip.rolled", r.ID})
+			st.Runs = append(st.Runs, Row{name, what, Chip["failed"], r.ID})
 		}
 	}
 	switch {

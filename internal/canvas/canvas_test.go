@@ -92,3 +92,18 @@ func TestRawSegs(t *testing.T) {
 		t.Errorf("render:\n%q\nwant\n%q", got, want)
 	}
 }
+
+// TestDim: a dimmed band keeps its glyphs in one quiet style and drops
+// the selection, the band and any raw color.
+func TestDim(t *testing.T) {
+	c := New(4, 3)
+	c.PutSegs(0, 0, []text.Seg{text.S("ab", "title")}, 0, true, false)
+	c.PutRaw(1, 0, "x", "\x1b[38;2;1;2;3m")
+	c.Dim(0, 1, "quiet")
+	if c.Text(0) != "ab  " || c.StyleAt(0, 0) != "quiet" || c.StyleAt(1, 0) != "quiet" || c.Text(1) != "    " {
+		t.Errorf("dimmed: %q %q %q", c.Text(0), c.Text(1), c.StyleAt(0, 0))
+	}
+	if c.StyleAt(2, 0) != "text" {
+		t.Error("rows outside the band are left")
+	}
+}

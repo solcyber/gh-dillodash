@@ -1117,11 +1117,20 @@ func TestRowsRenderAndFit(t *testing.T) {
 	sl := kinds[RowStage].Layout(app, []workflow.Row{srow}, 120, 4, 0)
 	segs = kinds[RowStage].Segs(app, srow, sl, 120, 0)
 	txt = text.SegsText(segs)
-	if !strings.HasPrefix(strings.TrimLeft(txt, " ️"+string([]rune{0x1F680})), "") || !strings.Contains(txt, "stage") || !strings.Contains(txt, "3 units ahead of main") {
+	if !strings.Contains(txt, "3 units ahead of main") || !strings.Contains(txt, "1 go") || !strings.Contains(txt, "1 hold") || !strings.Contains(txt, "1 untagged") {
 		t.Errorf("the stage row: %q", txt)
 	}
+	held := false
+	for _, sg := range segs {
+		held = held || (sg.Style == "chip.act" && strings.Contains(sg.Text, "hold"))
+	}
+	if !held {
+		t.Errorf("a held unit is a gold chip: %+v", segs)
+	}
+	// too narrow for the chips: the sentence, gold while a unit is held
+	segs = kinds[RowStage].Segs(app, srow, sl, 40, 0)
 	if segs[len(segs)-1].Style != "rev.attend" {
-		t.Errorf("a hold or untagged unit asks for attention: %q", segs[len(segs)-1].Style)
+		t.Errorf("a narrow stage row with a hold asks for attention: %q", segs[len(segs)-1].Style)
 	}
 	if got := kinds[RowStage].URL(app, srow); got != "https://github.com/acme/web-portal/compare/main...stage" {
 		t.Errorf("the stage row's URL is the compare page: %q", got)
@@ -1223,7 +1232,7 @@ func TestDetailCards(t *testing.T) {
 	}
 	stuck := mergedRelease()
 	stuck.Repo, stuck.Number = portal, 135
-	stuck.Set(ExtDeploy, deploys.State{SHA: mergedSHA, Phase: "stuck", Text: "stuck? 9h43m", Runs: []deploys.Row{{Name: "Deploy", What: "in progress 9h43m - stuck?", Style: "chip.rolled", RunID: 77}}})
+	stuck.Set(ExtDeploy, deploys.State{SHA: mergedSHA, Phase: "stuck", Text: "stuck? 9h43m", Runs: []deploys.Row{{Name: "Deploy", What: "in progress 9h43m - stuck?", Style: deploys.Chip["stuck"], RunID: 77}}})
 	if card = flat(w.DetailCards(app, stuck, nil, 80)); !strings.Contains(card, "run 77 has gone longer than 45 minutes") {
 		t.Errorf("a stuck run is called out:\n%s", card)
 	}

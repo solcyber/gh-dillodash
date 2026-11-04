@@ -178,7 +178,7 @@ var ChipForLabel = map[string]string{
 	LabelAwaiting:   "chip.await",
 	LabelApprovedMe: "chip.mine",
 	LabelApproved:   "chip.approved",
-	LabelMerged:     "chip.approved",
+	LabelMerged:     "chip.merged",
 	LabelChanges:    "chip.changes",
 	LabelDraft:      "chip.draft",
 }

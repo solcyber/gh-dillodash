@@ -126,6 +126,11 @@ type PromptOpts struct {
 	Refused bool
 }
 
+// TitleSegs is a Row.Meta key: a func(room int) []text.Seg the list
+// draws in an issue row's title place, read at draw time (nil or too
+// wide: the title).
+const TitleSegs = "title.segs"
+
 // App is what a workflow may call: the dashboard's services. The ui
 // package implements it.
 type App interface {
@@ -165,6 +170,9 @@ type App interface {
 	// RefreshSoon pulls the next refresh in to at most d from now.
 	RefreshSoon(d time.Duration)
 	Width() int
+	// Height is the screen's rows (a card leaves decoration out when
+	// short of them).
+	Height() int
 	// Fx is the effect set, for row renderers (number pulses, glints).
 	Fx() *fx.Fx
 	// EditInEditor runs $EDITOR seeded with text; ok false on cancel.
@@ -371,7 +379,9 @@ type Workflow interface {
 	// List.
 	Sections(app App, terms []string, me string) []Row
 	RowKinds() map[string]RowKind
-	HeaderExtra(app App, row Row, w int) (countdown string, segs []text.Seg)
+	// HeaderExtra is a sub-header's countdown (kept on a narrow screen,
+	// styled by how soon) and the rest it adds (clipped first).
+	HeaderExtra(app App, row Row, w int) (countdown []text.Seg, segs []text.Seg)
 	SummarySegs(app App) []text.Seg
 
 	// Detail.
@@ -419,7 +429,7 @@ func (Base) ChipStyles() map[string]string                                    { 
 func (Base) NeedsYou() []string                                               { return nil }
 func (Base) Sections(App, []string, string) []Row                             { return nil }
 func (Base) RowKinds() map[string]RowKind                                     { return nil }
-func (Base) HeaderExtra(App, Row, int) (string, []text.Seg)                   { return "", nil }
+func (Base) HeaderExtra(App, Row, int) ([]text.Seg, []text.Seg)               { return nil, nil }
 func (Base) SummarySegs(App) []text.Seg                                       { return nil }
 func (Base) EnrichDetail(context.Context, ghapi.Client, *model.PR, *model.PR) {}
 func (Base) DetailCards(App, *model.PR, *model.PR, int) []text.Line           { return nil }

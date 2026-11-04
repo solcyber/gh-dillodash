@@ -19,8 +19,8 @@ var ShotCaptions = map[string]string{
 	"terraform-approve-menu": "a on a terraform PR: which plan to approve, with its destroys",
 	"approve-menu":           "a on a release: queue it for tonight's window, or release NOW with a reason",
 	"release-now-prompt":     "The release-now prompt: the reason, its length meter, and the exact comment that will be posted",
-	"release-rail":           "A release in flight on the list: its rail fills phase by phase, with the phase and its clock",
-	"release-card":           "Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run",
+	"release-rail":           "A release in flight on the list: its rail is a pip per phase, filled as it goes, with the phase and its clock",
+	"release-card":           "Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run",
 	"release-launch":         "When a release lands: the rocket, the fireworks and RELEASED! across the screen",
 	"waiting-runs":           "The waiting approvals section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is",
 	"waiting-runs-approve":   "D on a waiting run: the environments you review, confirmed before they are approved",
@@ -38,4 +38,6 @@ var ShotCaptions = map[string]string{
 	"icons-nerd":             "The list with the bundled Nerd Font's icons",
 	"icons-unicode":          "The same list with icons = \"unicode\": plain Unicode symbols, no font needed",
 	"icons-ascii":            "The same list with icons = \"ascii\": every glyph from the seven-bit set",
+	"tier-16-night":          "The release night on a 16-color terminal: ANSI blue and yellow, gray chips black on light gray",
+	"tier-mono-list":         "The list with no color at all (NO_COLOR or --mono): chips in reverse video, what needs a look in bold",
 }

@@ -503,9 +503,9 @@ func TestNightSegs(t *testing.T) {
 	defer func() { clock.Now = saved }()
 	clock.Now = func() time.Time { return at("2026-10-22T00:57:00Z") }
 	extra, more := w.HeaderExtra(app, workflow.Row{Kind: "header", Item: "  x", Meta: map[string]any{workflow.NightRow: night}}, 120)
-	check(t, "a night header gets the countdown and the attendance", strings.Contains(extra, "starts in 2h03m") && strings.Contains(segsText(more), "checked in"))
+	check(t, "a night header gets the countdown and the attendance", strings.Contains(segsText(extra), "starts in 2h03m") && strings.Contains(segsText(more), "checked in"))
 	extra, more = w.HeaderExtra(app, workflow.Row{Kind: "header", Item: "pull requests (2)"}, 120)
-	check(t, "a plain header gets nothing", extra == "" && more == nil)
+	check(t, "a plain header gets nothing", extra == nil && more == nil)
 }
 
 // ---- the manifest issue lives under its night ----
@@ -990,4 +990,36 @@ func TestTitleMatchesAnyStartTime(t *testing.T) {
 	check(t, "{hhmm} renders the start", mw.Title("2026-10-21") == "Window 2026-10-21 23:00 ET")
 	got, _ := mw.MatchNight("Window 2026-10-21 01:15 ET")
 	check(t, "{hhmm} matches any HH:MM", got == "2026-10-21")
+}
+
+// TestNightStrip: a night's manifest row draws the window as a rule with
+// a mark per slot, in order and in the room given; a done night, or one
+// with no slot outside the window, draws nothing.
+func TestNightStrip(t *testing.T) {
+	cfg := testCfg()
+	_, w := newApp(cfg)
+	mw := cfg.MaintenanceWindow
+	const mn = "2026-10-26"
+	start, _ := WallToUTC(mn, mw.Start, mw)
+	end, _ := WallToUTC(mn, mw.End, mw)
+	iso := func(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+	yes, no := true, false
+	night := &Night{Issue: 3891, Phase: "running", Items: []Item{
+		{PR: 1, Flag: "scheduled", StartUTC: iso(start), Status: "applied", Final: &yes},
+		{PR: 2, Flag: "scheduled", StartUTC: iso(start), Status: "failed", Final: &yes},
+		{PR: 3, Flag: "scheduled", StartUTC: iso(end.Add(-5 * time.Minute)), Status: "scheduled", Final: &no},
+	}}
+	mid := start.Add(end.Sub(start) / 3)
+	segs := w.stripSegs(night, mn, mid, 60)
+	s := segsText(segs)
+	check(t, "the strip fits its room", text.SegsWidth(segs) <= 60 && text.SegsWidth(segs) > 20)
+	check(t, "it starts at the window's start and ends at its end", strings.HasPrefix(s, mw.Start.String()+" ") && strings.Contains(s, mw.End.String()))
+	styles := map[string]bool{}
+	for _, sg := range segs {
+		styles[sg.Style] = true
+	}
+	check(t, "done, failed, scheduled and now each show", styles["ci.pass"] && styles["ci.fail"] && styles["ci.run"] && styles["sum.attn"])
+	check(t, "a done night draws nothing", w.stripSegs(&Night{Phase: "closed", Items: night.Items}, mn, mid, 60) == nil)
+	check(t, "no slots, the window not open: nothing", w.stripSegs(&Night{Phase: "open"}, mn, start.Add(-6*time.Hour), 60) == nil)
+	check(t, "too narrow: nothing", w.stripSegs(night, mn, mid, 14) == nil)
 }

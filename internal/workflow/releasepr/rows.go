@@ -528,11 +528,38 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 	if s.Units == nil || s.Units.Units == 0 {
 		return append(segs, text.S(text.Ellip(txt, room), "faint"))
 	}
-	style := "rev.ok"
-	if s.Units.Hold > 0 || s.Units.Untagged > 0 {
-		style = "rev.attend"
+	// ahead: the count in words, then a small chip per tag that has any
+	// (go blue, hold gold, untagged gray), so the row reads at a glance
+	// without a whole gold sentence
+	u := s.Units
+	ge := ""
+	if u.Truncated {
+		ge = "≥"
 	}
-	return append(segs, text.S(text.Ellip(txt, room), style))
+	head := fmt.Sprintf("%s%d unit%s ahead of %s ", ge, u.Units, plural(u.Units, "", "s"), w.cfg.ProductionBranch)
+	var chips []text.Seg
+	for _, c := range []struct {
+		n     int
+		name  string
+		style string
+	}{{u.Go, "go", "chip.approved"}, {u.Hold, "hold", "chip.act"}, {u.Untagged, "untagged", "chip.draft"}} {
+		if c.n > 0 {
+			chips = append(chips, text.S(" ", "text"))
+			chips = append(chips, scenes.Chip(fmt.Sprintf("%d %s", c.n, c.name), c.style)...)
+		}
+	}
+	if text.Width(head)+text.SegsWidth(chips) > room {
+		head = fmt.Sprintf("%s%d ahead ", ge, u.Units) // the short form keeps the chips
+	}
+	if text.Width(head)+text.SegsWidth(chips) > room {
+		style := "rev.ok"
+		if u.Hold > 0 || u.Untagged > 0 {
+			style = "rev.attend"
+		}
+		return append(segs, text.S(text.Ellip(txt, room), style))
+	}
+	segs = append(segs, text.S(head, "muted"))
+	return append(segs, chips...)
 }
 
 // SummarySegs: "N releases need approval", "N deploys wait on you (D)",
@@ -610,12 +637,12 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	rail = append(rail, text.S(" deploying 3/9 · 2m", "chip.queued"), text.S(glyphs.G("capr"), "cap:chip.queued"))
 	rail = append(rail, text.S(" a release in flight: its rail fills from setup to finishing", "muted"))
 	ends := []text.Seg{text.S(text.Pad("", 10), "section")}
-	ends = append(ends, scenes.Chip("released", "chip.approved")...)
+	ends = append(ends, scenes.Chip(markOK()+"released", "chip.released")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("release FAILED", "chip.rolled")...)
+	ends = append(ends, scenes.Chip(markErr()+"release FAILED", "chip.fail")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("bumped — a: release NOW", "chip.rolled")...)
-	ends = append(ends, text.S(" its approval stands", "muted"))
+	ends = append(ends, scenes.Chip("bumped — a: release NOW", "chip.act")...)
+	ends = append(ends, text.S(" yours to act on", "muted"))
 	return [][]text.Seg{row, rail, ends}
 }
 
@@ -696,9 +723,13 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	default:
 		rule = fmt.Sprintf("a: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
 	}
-	out = append(out, scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "muted"), text.S(rule, "muted")}, width, inner)...)
+	ruleLines := scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "faint"), text.S(rule, "faint")}, width, inner)
 	if p, ok := w.progressOf(src); ok {
+		// in flight, the rail and its steps come first and the rule after
 		out = append(out, w.progressCard(app, src, p, width, inner)...)
+		out = append(out, ruleLines...)
+	} else {
+		out = append(out, ruleLines...)
 	}
 	if merged {
 		sha := MergeSHA(src)

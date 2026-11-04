@@ -5,6 +5,8 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/fx"
+	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 )
 
@@ -49,11 +51,17 @@ func (c *Confirm) Animated() bool {
 	return false
 }
 
-// Draw paints the question with its [y/N] on the bottom rows.
+// Draw paints the question with its [y/N] as a panel on the bottom
+// rows, a gold rule across its top so it reads apart from the screen it
+// asks about.
 func (c *Confirm) Draw(cv *canvas.Canvas, f *fx.Fx) {
 	cmd := "approve.cmd"
 	if c.Animated() {
 		cmd = []string{"approve.cmd", "approve.cmd.hi", "approve.cmd.hi2", "approve.cmd.hi"}[int(fx.Wave(1.6, 0)*4)%4]
 	}
-	DrawBlock(cv, c.Question+" [y/N]", cv.H-1, "prompt", cmd)
+	top := DrawBlock(cv, c.Question+" [y/N]", cv.H-1, "prompt", cmd)
+	if top > 1 {
+		cv.Fill(top-1, 0, cv.W, "text", false, false)
+		cv.PutSegs(top-1, 0, []text.Seg{text.S(strings.Repeat(glyphs.G("rule"), cv.W), "hazard.dim")}, 0, false, false)
+	}
 }

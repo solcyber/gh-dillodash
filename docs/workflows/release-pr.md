@@ -225,9 +225,9 @@ replays one offline; these shots are its steps.
 
 ## Live progress
 
-![A release in flight on the list: its rail fills phase by phase, with the phase and its clock](../shots/release-rail.png)
+![A release in flight on the list: its rail is a pip per phase, filled as it goes, with the phase and its clock](../shots/release-rail.png)
 
-![Mission control for a release in flight: the T+ clock, the rail with Amos on it, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
+![Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
 
 ![When a release lands: the rocket, the fireworks and RELEASED! across the screen](../shots/release-launch.png)
 
@@ -256,19 +256,28 @@ new run.
 
 **What you see.**
 
-- **The row's rail**: one segment per run phase, filling blue as the
-  release moves (deploying by runs done, verifying by the settle), a gold
-  head that breathes while the phase runs, a sweep of light when it
-  changes, stripes when it failed, a full rail once released. Next to it
-  the phase and its clock, and a spinner (a rolling ball while a dispatch
-  waits for its run). A scheduled release shows its slot and no spinner.
+- **The row's rail**: one pip per run phase, filled blue for a phase
+  done, gold for the one running (it breathes while the phase runs, and a
+  sweep of light crosses the rail when the phase changes), a thin line for
+  the phases to come, a solid gold block where a release failed, every pip
+  filled once released. Next to it the phase and its clock, and a spinner
+  (a rolling ball while a dispatch waits for its run). A scheduled release
+  shows its slot and no spinner. The chip says how it ended: `✓ released`
+  pale blue, `✗ release FAILED` dark gold, `deploy waiting · D` and
+  `bumped — a: release NOW` bold gold (yours to act on).
 - **The detail's mission control**, in the release card: the state chip,
-  the run and attempt (or the night and slot), a `T+` clock since the
-  command (`T-` to the slot), the rail across the card with Amos walking
-  it (the splash's Amos, small, in his own colors), one row per phase with its glyph and clock and a technical tail
-  (the merge sha, `n/m runs`, the settle countdown, the approver), the
-  outcome and the merge once it ends, the run's URL, and the last poll
-  error if there was one. It redraws every frame while live.
+  the run and attempt (or the night and slot), a bold `T+` clock since the
+  command (`T-` to the slot) with the apply budget's countdown after it,
+  the rail across the card as a stepper (one segment per phase, filling
+  within the running one: deploying by runs done, verifying by the
+  settle), Amos walking above it on a screen of 32 rows or more (the
+  splash's Amos, small, in his own colors), one row per phase with its
+  glyph and clock and a technical tail (the merge sha, `n/m runs`, the
+  settle countdown, the approver; the running step bold), the outcome and
+  the merge once it ends, the run's URL, and the last poll error if there
+  was one. The card's rule line comes after the steps while a release is in
+  flight, so every step fits at 24 rows. It redraws every frame while
+  live.
 - **One message when it ends**: `web-portal#90 released — verified on
   9f8e7d6 after 6m02s`, with the launch; `release FAILED at verifying —
   <detail>; run: <url>`; `release refused — <reason>`; a notice for
@@ -276,7 +285,7 @@ new run.
 - **A deploy held at an environment.** When the merge is done but the
   deploy run waits on a required-reviewer environment (the `WAITING`
   heading, or `pending_label`), the release ends as **`deploy waiting ·
-  D`** in gold: the rail stops at *deploying* without stripes, the card
+  D`** in bold gold: the rail stops at *deploying*, the card
   says `D` approves the waiting environment (if you review it) and that
   `window:pending` is swapped for `window:applied` by hand, and one notice
   names the environment. Once someone swaps the label, the row follows it:
@@ -296,8 +305,8 @@ repo's Actions turns that half off for the session, with one notice; the
 PR's labels, comments and deploy runs still carry the release to its
 outcome. Set `apply_workflow = ""` to skip the runs on purpose.
 
-**ASCII and motion off.** The rail draws with `#` and `-`, the stripes
-with `/\`, Amos in line art; with `motion = "off"` nothing breathes or
+**ASCII and motion off.** The rail draws with `#` and `-`, Amos in line
+art; with `motion = "off"` nothing breathes or
 sweeps and the card still redraws on every poll.
 
 ## Permissions

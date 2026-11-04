@@ -522,6 +522,9 @@ func TestConfirm(t *testing.T) {
 	if got := strings.TrimRight(cv.Text(23), " "); got != " post? [y/N]" {
 		t.Errorf("row 23 = %q", got)
 	}
+	if cv.StyleAt(22, 0) != "hazard.dim" || !strings.HasPrefix(cv.Text(22), "────") {
+		t.Errorf("a gold rule tops the question: %q %q", cv.Text(22), cv.StyleAt(22, 0))
+	}
 	longQ := "No live plan to /approve on #3543 (acme/15-canary: superseded, " +
 		"acme/05-net: no changes). Submit a GitHub review approval as alice?"
 	cv = canvas.New(80, 24)

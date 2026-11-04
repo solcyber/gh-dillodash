@@ -17,7 +17,38 @@ author) so the title keeps at least 24 cells.
 | blue `approved by me` | the row dims and stays in the default list until the PR merges, so approving never makes a PR silently vanish |
 | gold-on-gray `changes requested` | |
 | gray `DRAFT` | |
+| blue `merged` | merged into the production branch |
 | workflow chips | `applied, needs review`, `re-planned since queued`, `needs approval`, `not a release`, the window states, a release's rail and a waiting run's `approve: prod` / `waits: prod` come from the workflows; their docs explain them |
+
+The chips keep one meaning each, so a color never has to be read twice:
+
+| Chip | Means |
+|---|---|
+| pale blue `✓ released` | a release landed and verified; also a deploy run that succeeded |
+| steel `scheduled 23:12` | waits for its slot in the window (apart from the deeper blue `approved by me`) |
+| bold gold `deploy waiting · D`, `bumped — a: release NOW` | yours to act on now, with the key that does it |
+| dark gold `✗ release FAILED`, `✗ release refused` | it broke; the card says where |
+
+**A release's rail** is drawn per run phase (setup, validating, merging,
+approving envs, deploying, verifying, finishing). On its row it is one pip
+a phase: filled blue for a phase done, gold for the one running, a thin
+line for the phases to come, and a solid gold block where a release
+failed. In its detail it is a stepper, one segment a phase with a gap
+between them, so it lines up with the steps listed under it; the running
+step is bold with its clock in blue. Amos walks above the rail on a
+screen of 32 rows or more; on a shorter one the steps come first, so all
+seven fit at 24 rows.
+
+**A night's manifest row** draws the night's timeline in its title's place:
+the window from its start to its end as a rule, a mark per slot (a blue
+dot scheduled, gold running, a blue block done, a gold block failed) and a
+gold bar for now while the window is open. The night's countdown is blue,
+gold in its last quarter hour, and `live now` once the window opens; a
+narrow screen clips the attendance before the countdown.
+
+**A stage branch ahead of production** reads `3 units ahead of main` with
+a small chip per tag that has any: `go` blue, `hold` gold, `untagged`
+gray.
 
 PRs approved only by others are hidden by default; `A` shows them.
 Approvals made with `a` mark the row instantly, for the head they
@@ -62,9 +93,15 @@ about 30 frames a second; with `motion = "off"` the clock shows whole
 seconds and the dashboard wakes once a second for it instead.
 
 **The summary row** counts what needs you, failing CI, open issues, and the
-workflows' own counts, and shows an active filter as a chip. Inside a PR it
+workflows' own counts, and shows an active filter as a chip. On a narrow
+screen the counts with nothing to count go first, then the row ends in an
+ellipsis; what needs you always stays. Inside a PR it
 is a breadcrumb (`list › #42 › files`) with the scroll position and the
 search counter.
+
+**Menus and the help** open over a dimmed screen, so the box is the only
+thing in front. A `y/N` question sits on the bottom rows under a gold
+rule.
 
 **The status line** (second from the bottom) shows the newest message for
 six seconds, or until a newer one replaces it. Results are blue. Refusals
@@ -88,9 +125,14 @@ differ sharply in lightness, which covers tritan vision. No state depends
 on color alone; each has its own glyph or text too. The colors come from
 xterm's fixed 256-color cube (rendered exactly on truecolor terminals), so
 terminal themes do not remap them, and the background is true black. On a
-16-color terminal dillodash uses the ANSI blue and yellow. With `NO_COLOR`
+16-color terminal dillodash uses the ANSI blue and yellow, and a gray chip
+is black on light gray so it keeps its shape. With `NO_COLOR`
 or `--mono` it uses attributes only, and dims only rules and borders, never
 text.
+
+![The release night on a 16-color terminal: ANSI blue and yellow, gray chips black on light gray](shots/tier-16-night.png)
+
+![The list with no color at all (NO_COLOR or --mono): chips in reverse video, what needs a look in bold](shots/tier-mono-list.png)
 
 **High contrast, measured.** Every style that draws text clears WCAG
 4.5:1 against every background it can land on; rules, borders and icons

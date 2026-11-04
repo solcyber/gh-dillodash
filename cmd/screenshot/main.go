@@ -75,6 +75,7 @@ func main() {
 			continue
 		}
 		setGlyphs(s.glyphSet())
+		setTier(s.Tier)
 		frames, err := render(s, [][]string{s.Steps})
 		if err != nil {
 			die(fmt.Errorf("%s: %w", s.Name, err))
@@ -96,6 +97,19 @@ func setGlyphs(set string) {
 	}
 	theme.Setup(colorprofile.TrueColor, false)
 	fx.Motion = "off"
+}
+
+// setTier draws a shot at a color depth below truecolor: "256", "16" or
+// "mono" (anything else keeps truecolor).
+func setTier(tier string) {
+	switch tier {
+	case "256":
+		theme.Setup(colorprofile.ANSI256, false)
+	case "16":
+		theme.Setup(colorprofile.ANSI, false)
+	case "mono":
+		theme.Setup(colorprofile.Ascii, false)
+	}
 }
 
 // render drives the demo fixture through the shot's scripts.

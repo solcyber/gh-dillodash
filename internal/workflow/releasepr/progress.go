@@ -25,6 +25,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -880,7 +881,7 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 	if dep, ok := pr.Get(ExtDeploy).(deploys.State); ok {
 		p.DeployTotal = len(dep.Runs)
 		for _, r := range dep.Runs {
-			if r.Style == "chip.approved" {
+			if r.Style == deploys.Chip["done"] {
 				p.DeployDone++
 			}
 		}
@@ -1208,13 +1209,13 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 		}
 		return "deploying " + el
 	case PhaseReleased:
-		return "released"
+		return markOK() + "released"
 	case PhasePending:
 		return "deploy waiting · D"
 	case PhaseFailed:
-		return "release FAILED"
+		return markErr() + "release FAILED"
 	case PhaseRefused:
-		return "release refused"
+		return markErr() + "release refused"
 	case PhaseCancelled:
 		return "release cancelled"
 	case PhaseRolled:
@@ -1228,12 +1229,29 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 	return p.Phase + " " + el
 }
 
+// markOK and markErr lead a chip that ended: a check for released, a
+// cross for a failure, so the outcome reads without the color.
+func markOK() string  { return mark("ok") }
+func markErr() string { return mark("err") }
+
+func mark(name string) string {
+	if g := glyphs.G(name); g != "" {
+		return g + " "
+	}
+	return ""
+}
+
 // progressStyle is the chip style of a phase.
 func progressStyle(p Progress) string {
 	switch p.Phase {
 	case PhaseReleased:
-		return "chip.approved"
-	case PhaseFailed, PhaseRefused, PhaseUnverifiable, PhaseRolled, PhaseBumped, PhasePending:
+		return "chip.released"
+	case PhasePending, PhaseBumped:
+		// you can act: D approves the waiting deploy, a releases NOW
+		return "chip.act"
+	case PhaseFailed, PhaseRefused, PhaseUnverifiable:
+		return "chip.fail"
+	case PhaseRolled:
 		return "chip.rolled"
 	case PhaseNotRun, PhaseCancelled, PhaseLost:
 		return "chip.state"

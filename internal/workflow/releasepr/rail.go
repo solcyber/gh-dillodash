@@ -79,30 +79,41 @@ func railFrac(p Progress, now time.Time) float64 {
 
 // railSegs is the rail width cells wide. live says the release moves
 // (the head breathes, a sweep plays on "rail:<ident>"); f may be nil.
+//
+// It is drawn per phase. One cell a phase (the row chip) is a row of
+// pips: filled blue for a phase done, gold for the one running, a thin
+// line for the rest, and a solid gold block where a release failed. Wider (the
+// card) it is a stepper: one segment a phase with a gap between them, so
+// it lines up with the steps listed under it, the running segment filling
+// as its phase goes. Narrower than one cell a phase it is a plain meter.
 func railSegs(p Progress, now time.Time, f *fx.Fx, ident string, width int, live bool) []text.Seg {
 	if width <= 0 {
 		return nil
 	}
-	if p.Terminal && p.Phase != PhaseReleased && p.Phase != PhasePending {
-		return hazardSegs(p, width)
+	n := len(runPhases)
+	var segs []text.Seg
+	switch {
+	case width < n:
+		segs = meterRail(p, now, width)
+	case width < 2*n:
+		segs = pipRail(p, now, width)
+	default:
+		segs = stepRail(p, now, width)
 	}
-	frac := railFrac(p, now)
-	fill := "fx.b5"
-	if p.Phase == PhaseReleased {
-		fill = "meter.ok"
-	}
-	segs := fx.MeterSegs(frac, width, fill, "meter.track")
 	ambient := live && fx.Ambient && fx.Motion == "full"
-	if !ambient {
-		if p.Phase == PhaseReleased {
-			return segs
-		}
-		// a still frame: the head cell is the one being worked on
-		return headAt(segs, frac, width, "fx.g2")
+	if !ambient || p.Terminal {
+		return segs
 	}
-	// the head breathes gold while its phase runs
+	// the running phase breathes gold
 	beat := fx.Tri(fx.Wave(1.6, 0))
-	segs = headAt(segs, frac, width, fx.Ramp("fx.g", 4, 0.35+0.65*beat))
+	head := fx.Ramp("fx.g", 4, 0.35+0.65*beat)
+	cells := cellsOf(segs)
+	for i := range cells {
+		if cells[i].Style == "fx.g2" {
+			cells[i].Style = head
+		}
+	}
+	segs = joinCells(cells)
 	// and a sweep of light runs the rail when the phase changes
 	if f != nil {
 		if t, ok := f.T("rail:" + ident); ok {
@@ -112,18 +123,142 @@ func railSegs(p Progress, now time.Time, f *fx.Fx, ident string, width int, live
 	return segs
 }
 
-// headAt recolours the cell at the fill's edge.
-func headAt(segs []text.Seg, frac float64, width int, style string) []text.Seg {
-	cells := cellsOf(segs)
-	i := int(math.Floor(frac * float64(width)))
-	if i >= width {
-		i = width - 1
+// phaseStates is each run phase's state on the rail: done, running,
+// failed (where a failure stopped it), held (a deploy waits at an
+// environment), stopped (where a cancel or a lost track left it) or
+// pending.
+func phaseStates(p Progress) []string {
+	out := make([]string, len(runPhases))
+	for i := range out {
+		out[i] = "pending"
 	}
-	if i < 0 || i >= len(cells) || frac <= 0 {
-		return segs
+	fill := func(upTo int, at string) {
+		for i := 0; i < upTo && i < len(out); i++ {
+			out[i] = "done"
+		}
+		if upTo >= 0 && upTo < len(out) {
+			out[upTo] = at
+		}
 	}
-	cells[i].Style = style
+	switch {
+	case p.Phase == PhaseReleased:
+		fill(len(out), "")
+	case p.Phase == PhasePending:
+		fill(PhaseIndex(PhaseDeploying), "held")
+	case p.Terminal:
+		i := PhaseIndex(p.FailPhase)
+		if i < 0 {
+			return out // it never ran (refused, rolled, bumped, not run)
+		}
+		at := "failed"
+		if p.Phase == PhaseCancelled || p.Phase == PhaseNotRun || p.Phase == PhaseLost {
+			at = "stopped"
+		}
+		fill(i, at)
+	default:
+		if i := PhaseIndex(p.Phase); i >= 0 {
+			fill(i, "running")
+		}
+	}
+	return out
+}
+
+// phaseSub is how far the running phase is, 0..0.92: deploys done over
+// deploys, else the elapsed time over the phase's usual length, capped
+// short of full so a slow phase never looks done.
+func phaseSub(p Progress, now time.Time) float64 {
+	sub := 0.0
+	switch {
+	case p.Phase == PhaseDeploying && p.DeployTotal > 0:
+		sub = float64(p.DeployDone) / float64(p.DeployTotal)
+	default:
+		if b := phaseBudget[p.Phase]; b > 0 {
+			sub = p.Elapsed(now).Seconds() / b.Seconds()
+		}
+	}
+	return math.Min(0.92, math.Max(0, sub))
+}
+
+// railStyle is a phase state's style on the rail; released fills with
+// the meter's own blue.
+func railStyle(p Progress, state string) string {
+	switch state {
+	case "done":
+		if p.Phase == PhaseReleased {
+			return "meter.ok"
+		}
+		return "fx.b5"
+	case "running", "held":
+		return "fx.g2"
+	case "failed":
+		return "hazard"
+	}
+	return "meter.track"
+}
+
+// pipRail is one pip a phase, the last pip taking the spare cells.
+func pipRail(p Progress, now time.Time, width int) []text.Seg {
+	// a phase to come is a thin line, so a release that has not started
+	// reads as a quiet rule, not a row of empty boxes
+	on, off := glyphs.G("bar_on"), glyphs.G("rule")
+	states := phaseStates(p)
+	var cells []text.Seg
+	for i, st := range states {
+		w := 1
+		if i == len(states)-1 {
+			w = width - (len(states) - 1)
+		}
+		g := on
+		switch st {
+		case "pending", "stopped":
+			g = off
+		case "failed":
+			g = glyphs.G("block")
+		}
+		cells = append(cells, text.S(strings.Repeat(g, w), railStyle(p, st)))
+	}
 	return joinCells(cells)
+}
+
+// stepRail is one segment a phase with a one-cell gap between them.
+func stepRail(p Progress, now time.Time, width int) []text.Seg {
+	states := phaseStates(p)
+	n := len(states)
+	segW := (width - (n - 1)) / n
+	extra := width - (n - 1) - segW*n
+	block, line := glyphs.G("block"), glyphs.G("rule")
+	var out []text.Seg
+	for i, st := range states {
+		w := segW
+		if i == n-1 {
+			w += extra
+		}
+		switch st {
+		case "done", "failed", "held":
+			out = append(out, text.S(strings.Repeat(block, w), railStyle(p, st)))
+		case "running":
+			// the segment fills as its phase goes; its edge is the gold head
+			// blocks for what is done, a gold head, a line for the rest
+			edge := min(w-1, int(math.Floor(phaseSub(p, now)*float64(w))))
+			out = append(out, text.S(strings.Repeat(block, edge), "fx.b5"), text.S(block, "fx.g2"),
+				text.S(strings.Repeat(line, w-edge-1), "meter.track"))
+		default:
+			out = append(out, text.S(strings.Repeat(line, w), "meter.track"))
+		}
+		if i < n-1 {
+			out = append(out, text.S(" ", "text"))
+		}
+	}
+	return joinCells(out)
+}
+
+// meterRail is the plain meter of a rail too narrow for its phases.
+func meterRail(p Progress, now time.Time, width int) []text.Seg {
+	fill := "fx.b5"
+	if p.Phase == PhaseReleased {
+		fill = "meter.ok"
+	}
+	return fx.MeterSegs(railFrac(p, now), width, fill, "meter.track")
 }
 
 // sweep brightens the cells around a head that crosses the rail once
@@ -132,6 +267,9 @@ func sweep(segs []text.Seg, width int, t float64) []text.Seg {
 	cells := cellsOf(segs)
 	head := t * float64(width+2)
 	for i := range cells {
+		if strings.TrimSpace(cells[i].Text) == "" {
+			continue // the gaps between phases stay dark
+		}
 		switch d := math.Abs(float64(i) - head); {
 		case d < 1:
 			cells[i].Style = "fx.b7"
@@ -140,22 +278,6 @@ func sweep(segs []text.Seg, width int, t float64) []text.Seg {
 		}
 	}
 	return joinCells(cells)
-}
-
-// hazardSegs is the rail of a release that did not land: warning
-// stripes for a failure, a refusal or a roll-back (the chip's red), grey
-// ones for the rest.
-func hazardSegs(p Progress, width int) []text.Seg {
-	var b strings.Builder
-	rs := []rune(glyphs.G("hazard"))
-	for i := 0; i < width; i++ {
-		b.WriteRune(rs[i%len(rs)])
-	}
-	style := "hazard"
-	if p.Phase == PhaseCancelled || p.Phase == PhaseNotRun || p.Phase == PhaseLost {
-		style = "meter.track"
-	}
-	return []text.Seg{text.S(b.String(), style)}
 }
 
 // cellsOf splits segments into one-cell segments (every rail glyph is
@@ -447,6 +569,10 @@ func stateGlyph(state string) (string, string) {
 	return glyphs.G("wait"), "ci.wait"
 }
 
+// amosMinHeight is the screen height from which the card has room for
+// Amos above the rail and every step under it.
+const amosMinHeight = 32
+
 // nameCol is the card's phase-name column: the longest phase name
 // ("waiting for slot") and a gap.
 const nameCol = 17
@@ -486,23 +612,35 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 		if p.Phase == PhaseScheduled && !p.SlotAt.IsZero() && now.Before(p.SlotAt) {
 			clock = "T-" + fmtClock(p.SlotAt.Sub(now))
 		}
-		cstyle := "muted"
+		cstyle := "strong"
 		if live && fx.Ambient && fx.Motion == "full" {
 			cstyle = fx.Ramp("hdr.logo.", 3, fx.Tri(fx.Wave(3.0, 0)))
 		}
-		if gap := inner - 4 - text.SegsWidth(head) - text.Width(clock); gap > 1 {
+		// the apply budget's countdown rides after the clock
+		var budget []text.Seg
+		if left := w.budgetLeft(p, now, false); left != "" {
+			bstyle := "faint"
+			if strings.HasPrefix(left, "over") {
+				bstyle = "budget.low"
+			}
+			budget = []text.Seg{text.S("  "+glyphs.Ico("budget")+left, bstyle)}
+		}
+		if gap := inner - 4 - text.SegsWidth(head) - text.Width(clock) - text.SegsWidth(budget); gap > 1 {
 			head = append(head, text.S(strings.Repeat(" ", gap), "text"))
 		} else {
 			head = append(head, text.S("  ", "text"))
 		}
 		head = append(head, text.S(clock, cstyle))
+		head = append(head, budget...)
 	}
 	out = append(out, scenes.CardLines(head, width, inner)...)
 	// Amos walks the rail, just above it
 	ident := fmt.Sprintf("%s#%d", pr.Repo.Name, pr.Number)
 	railW := max(1, inner-4)
 	f := app.Fx()
-	if inner >= 60 && scenes.Mascot != "none" {
+	// Amos walks the rail only where the card has the rows to spare: on
+	// a short screen the steps come first
+	if inner >= 60 && scenes.Mascot != "none" && app.Height() >= amosMinHeight {
 		for _, ln := range amosOnRail(p, railFrac(p, now), railW, live) {
 			out = append(out, scenes.CardLines(ln, width, inner)...)
 		}
@@ -522,13 +660,18 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	// the timeline
 	for _, r := range w.timelineRows(p, now) {
 		g, st := stateGlyph(r.state)
-		nst := "text"
-		if r.state == "pending" {
+		nst, cst := "text", "muted"
+		switch r.state {
+		case "pending":
 			nst = "faint"
+		case "running":
+			nst, cst = "strong", "ci.run" // the step being worked on
+		case "failed":
+			nst, cst = "approve.refused", "ci.fail"
 		}
 		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(r.phase, nameCol), nst)}
 		if r.timed && r.state != "pending" && r.state != "skipped" {
-			line = append(line, text.S(text.Pad(fmtClock(r.elapsed), 6), "muted"))
+			line = append(line, text.S(text.Pad(fmtClock(r.elapsed), 6), cst))
 		} else {
 			line = append(line, text.S(strings.Repeat(" ", 6), "text"))
 		}
