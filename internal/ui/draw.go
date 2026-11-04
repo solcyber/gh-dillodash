@@ -334,8 +334,58 @@ func (m *Model) drawSubheader(c *canvas.Canvas, w int) {
 	}
 	right := m.positionSegs()
 	rw := text.SegsWidth(right)
-	c.PutSegs(1, 0, segs, max(0, w-rw-2), false, false)
+	room := max(0, w-rw-2)
+	if m.view == ViewList {
+		segs = fitSummary(segs, room)
+	}
+	c.PutSegs(1, 0, segs, room, false, false)
 	c.PutSegs(1, max(0, w-rw-1), right, 0, false, false)
+}
+
+// fitSummary fits the summary row in room: the items with nothing to
+// count (all muted) go first, from the right, then the rest ends in an
+// ellipsis instead of a cut-off separator. The first item (what needs
+// you) always stays.
+func fitSummary(segs []text.Seg, room int) []text.Seg {
+	if text.SegsWidth(segs) <= room {
+		return segs
+	}
+	sepText := "  " + glyphs.G("sep") + "  "
+	var items [][]text.Seg
+	cur := []text.Seg{}
+	for _, s := range segs {
+		if s.Style == "rule" && s.Text == sepText {
+			items = append(items, cur)
+			cur = []text.Seg{}
+			continue
+		}
+		cur = append(cur, s)
+	}
+	items = append(items, cur)
+	quiet := func(it []text.Seg) bool {
+		for _, s := range it {
+			if s.Style != "sum.muted" && strings.TrimSpace(s.Text) != "" {
+				return false
+			}
+		}
+		return true
+	}
+	join := func(its [][]text.Seg) []text.Seg {
+		var out []text.Seg
+		for i, it := range its {
+			if i > 0 {
+				out = append(out, text.S(sepText, "rule"))
+			}
+			out = append(out, it...)
+		}
+		return out
+	}
+	for i := len(items) - 1; i > 0 && text.SegsWidth(join(items)) > room; i-- {
+		if quiet(items[i]) {
+			items = append(items[:i], items[i+1:]...)
+		}
+	}
+	return text.EllipSegs(join(items), room)
 }
 
 // summarySegs: the list's summary row.

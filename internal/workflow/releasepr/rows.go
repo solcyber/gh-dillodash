@@ -528,11 +528,35 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 	if s.Units == nil || s.Units.Units == 0 {
 		return append(segs, text.S(text.Ellip(txt, room), "faint"))
 	}
-	style := "rev.ok"
-	if s.Units.Hold > 0 || s.Units.Untagged > 0 {
-		style = "rev.attend"
+	// ahead: the count in words, then a small chip per tag that has any
+	// (go blue, hold gold, untagged gray), so the row reads at a glance
+	// without a whole gold sentence
+	u := s.Units
+	ge := ""
+	if u.Truncated {
+		ge = "≥"
 	}
-	return append(segs, text.S(text.Ellip(txt, room), style))
+	head := fmt.Sprintf("%s%d unit%s ahead of %s ", ge, u.Units, plural(u.Units, "", "s"), w.cfg.ProductionBranch)
+	var chips []text.Seg
+	for _, c := range []struct {
+		n     int
+		name  string
+		style string
+	}{{u.Go, "go", "chip.approved"}, {u.Hold, "hold", "chip.act"}, {u.Untagged, "untagged", "chip.draft"}} {
+		if c.n > 0 {
+			chips = append(chips, text.S(" ", "text"))
+			chips = append(chips, scenes.Chip(fmt.Sprintf("%d %s", c.n, c.name), c.style)...)
+		}
+	}
+	if text.Width(head)+text.SegsWidth(chips) > room {
+		style := "rev.ok"
+		if u.Hold > 0 || u.Untagged > 0 {
+			style = "rev.attend"
+		}
+		return append(segs, text.S(text.Ellip(txt, room), style))
+	}
+	segs = append(segs, text.S(head, "muted"))
+	return append(segs, chips...)
 }
 
 // SummarySegs: "N releases need approval", "N deploys wait on you (D)",
