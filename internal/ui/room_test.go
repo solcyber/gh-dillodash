@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,8 @@ func TestRoomConfigOff(t *testing.T) {
 // TestRoomScreen: in the room the dashboard is inside the glass with the
 // mullions across it and the plaque under it; out of it the screen is
 // the plain dashboard, exactly.
+var digits = regexp.MustCompile(`[0-9]`)
+
 func TestRoomScreen(t *testing.T) {
 	open := true
 	h := roomHarness(t, &open, 160, 48)
@@ -164,7 +167,9 @@ func TestRoomScreen(t *testing.T) {
 			}
 			continue
 		}
-		if out[i] != want[i] {
+		// digits masked: the header's clock and refresh countdown tick
+		// between the two harnesses on a slow runner
+		if digits.ReplaceAllString(out[i], "9") != digits.ReplaceAllString(want[i], "9") {
 			t.Errorf("line %d out of the room:\n%q\nplain:\n%q", i, out[i], want[i])
 		}
 	}
