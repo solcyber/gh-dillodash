@@ -30,6 +30,8 @@ dashboard that can be held to the repos and the team it is for.
   warning and posting unchecked.
 - **`[display] profile`**: a short badge in the header, for someone who
   runs more than one config.
+- `config check` prints `writes: only to ...` when `allowed_repos` is set,
+  and says strict mode refuses while the team cannot be read.
 - `terraform_approve` reads `Window: **n/a (apply on approval)**` (or
   `**n/a**`) from a repo with no maintenance window: never disruptive, a
   plain `/approve`, the same as a digest with no Window line.
