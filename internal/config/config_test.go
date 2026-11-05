@@ -84,6 +84,7 @@ mascot = "none"
 clock = false
 clock_timezone = "Europe/London"
 clock_tz_label = " UK "
+room = false
 
 [bots]
 logins = ["Infra-Bot", "github-actions", "infra-bot"]
@@ -539,7 +540,7 @@ func TestOverrides(t *testing.T) {
 	if want := []model.Repo{repo("acme/app"), repo("acme/web")}; !reflect.DeepEqual(c.Reviews.Repos, want) {
 		t.Errorf("--repo replaces the list: %v", c.Reviews.Repos)
 	}
-	if c.Display != (DisplayConfig{RefreshSecs: 5, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York"}) {
+	if c.Display != (DisplayConfig{RefreshSecs: 5, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true}) {
 		t.Errorf("display = %+v", c.Display)
 	}
 	if !reflect.DeepEqual(c.Warnings, []string{"--refresh: 1 is below the floor of 5, using 5"}) {
