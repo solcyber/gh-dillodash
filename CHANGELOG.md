@@ -14,7 +14,10 @@ release rail that only believes the release job.
   real time, a mug steaming on the sill. Everything still works through
   the glass. `W` (it is on the plaque under the window) goes back to the
   normal dashboard, and brings the room back; each window starts in the
-  room. `[display] room = false` turns it off. The room needs 100x30; a
+  room, as a reminder. Outside the window the dashboard stays plain and
+  `W` steps into the room any time; the bar offers `W` whenever the room
+  fits and is not shown. `[display] room = false` keeps the window plain
+  too. The room needs 100x30; a
   smaller terminal gets the normal dashboard. With motion off the room
   holds still.
 - **The launch, psychedelic.** From 256 colors up a release lands in a
