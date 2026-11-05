@@ -65,6 +65,11 @@ var shots = []shot{
 	{Name: "night-4-cancel", Night: true, Steps: nightSteps(4), Expect: []string{"16:09 slot on manifest #20", "/window-cancel rel:db-migrations#64"}},
 	{Name: "night-5-stg", Night: true, Steps: nightSteps(5), Expect: []string{"deploy waiting · D", "stg (migrate, run 801)"}},
 	{Name: "night-6-done", Night: true, Steps: nightSteps(6), Expect: []string{"approved 1 deployment of db-migrations#64 (prod)"}},
+	// the room: the window is open, so the dashboard is the view out of
+	// it; W steps out of the room to the plain dashboard
+	{Name: "room", Night: true, Cols: 160, Rows: 48, Steps: nightSteps(1), Expect: []string{"back to work", "#212"},
+		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 1.3}},
+	{Name: "room-off", Night: true, Cols: 160, Rows: 48, Steps: append(nightSteps(1), "W"), Expect: []string{"#212", "steps back into the room"}},
 	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
 	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
 	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},

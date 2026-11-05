@@ -88,6 +88,11 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   the GraphQL budget and when the next refresh lands.
 - **Fortress mode** (`d`): everything open as a Dwarf Fortress map over
   Manhattan or Chicago. Row is age, lane is repo, shape is what it is.
+- **The room.** While the release window is open, the dashboard is the view
+  out of a window from a lamp-lit room at night: curtains, plants, a wall
+  clock, a mug on the sill. `W` steps out to the plain dashboard and back
+  in; the next window opens in the room again
+  ([docs/display.md](docs/display.md#the-room)).
 
 It refreshes in the background every five minutes by default (`r` refreshes
 now) and backs off by itself when GitHub rate-limits the token.
@@ -122,6 +127,7 @@ fast reviewer.
 
 The essentials: `enter` opens, `a` approves, `c` comments, `M` merges,
 `D` approves deployments, `/` filters or searches, `d` is fortress mode,
+`W` steps out of the room in the release window (and back in),
 `?` is the help with every key and the glyph legend, `q` quits (`Esc`
 clears the filter instead). Every key, per view, is in
 [docs/keys.md](docs/keys.md), which is generated from the key table the

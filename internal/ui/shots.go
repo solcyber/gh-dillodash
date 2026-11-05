@@ -36,6 +36,8 @@ var ShotCaptions = map[string]string{
 	"night-4-cancel":         "release NOW on the migration that holds a slot: the same flow offers the window-cancel of its item",
 	"night-5-stg":            "The migration merged and waits on stg: D on its row approves it",
 	"night-6-done":           "stg, then prod: both releases out, with no keystroke outside dillodash",
+	"room":                   "The room: in the release window the dashboard is the view out of a window, behind its mullions, with curtains, plants, Amos's portrait, a wall clock and a mug of coffee on the sill; the plaque says W goes back to work",
+	"room-off":               "W steps out of the room: the plain dashboard, the same night, for getting work done",
 	"icons-nerd":             "The list with the bundled Nerd Font's icons",
 	"icons-unicode":          "The same list with icons = \"unicode\": plain Unicode symbols, no font needed",
 	"icons-ascii":            "The same list with icons = \"ascii\": every glyph from the seven-bit set",

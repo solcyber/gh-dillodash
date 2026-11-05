@@ -74,6 +74,9 @@ type DisplayConfig struct {
 	Clock         bool
 	ClockTimezone string // IANA zone, validated at parse
 	ClockTZLabel  string // "" = derived (EST/EDT)
+	// Room draws the dashboard as seen through a window from a room
+	// while the release window is open (W steps out of it and back).
+	Room bool
 }
 
 // ClockLocal is the header clock's second zone with its label (both
@@ -342,7 +345,7 @@ func Default() *Config {
 	return &Config{
 		GitHub:  GitHubConfig{}, // Host "": $GH_HOST, then gh's default host, then github.com
 		Reviews: ReviewsConfig{CIRecheckSecs: 900},
-		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York"},
+		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true},
 		Bots:    BotsConfig{Logins: []string{"github-actions", "dependabot"}},
 		Update:  UpdateConfig{Auto: true, Channel: "stable"},
 	}

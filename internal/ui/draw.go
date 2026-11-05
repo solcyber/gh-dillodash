@@ -17,8 +17,18 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
-// draw paints one frame.
+// draw paints one frame: the dashboard, or in the room (room.go) the
+// room with the dashboard behind its glass. The launch goes over all of
+// it, so a release's celebration fills the room too.
 func (m *Model) draw(c *canvas.Canvas) {
+	if !m.drawRoom(c) {
+		m.drawFrame(c)
+	}
+	scenes.Launch(c, m.fx, c.H, c.W)
+}
+
+// drawFrame paints the dashboard onto c, whatever its size.
+func (m *Model) drawFrame(c *canvas.Canvas) {
 	h, w := c.H, c.W
 	fx.Ambient = fx.Motion == "full" && fx.Now()-m.lastKey < fx.AmbientIdleSecs
 	// mono has no color effects to tick for, only the empty list's walk
@@ -76,7 +86,6 @@ func (m *Model) draw(c *canvas.Canvas) {
 		m.modal.Draw(c, m.fx)
 	}
 	scenes.Confetti(c, m.fx, h, w)
-	scenes.Launch(c, m.fx, h, w)
 }
 
 // endSplash: the splash is over (time, data, a key, or no room): the

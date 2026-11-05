@@ -58,6 +58,7 @@ it runs whatever it wraps.
 | `clock` | `true` | | The header clock: the UTC date and time, then the same instant in `clock_timezone`, `2026-11-03 04:12:33.45 UTC  23:12:33.45 EST`. Hundredths with `motion = "full"`, whole seconds with `off`. `false` hides it. |
 | `clock_timezone` | `America/New_York` | | IANA zone of the clock's second time, e.g. `Europe/London`, `Asia/Tokyo`, `UTC`. |
 | `clock_tz_label` | `""` | | Label for the second time, e.g. `ET`. Empty uses the zone's own abbreviation for the instant, so New York reads `EST` in winter and `EDT` in summer. |
+| `room` | `true` | | While the release window is open, the dashboard is the view out of a window: it shrinks to the glass in the middle of the screen, behind a cross of mullions, and the room around it has curtains, plants, pictures, a wall clock and a mug of something hot. `W` steps out to the plain dashboard (and back in); the next window opens in the room again. Needs a terminal of at least 100×30. `false` keeps the plain dashboard, and `W` still shows the room. |
 
 ## `[bots]`
 
