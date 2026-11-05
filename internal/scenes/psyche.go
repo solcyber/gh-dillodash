@@ -108,25 +108,25 @@ func groundAt(tier theme.Tier, top, bot int) string {
 	return g.t[top][bot]
 }
 
-type sgrKey struct {
+type psySGRKey struct {
 	fg, bg fx.RGB
 	hasBG  bool
 	tier   theme.Tier
 }
 
 var (
-	sgrMu    sync.Mutex
-	sgrCache = map[sgrKey]string{}
-	near256  = map[fx.RGB]int{}
+	sgrMu       sync.Mutex
+	psySGRCache = map[psySGRKey]string{}
+	near256     = map[fx.RGB]int{}
 )
 
 // psySGR is the raw SGR prefix for fg on bg (no bg: the cell's own) at
 // a tier: 24-bit, or the xterm-256 index nearest in OKLab.
 func psySGR(fg fx.RGB, bg fx.RGB, hasBG bool, tier theme.Tier) string {
-	k := sgrKey{fg, bg, hasBG, tier}
+	k := psySGRKey{fg, bg, hasBG, tier}
 	sgrMu.Lock()
 	defer sgrMu.Unlock()
-	if s, ok := sgrCache[k]; ok {
+	if s, ok := psySGRCache[k]; ok {
 		return s
 	}
 	var s string
@@ -142,10 +142,10 @@ func psySGR(fg fx.RGB, bg fx.RGB, hasBG bool, tier theme.Tier) string {
 		}
 	}
 	s += "m"
-	if len(sgrCache) > 1<<16 { // a bound, not a policy: the levels make ~10k
-		sgrCache = map[sgrKey]string{}
+	if len(psySGRCache) > 1<<16 { // a bound, not a policy: the levels make ~10k
+		psySGRCache = map[psySGRKey]string{}
 	}
-	sgrCache[k] = s
+	psySGRCache[k] = s
 	return s
 }
 
