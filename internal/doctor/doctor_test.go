@@ -219,6 +219,15 @@ func TestReportApprovers(t *testing.T) {
 	if !strings.Contains(out, "could not read @acme/release-approvers with this token (it needs the organization's Members read)") {
 		t.Errorf("unreadable:\n%s", out)
 	}
+	if !strings.Contains(out, "commands are posted unchecked") || strings.Contains(out, "writes: only to") {
+		t.Errorf("unreadable, not strict, no allowed_repos:\n%s", out)
+	}
+	cfg.GitHub.ApproversTeamStrict = true
+	cfg.GitHub.AllowedRepos = []model.Repo{infra}
+	out, _ = report(t, "alice", "keyring", cfg)
+	if !strings.Contains(out, "approvers_team_strict refuses every such command") || !strings.Contains(out, "  writes: only to acme/infra (allowed_repos)") {
+		t.Errorf("strict and allowed_repos:\n%s", out)
+	}
 	if out, _ := report(t, "alice", "keyring", cfgWith(infra)); strings.Contains(out, "approvers:") {
 		t.Errorf("no team, no line:\n%s", out)
 	}

@@ -31,7 +31,7 @@ with one), create it with:
 | Resource owner | your organization (not your personal account, or the repos 404) |
 | Repository access | every repo in `[reviews] repos` and, for `release_pr`, every release repo; for `waiting_runs`, every repo in its `repos` |
 | Pull requests | **Read and write**: the dashboard, reviews, approval comments |
-| Issues | **Read and write**: the issues section, issue comments, tagging, and the window and release commands, which are comments. Without it the dashboard shows PRs only and says so on the warn line |
+| Issues | **Read and write**: the issues section, issue comments, tagging, labels (`L`), assignees (`s`), close and reopen (`Z`), the hand-off to an agent (`H`), and the window and release commands, which are comments. Without it the dashboard shows PRs only and says so on the warn line |
 | Actions | **Read**: the CI column, see below; the deploy state of merged releases; the waiting runs |
 | Contents | **Read**: commit data and the diff viewers |
 | Metadata | Read (added automatically); `release_pr` discovery reads the org's repos and rulesets with it |
@@ -47,7 +47,7 @@ where you use `M`, `D`, `x` and `X`:
 | Actions | **Read and write**: `x` re-runs and cancels a run (reading its log is Actions read); `X` runs a listed workflow with `workflow_dispatch` |
 | Contents | **Read and write** on a repo `X` fires a `repository_dispatch` event on |
 | Pull requests | **Read and write** (as above): request changes and dismissing your own approval are review writes too |
-| Members (organization) | **Read**, only with `[github] approvers_team`: dillodash checks the posting login is in the team before it posts a release, window or plan command; without it dillodash warns and posts unchecked |
+| Members (organization) | **Read**, only with `[github] approvers_team`: dillodash checks the posting login is in the team before it posts a release, window or plan command; without it dillodash warns and posts unchecked, and with `approvers_team_strict = true` it refuses to post |
 
 Without them GitHub answers `403 Resource not accessible by personal access
 token`, and `M`, `D`, `x` and `X` name the permission to add.

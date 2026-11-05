@@ -401,8 +401,10 @@ func dashboard(args []string) error {
 		return exitError{2, err}
 	}
 	err = ui.Run(context.Background(), ui.Options{
-		Config:    cfg,
-		GH:        gh,
+		Config: cfg,
+		// [github] allowed_repos: writes anywhere else are refused here,
+		// under every key that posts
+		GH:        ghapi.WithAllowedRepos(gh, cfg.GitHub.AllowedRepos),
 		Workflows: wf,
 		Me:        me,
 		Host:      gh.Host(),

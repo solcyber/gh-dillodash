@@ -11,6 +11,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/fortress"
 	"github.com/solcyber/gh-dillodash/internal/fx"
+	"github.com/solcyber/gh-dillodash/internal/glyphs"
 )
 
 // SnapshotOptions tune a snapshot's clock and effects: the screenshot
@@ -41,6 +42,10 @@ func Snapshots(ctx context.Context, o Options, w, h int, scripts [][]string) ([]
 
 // SnapshotsWith is Snapshots with the clock and effects set.
 func SnapshotsWith(ctx context.Context, o Options, so SnapshotOptions, w, h int, scripts [][]string) ([]*canvas.Canvas, error) {
+	// the spinner turns with the snapshot's clock, not the wall's
+	wasSpin := glyphs.SpinnerClock
+	defer func() { glyphs.SpinnerClock = wasSpin }()
+	glyphs.SpinnerClock = func() time.Duration { return time.Duration(so.Clock * float64(time.Second)) }
 	if so.Motion {
 		wasMotion, wasNow := fx.Motion, fx.Now
 		defer func() { fx.Motion, fx.Now = wasMotion, wasNow }()

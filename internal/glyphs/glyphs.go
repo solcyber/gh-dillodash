@@ -227,13 +227,18 @@ func Ico(name string) string {
 
 var start = time.Now()
 
+// SpinnerClock is how long the spinner has spun: the time since the
+// process started. A snapshot pins it, so a picture with a spinner in it
+// comes out the same on every render.
+var SpinnerClock = func() time.Duration { return time.Since(start) }
+
 // SpinnerFrame is the spinner glyph for this instant, ten frames a second.
 func SpinnerFrame() string {
 	frames := []rune(G("spinner"))
 	if len(frames) == 0 {
 		return ""
 	}
-	n := int(time.Since(start).Milliseconds()/100) % len(frames)
+	n := int(SpinnerClock().Milliseconds()/100) % len(frames)
 	return string(frames[n])
 }
 

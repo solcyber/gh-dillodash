@@ -108,6 +108,10 @@ var (
 	NotADigestRE = regexp.MustCompile(`(?m)^(## (Apply |Window apply |Plan-set |Ceremony )|\*\*(Apply|Ceremony) refused|Auto-generated apply-log entry)`)
 	// WindowVerdictRE is the "Window (...): **verdict**" line in a digest.
 	WindowVerdictRE = regexp.MustCompile(`(?m)^Window \(([^)]*)\):\s*\*\*([^*\n]+)\*\*`)
+	// NoWindowRE is the "Window: **n/a ...**" line of a repo that applies
+	// on approval and has no maintenance window: nothing queues, so a
+	// plain approve applies (the same as a digest with no Window line).
+	NoWindowRE = regexp.MustCompile(`(?m)^Window:\s*\*\*\s*(n/a\b[^*\n]*)\*\*`)
 )
 
 // cmdRegexps are the config-shaped regexes, cached per command/flag set.

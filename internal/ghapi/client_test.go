@@ -992,3 +992,72 @@ func TestWorkflowFileRunsAndJobs(t *testing.T) {
 		t.Errorf("403 shape: %v", err)
 	}
 }
+
+// TestTriageOperations: labels, assignees and issue state go to the
+// issues API (a PR's labels and assignees are its issue's).
+func TestTriageOperations(t *testing.T) {
+	s := newServer(t)
+	s.handle("GET", "/repos/acme/infra/labels", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "1" {
+			var items []string
+			for i := 0; i < 100; i++ {
+				items = append(items, fmt.Sprintf(`{"name":"l%d"}`, i))
+			}
+			io.WriteString(w, "["+strings.Join(items, ",")+"]")
+			return
+		}
+		io.WriteString(w, `[{"name":"good first issue"}]`)
+	})
+	s.jsonOK("POST", "/repos/acme/infra/issues/7/labels", `[]`)
+	s.jsonOK("DELETE", "/repos/acme/infra/issues/7/labels/good first issue", `[]`)
+	s.jsonOK("POST", "/repos/acme/infra/issues/7/assignees", `{}`)
+	s.jsonOK("DELETE", "/repos/acme/infra/issues/7/assignees", `{}`)
+	s.jsonOK("PATCH", "/repos/acme/infra/issues/7", `{}`)
+
+	cl := s.client(t)
+	ctx := context.Background()
+	labels, err := cl.RepoLabels(ctx, infra)
+	if err != nil || len(labels) != 101 || labels[100].Name != "good first issue" {
+		t.Fatalf("labels: %d %v", len(labels), err)
+	}
+	if req, _ := s.last(); req.URL.RawQuery != "per_page=100&page=2" {
+		t.Errorf("labels query: %s", req.URL.RawQuery)
+	}
+	if err := cl.AddLabels(ctx, infra, 7, []string{"agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := s.last(); body != `{"labels":["agent"]}` {
+		t.Errorf("add labels body: %s", body)
+	}
+	if err := cl.RemoveLabel(ctx, infra, 7, "good first issue"); err != nil {
+		t.Fatal(err)
+	}
+	if req, _ := s.last(); req.URL.EscapedPath() != "/repos/acme/infra/issues/7/labels/good%20first%20issue" {
+		t.Errorf("remove label path: %s", req.URL.EscapedPath())
+	}
+	if err := cl.AddAssignees(ctx, infra, 7, []string{"bob"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := s.last(); body != `{"assignees":["bob"]}` {
+		t.Errorf("assign body: %s", body)
+	}
+	if err := cl.RemoveAssignees(ctx, infra, 7, []string{"bob"}); err != nil {
+		t.Fatal(err)
+	}
+	if req, body := s.last(); req.Method != "DELETE" || body != `{"assignees":["bob"]}` {
+		t.Errorf("unassign: %s %s", req.Method, body)
+	}
+	if err := cl.SetIssueState(ctx, infra, 7, "closed", "not_planned"); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := s.last(); body != `{"state":"closed","state_reason":"not_planned"}` {
+		t.Errorf("close body: %s", body)
+	}
+	if err := cl.SetIssueState(ctx, infra, 7, "open", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := s.last(); body != `{"state":"open"}` {
+		t.Errorf("reopen body: %s", body)
+	}
+}

@@ -24,6 +24,10 @@
 | detail | `x` | the Actions runs of the open PR (its head's, or its merge's once merged, and a release's run): re-run, cancel, reject the deployment it waits on, or read a job's log in `$PAGER` |
 | detail | `c` / `C` | comment inline / in `$EDITOR` |
 | detail | `t` | tag someone: pick a repo user, `$EDITOR` opens seeded with the mention, posts as a comment |
+| detail | `L` | labels: pick one of the repo's labels to add, or one the item carries (`[x]`) to remove |
+| issue | `s` | assign an issue: pick a repo user to assign, or an assignee (`[x]`) to unassign |
+| issue | `Z` | close an open issue as completed or as not planned; reopen a closed one (after a confirm) |
+| detail | `H` | hand the open PR or issue to the agent: adds `[agent] handoff_label` and, when set, posts `handoff_comment`, after a confirm (an agent that is a GitHub App's bot watches a label, not @-mentions; the bar shows it while `handoff_label` is set) |
 | detail | `f` | changed files |
 | detail | `v` | the full PR diff in `$PAGER` |
 | detail | `/` | search, less-style: smartcase, a `3/17` counter |

@@ -137,6 +137,11 @@ func (m *Model) doRuns(app *lockedApp) {
 	case runLogs:
 		m.runLogs(app, t)
 		return
+	}
+	if m.writeRefused(app, t.Repo, acts[i]+" of "+what) {
+		return
+	}
+	switch acts[i] {
 	case runReject:
 		m.rejectRun(app, t, what)
 		return

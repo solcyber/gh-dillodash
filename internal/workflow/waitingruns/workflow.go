@@ -551,6 +551,9 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		return false
 	}
 	where := it.where()
+	if workflow.WriteRefused(app, it.Repo, "approving "+where) {
+		return true
+	}
 	app.Flash(fmt.Sprintf("reading %s's environments...", where))
 	pend, err := app.GH().PendingDeployments(app.Context(), it.Repo, it.Run.ID)
 	if err != nil {

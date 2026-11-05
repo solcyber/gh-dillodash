@@ -46,6 +46,14 @@ const (
 	nightBudget = 25
 )
 
+// DayEpoch is when the gallery's day shots are drawn (cmd/screenshot): an
+// afternoon after the example window's 12:00 UTC cutoff, so the window
+// section lists the next night with its manifest open. The demo itself
+// runs on the wall clock; the shots are pinned so they come out the same
+// whenever they are rendered, and a regeneration changes only what a
+// change changed.
+var DayEpoch = time.Date(2031, 4, 15, 14, 30, 0, 0, time.UTC)
+
 // NightClock is the replay's clock: NightEpoch plus the time since the
 // demo started. Install it as clock.Now.
 func NightClock() func() time.Time {

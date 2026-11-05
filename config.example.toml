@@ -5,7 +5,7 @@
 #   repos = ["acme/infra"]
 #
 # Everything else below is optional and shown commented out with its default
-# (ceremony_window, manifest_repo and org have no default: theirs are examples).
+# (allowed_repos, ceremony_window, manifest_repo and org have no default: theirs are examples).
 # Auth is the gh CLI's job (`gh auth login`; GH_TOKEN overrides it); there is no token here.
 # Search order: --config, $DILLODASH_CONFIG, $XDG_CONFIG_HOME/dillodash/config.toml
 # (%APPDATA%\dillodash\config.toml on Windows), ~/.config/dillodash/config.toml.
@@ -17,6 +17,8 @@
 # host = ""                   # GitHub Enterprise Server hostname; unset: $GH_HOST, then gh's default host, then github.com
 # login = ""                  # expected login; warns when gh's active account differs
 # approvers_team = ""         # "org/team": a command a bot validates by its author (/release-now, /release, /attend, /window-cancel, /approve) is posted only by a member
+# approvers_team_strict = false # true: refuse that command when the team can't be read (a token without the organization's Members read), instead of warning and posting unchecked
+# allowed_repos = ["acme/infra"] # the only repos dillodash writes to (comments, reviews, merges, commands, labels, assignees, close/reopen, deployments, runs); unset = every repo
 
 # ============================================================================
 # Reviews — the repos the dashboard lists
@@ -38,6 +40,15 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # clock_timezone = "America/New_York" # IANA zone of the clock's second time
 # clock_tz_label = ""         # label for it, e.g. "ET"; "" = the zone's own (EST/EDT)
 # room = true                 # in the release window, the dashboard is a view out of a window (W toggles)
+# profile = ""                # a header badge (at most 12 characters), e.g. "OPS": which config this dashboard runs
+
+# ============================================================================
+# Agent — the agent an item is handed to with H. An agent that is a GitHub
+# App's bot can't be @-mentioned into a notification, so it watches a label.
+# ============================================================================
+[agent]
+# handoff_label = ""          # the label H adds; "" = H is off
+# handoff_comment = ""        # posted with the label when set (a first instruction, a note for the humans watching)
 
 # ============================================================================
 # Bots — logins drawn as bots (exact, case-insensitive; "[bot]" suffixes always

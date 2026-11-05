@@ -96,6 +96,8 @@ var coreKeys = map[string]bool{
 	"issue:/": true, "issue:C": true, "issue:G": true, "issue:N": true, "issue:c": true, "issue:g": true, "issue:h": true, "issue:j": true,
 	"issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:t": true, "issue:y": true, "issue:R": true,
 	"any::": true, "any:?": true, "any:e": true, "any:W": true, "list:W": true, "detail:W": true, "issue:W": true,
+	// triage: labels, hand to the agent, and (issues) assign, close/reopen
+	"detail:L": true, "detail:H": true, "issue:L": true, "issue:H": true, "issue:s": true, "issue:Z": true,
 }
 
 // CoreKeyIDs lists the view:key pairs the dashboard reserves, sorted;

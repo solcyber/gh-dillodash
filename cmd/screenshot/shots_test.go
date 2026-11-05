@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/colorprofile"
 
@@ -119,6 +120,38 @@ func TestEveryShotSettles(t *testing.T) {
 			if !strings.Contains(screen, want) {
 				t.Errorf("%s: the frame lacks %q: the script landed elsewhere\n%s", s.Name, want, screen)
 			}
+		}
+	}
+}
+
+// TestShotsAreReproducible: a shot drawn twice, a spinner frame and a
+// wall-clock second apart, is the same picture. The day fixture runs at
+// demo.DayEpoch and the spinner at the snapshot's clock, so regenerating
+// the gallery changes only the shots a change changed.
+func TestShotsAreReproducible(t *testing.T) {
+	glyphs.Use(glyphs.Nerd)
+	theme.Setup(colorprofile.Ascii, false)
+	fx.Motion = "off"
+	draw := func(s shot) string {
+		o, err := options(s, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cols, rows := s.size()
+		frames, err := ui.SnapshotsWith(context.Background(), o, s.Opts, cols, rows, [][]string{s.Steps})
+		if err != nil || len(frames) != 1 {
+			t.Fatalf("%s: %v (%d frames)", s.Name, err, len(frames))
+		}
+		return strings.Join(frames[0].Lines(), "\n")
+	}
+	for _, s := range shots {
+		if s.Name != "list" && s.Name != "release-rail" {
+			continue
+		}
+		a := draw(s)
+		time.Sleep(1100 * time.Millisecond)
+		if b := draw(s); a != b {
+			t.Errorf("%s changed between two renders:\n%s\n---\n%s", s.Name, a, b)
 		}
 	}
 }

@@ -179,7 +179,7 @@ func waitingRuns(gh *fake.Client) {
 // its start: today's before the cutoff, else tomorrow's.
 func night(mw *config.MaintenanceWindowConfig) (string, time.Time) {
 	local := mw.Local()
-	now := time.Now()
+	now := clock.Now()
 	day := local.Today(now)
 	if !now.Before(local.WallToUTC(day, mw.Cutoff)) {
 		day = day.AddDate(0, 0, 1)
@@ -204,7 +204,7 @@ func bot(body string, age time.Duration) model.Comment {
 func Client() *fake.Client {
 	infra, portal := Repos[0], Repos[1]
 	gh := fake.New(Me)
-	gh.Rate = &model.RateLimit{Limit: 5000, Remaining: 4812, ResetAt: time.Now().Add(37 * time.Minute)}
+	gh.Rate = &model.RateLimit{Limit: 5000, Remaining: 4812, ResetAt: clock.Now().Add(37 * time.Minute)}
 	gh.Open = map[model.Repo]ghapi.ListResult{}
 	gh.PRs = map[model.Ident]*model.PR{}
 	gh.Issues = map[model.Ident]*model.Issue{}

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
 // The membership answers of this session, per team and login: a team's
@@ -30,7 +31,8 @@ func ResetMembershipCache() {
 // login is a bot login, or when [github] approvers_team is set and
 // the login is not an active member of it: the bot would refuse the post
 // anyway, and posting under the wrong identity costs a live release
-// minutes. When the token cannot read the team, it warns and allows.
+// minutes. When the token cannot read the team, it warns and allows;
+// with [github] approvers_team_strict it refuses instead.
 // The refusal names the login and, when the token came from the
 // environment, the variable to unset.
 func PostGuard(app App, what string) bool {
@@ -54,6 +56,10 @@ func PostGuard(app App, what string) bool {
 		var err error
 		m, err = app.GH().TeamMember(app.Context(), org, slug, me)
 		if err != nil {
+			if cfg.GitHub.ApproversTeamStrict {
+				app.Notice(fmt.Sprintf("%s not posted: couldn't check %s is in @%s (%s), and approvers_team_strict refuses an unchecked post", what, me, team, err))
+				return false
+			}
 			app.Notice(fmt.Sprintf("couldn't check %s is in @%s (%s) — posting %s anyway", me, team, err, what))
 			return true
 		}
@@ -62,6 +68,9 @@ func PostGuard(app App, what string) bool {
 		memberMu.Unlock()
 	}
 	switch {
+	case !m.Readable && cfg.GitHub.ApproversTeamStrict:
+		app.Notice(fmt.Sprintf("%s not posted: this token can't read @%s (it needs the organization's Members read), and approvers_team_strict refuses an unchecked post", what, team))
+		return false
 	case !m.Readable:
 		app.Notice(fmt.Sprintf("couldn't read @%s with this token (it needs the organization's Members read) — posting %s as %s unchecked", team, what, me))
 		return true
@@ -85,4 +94,17 @@ func tokenHint(app App) string {
 		return "; gh auth switch (or GH_TOKEN=<your token>) to post as yourself"
 	}
 	return fmt.Sprintf("; the token comes from %s — unset it to post as gh's own login, or export your own token in it", s)
+}
+
+// WriteRefused says why a write to repo is refused, before any prompt:
+// the repo is not in [github] allowed_repos. False means go on. The
+// client refuses the write again underneath (ghapi.WithAllowedRepos);
+// this only spares the person a confirm that cannot be sent.
+func WriteRefused(app App, repo model.Repo, what string) bool {
+	cfg := app.Config()
+	if cfg == nil || cfg.GitHub.WriteAllowed(repo) {
+		return false
+	}
+	app.Notice(fmt.Sprintf("%s refused: %s is not in [github] allowed_repos — this dashboard is read-only there", what, repo))
+	return true
 }

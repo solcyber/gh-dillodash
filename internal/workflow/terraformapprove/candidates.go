@@ -66,6 +66,9 @@ type Verdict struct {
 	Verdict  string // "disruptive · revertible", "non-disruptive", ...
 	Shadow   bool   // an advisory ("shadow") verdict: nothing routes on it
 	Ceremony bool
+	// None is a repo without a maintenance window ("n/a (apply on
+	// approval)"): never disruptive, nothing queues.
+	None bool
 }
 
 // HeadPlanRuns is the Ext key EnrichDetail stores the ids of the plan
@@ -522,6 +525,11 @@ func PlanVerdicts(pr *model.PR) map[string]Verdict {
 			out[mID[1]] = Verdict{Verdict: strings.TrimSpace(mV[2]),
 				Shadow: strings.Contains(strings.ToLower(mV[1]), "shadow")}
 		}
+		if mID != nil && mV == nil {
+			if mN := NoWindowRE.FindStringSubmatch(body); mN != nil {
+				out[mID[1]] = Verdict{Verdict: strings.TrimSpace(mN[1]), None: true}
+			}
+		}
 		if mCer := CeremonyDigestRE.FindStringSubmatch(body); mCer != nil {
 			if mw := CeremonyWindowRE.FindStringSubmatch(body); mw != nil {
 				out[mCer[2]] = Verdict{Verdict: mw[1], Ceremony: true}
@@ -557,6 +565,9 @@ func PlanVerdicts(pr *model.PR) map[string]Verdict {
 
 // IsDisruptive reads a verdict: "disruptive ..." but not "non-disruptive".
 func IsDisruptive(v Verdict) bool {
+	if v.None {
+		return false
+	}
 	t := strings.ToLower(v.Verdict)
 	return strings.Contains(t, "disruptive") && !strings.HasPrefix(t, "non")
 }

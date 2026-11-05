@@ -78,11 +78,15 @@ func approversLine(ctx context.Context, w io.Writer, cfg *config.Config, gh Clie
 	}
 	org, slug, _ := strings.Cut(team, "/")
 	m, err := gh.TeamMember(ctx, org, slug, me)
+	unchecked := "commands are posted unchecked"
+	if cfg.GitHub.ApproversTeamStrict {
+		unchecked = "approvers_team_strict refuses every such command until it can be read"
+	}
 	switch {
 	case err != nil:
-		fmt.Fprintf(w, "  approvers: could not check @%s: %s\n", team, err)
+		fmt.Fprintf(w, "  approvers: could not check @%s: %s; %s\n", team, err, unchecked)
 	case !m.Readable:
-		fmt.Fprintf(w, "  approvers: could not read @%s with this token (it needs the organization's Members read); commands are posted unchecked\n", team)
+		fmt.Fprintf(w, "  approvers: could not read @%s with this token (it needs the organization's Members read); %s\n", team, unchecked)
 	case !m.Member:
 		fmt.Fprintf(w, "  approvers: %s is NOT in @%s; dillodash refuses to post /release-now, /release, /attend, /window-cancel and /approve as %s\n", me, team, me)
 	default:
@@ -118,6 +122,9 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		}
 		fmt.Fprintln(w)
 		approversLine(ctx, w, cfg, gh, me)
+		if len(cfg.GitHub.AllowedRepos) > 0 {
+			fmt.Fprintf(w, "  writes: only to %s (allowed_repos)\n", joinRepos(cfg.GitHub.AllowedRepos))
+		}
 	}
 	if pulled {
 		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {

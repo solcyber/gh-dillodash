@@ -226,12 +226,18 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 			}
 			num = m.where(m.repoOf(d), d.Number) + " "
 		}
-		left = append([]text.Seg{text.S(" "+glyphs.Ico(kind), logo), text.S(num, "hdr.app")}, pl("hdr.sep.app.k")...)
+		left = append([]text.Seg{text.S(" "+glyphs.Ico(kind), logo)}, m.profileSegs()...)
+		left = append(left, text.S(num, "hdr.app"))
+		left = append(left, pl("hdr.sep.app.k")...)
 		left = append(left, text.S(" ", "text"))
 		minLeft = text.SegsWidth(left) + 12
 	} else {
 		left = append([]text.Seg{text.S(" "+glyphs.Ico("logo"), logo)}, m.appNameSegs(refreshing)...)
 		left = append(left, text.S(" ", "hdr.app"))
+		if p := m.profileSegs(); len(p) > 0 {
+			left = append(left, p...)
+			left = append(left, text.S(" ", "hdr.app"))
+		}
 		left = append(left, pl("hdr.sep.app")...)
 		left = append(left, text.S(" "+text.Ellip(m.reposText(), max(10, w/3))+" ", "hdr.repo"))
 		left = append(left, pl("hdr.sep.repo")...)
@@ -284,6 +290,15 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	}
 	c.PutSegs(0, 0, left, avail, false, false)
 	c.PutSegs(0, max(0, w-rw), right, 0, false, false)
+}
+
+// profileSegs is the [display] profile badge, or nothing: which config
+// this dashboard runs, for someone who runs more than one.
+func (m *Model) profileSegs() []text.Seg {
+	if m.cfg == nil || m.cfg.Display.Profile == "" {
+		return nil
+	}
+	return []text.Seg{text.S(" "+m.cfg.Display.Profile+" ", "hdr.app.hi")}
 }
 
 // detailIcon lets a workflow override the header icon of the open PR
