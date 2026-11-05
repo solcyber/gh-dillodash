@@ -46,6 +46,8 @@ const settleSecs = 300
 func railFrac(p Progress, now time.Time) float64 {
 	n := float64(len(runPhases))
 	switch {
+	case p.OutcomeOnly():
+		return 0 // no run seen: nothing to fill
 	case p.Phase == PhaseReleased:
 		return 1
 	case p.Phase == PhasePending:
@@ -141,6 +143,8 @@ func phaseStates(p Progress) []string {
 		}
 	}
 	switch {
+	case p.OutcomeOnly():
+		return out // no run seen: no phase is known to have happened
 	case p.Phase == PhaseReleased:
 		fill(len(out), "")
 	case p.Phase == PhasePending:
@@ -314,7 +318,7 @@ func joinCells(cells []text.Seg) []text.Seg {
 func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, pos int, compact bool) []text.Seg {
 	now := app.Now()
 	style := progressStyle(p)
-	live := liveProgress(p, now) && pos >= 0
+	live := p.Moving(now) && pos >= 0
 	ident := fmt.Sprintf("%s#%d", pr.Repo.Name, pr.Number)
 	el := deploys.FmtSecs(p.Elapsed(now))
 	if pos < 0 && text.Width(el) < len(widestClock) {
@@ -582,7 +586,7 @@ const nameCol = 17
 // outcome and the run.
 func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, width, inner int) []text.Line {
 	now := app.Now()
-	live := liveProgress(p, now)
+	live := p.Moving(now)
 	var out []text.Line
 	// header: state chip, run, clock
 	head := []text.Seg{text.S(glyphs.Ico("live"), "plan.live")}
@@ -602,6 +606,9 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	}
 	if !p.Started.IsZero() {
 		at := now
+		if p.Phase == PhaseNotTold {
+			at = p.Since // nothing will move it: the clock stops where it stalled
+		}
 		if p.Terminal {
 			at = p.UpdatedAt
 			if at.Before(p.Started) {
@@ -651,14 +658,24 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	// before the run: where it stands
 	if PhaseIndex(p.Phase) < 0 && !p.Terminal {
 		g, st := stateGlyph("running")
-		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(p.Phase, nameCol), "text"), text.S(fmtClock(p.Elapsed(now)), "muted")}
+		clock := text.S(fmtClock(p.Elapsed(now)), "muted")
+		if p.Phase == PhaseNotTold {
+			g, st = glyphs.G("fail"), "chip.act"
+			clock = text.S(strings.Repeat(" ", 6), "text")
+		}
+		line := []text.Seg{text.S("  "+g+" ", st), text.S(text.Pad(p.Phase, nameCol), "text"), clock}
 		if p.Detail != "" {
 			line = append(line, text.S("  "+p.Detail, "faint"))
 		}
 		out = append(out, scenes.CardLines(line, width, inner)...)
 	}
-	// the timeline
-	for _, r := range w.timelineRows(p, now) {
+	// the timeline (none for an ending with no run behind it: no step
+	// is known to have happened)
+	var rows []phaseRow
+	if !p.OutcomeOnly() {
+		rows = w.timelineRows(p, now)
+	}
+	for _, r := range rows {
 		g, st := stateGlyph(r.state)
 		nst, cst := "text", "muted"
 		switch r.state {
@@ -696,6 +713,9 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 			line = append(line, text.S(" — "+p.Detail, "muted"))
 		}
 		out = append(out, scenes.CardLines(line, width, inner)...)
+		if p.OutcomeOnly() {
+			out = append(out, scenes.CardLines([]text.Seg{text.S("  no run seen — the outcome only, from the PR's "+p.Source, "faint")}, width, inner)...)
+		}
 		if p.Phase == PhasePending {
 			hint := fmt.Sprintf("  D approves the waiting environment (if you review it); then swap %s for %s by hand", w.pendingLabel(), w.appliedLabel())
 			out = append(out, scenes.CardLines([]text.Seg{text.S(hint, "sum.attn")}, width, inner)...)
@@ -709,6 +729,9 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	}
 	if p.PollErr != "" {
 		out = append(out, scenes.CardLines([]text.Seg{text.S("  last poll failed: "+p.PollErr, "faint")}, width, inner)...)
+	}
+	if p.Ignored != "" {
+		out = append(out, scenes.CardLines([]text.Seg{text.S("  "+p.Ignored, "sum.attn")}, width, inner)...)
 	}
 	return out
 }

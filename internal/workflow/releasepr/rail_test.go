@@ -45,6 +45,8 @@ func TestRailFrac(t *testing.T) {
 		{"released", Progress{Phase: PhaseReleased, Terminal: true}, 1, 1},
 		{"failed at verifying", Progress{Phase: PhaseFailed, Terminal: true, FailPhase: PhaseVerifying}, 5.5 / 7, 5.5 / 7},
 		{"refused", Progress{Phase: PhaseRefused, Terminal: true}, 0, 0},
+		{"released by label, no run seen", Progress{Phase: PhaseReleased, Terminal: true, Source: "label"}, 0, 0},
+		{"not told", Progress{Phase: PhaseNotTold, Since: now.Add(-time.Hour)}, 0, 0},
 	}
 	for _, c := range cases {
 		got := railFrac(c.p, now)
@@ -296,5 +298,30 @@ func TestAmosOnRail(t *testing.T) {
 	rows = amosOnRail(p, 0.5, 60, false)
 	if len(rows) != len(amosSmall) || !strings.Contains(text.SegsText(rows[1]), "(o>") {
 		t.Errorf("ASCII glyphs get the line art: %q", rows)
+	}
+}
+
+// TestOutcomeOnlyCard: an ending known only from a label draws the
+// outcome and says no run was seen; no phase is drawn as passed.
+func TestOutcomeOnlyCard(t *testing.T) {
+	w, app := newWF(t, true)
+	pr := makeRelease(relOpts{state: "MERGED"})
+	p := Progress{Phase: PhaseReleased, Terminal: true, Source: "label", Outcome: "verified"}
+	if !p.OutcomeOnly() {
+		t.Fatal("a label with no run is outcome-only")
+	}
+	for _, s := range phaseStates(p) {
+		if s != "pending" {
+			t.Fatalf("no phase is known to have happened: %v", phaseStates(p))
+		}
+	}
+	card := flatLines(w.progressCard(app, pr, p, 100, 96))
+	if !strings.Contains(card, "outcome: verified") || !strings.Contains(card, "no run seen") || strings.Contains(card, "alarms quiet") {
+		t.Errorf("outcome only:\n%s", card)
+	}
+	withRun := p
+	withRun.Source, withRun.RunURL = "comment", "https://github.com/acme/infra/actions/runs/91"
+	if withRun.OutcomeOnly() {
+		t.Error("the job's comment names its run: the phases stand")
 	}
 }

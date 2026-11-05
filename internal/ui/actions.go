@@ -359,6 +359,25 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	}
 	repo := m.repoOf(pr)
 	where := m.where(repo, pr.Number)
+	if app.CurrentView() == ViewDetail && (pr.State != "MERGED" || mergeSHA(pr) == "") {
+		// a detail left open across a merge (a release NOW merged it
+		// meanwhile) still holds the PR as it was: read it again before
+		// saying it is not merged
+		app.Flash(fmt.Sprintf("re-reading %s...", where))
+		fresh, err := m.fetchPRDetail(m.ctx, repo, pr.Number, app.DetailListed())
+		if err != nil {
+			app.Fail(fmt.Sprintf("couldn't re-read %s: %s", where, err))
+			return
+		}
+		m.mu.Lock()
+		if m.detail != nil && sameItem(fresh, m.detail) {
+			m.detail = fresh
+			m.detailLoadedAt = fx.Now()
+			m.detailVer++
+		}
+		m.mu.Unlock()
+		pr = fresh
+	}
 	sha := mergeSHA(pr)
 	if pr.State == "MERGED" && sha == "" {
 		// merged, but this read did not carry the merge commit: never send
@@ -521,7 +540,7 @@ var gotoRE = regexp.MustCompile(`^(?:([\w.-]+(?:/[\w.-]+)?)#|#?\s*)(\d+)$`)
 
 // doGoto opens any #N (or repo#N): the PR first, then the issue.
 func (m *Model) doGoto(app *lockedApp) {
-	txt, _ := app.Prompt("go to # (a PR or issue number, repo#N or owner/repo#N; Esc cancels):", workflow.PromptOpts{})
+	txt, _ := app.Prompt("go to # (a number listed in any repo, repo#N or owner/repo#N; Esc cancels):", workflow.PromptOpts{})
 	txt = strings.TrimSpace(txt)
 	if txt == "" {
 		return
@@ -537,6 +556,27 @@ func (m *Model) doGoto(app *lockedApp) {
 		return
 	}
 	repo := m.repos[0]
+	var listed *model.PR
+	if mm[1] == "" {
+		// a bare number: whatever the list shows under it, in any repo
+		// (a release row is not in the reviews repo); several ask which
+		cands, prs := m.listedNumbered(n)
+		switch {
+		case len(cands) == 1:
+			repo, listed = cands[0], prs[0]
+		case len(cands) > 1:
+			labels := make([]string, len(cands))
+			for i, r := range cands {
+				labels[i] = model.Ident{Repo: r, Number: n}.String()
+			}
+			i := app.Pick(fmt.Sprintf("go to #%d — listed in %d repos", n, len(cands)), labels)
+			if i < 0 || i >= len(cands) {
+				app.Notice("go to cancelled")
+				return
+			}
+			repo, listed = cands[i], prs[i]
+		}
+	}
 	if mm[1] != "" {
 		found := false
 		for _, r := range append(append([]model.Repo(nil), m.repos...), m.wf.ExtraRepos()...) {
@@ -552,10 +592,10 @@ func (m *Model) doGoto(app *lockedApp) {
 	}
 	app.Flash(fmt.Sprintf("opening %s...", m.where(repo, n)))
 	started := fx.Now()
-	pr, err := m.fetchPRDetail(m.ctx, repo, n, nil)
+	pr, err := m.fetchPRDetail(m.ctx, repo, n, listed)
 	if err == nil {
 		m.mu.Lock()
-		m.showDetail(pr, "pr", started, nil)
+		m.showDetail(pr, "pr", started, listed)
 		m.mu.Unlock()
 		return
 	}
@@ -572,6 +612,35 @@ func (m *Model) doGoto(app *lockedApp) {
 	m.mu.Lock()
 	m.showDetail(iss, "issue", started, nil)
 	m.mu.Unlock()
+}
+
+// listedNumbered is the repos whose list rows carry #n (a PR or an
+// issue), in list order, with the listed PR where the row is one.
+func (m *Model) listedNumbered(n int) ([]model.Repo, []*model.PR) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var repos []model.Repo
+	var prs []*model.PR
+	seen := map[model.Repo]bool{}
+	for _, r := range m.rows {
+		var num int
+		var pr *model.PR
+		switch v := r.Item.(type) {
+		case *model.PR:
+			num, pr = v.Number, v
+		case *model.Issue:
+			num = v.Number
+		default:
+			continue
+		}
+		repo := m.repoOf(r.Item)
+		if num != n || seen[repo] {
+			continue
+		}
+		seen[repo] = true
+		repos, prs = append(repos, repo), append(prs, pr)
+	}
+	return repos, prs
 }
 
 // startFilter is '/' in the list: a live filter, re-applied as you type.

@@ -50,7 +50,7 @@
 | list, detail, diff, fortress | `r` | refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed) |
 | list, detail | `R` | restart into the dillodash release installed in the background, keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it once one is installed) |
 | list | `q` | quit (press twice while an action is still talking to GitHub) |
-| any | `:` | go to `#N`, `repo#N` or `owner/repo#N`: a PR first, then an issue |
+| any | `:` | go to `#N`, `repo#N` or `owner/repo#N`: a PR first, then an issue; a bare `#N` opens the listed row with that number in any repo (release rows too), and asks which when several repos list it |
 | any | `?` | help: every key, the glyph legend, the version; `j`/`k` scroll it when it overflows |
 | any | `e` | the last status or error message in full (the status line cuts a long one with an ellipsis) |
 | any | ctrl+c | quit (interrupt); inside a prompt it cancels the prompt |

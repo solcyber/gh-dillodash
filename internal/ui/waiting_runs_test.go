@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +102,52 @@ func TestDInDetailAfterAnExternalMerge(t *testing.T) {
 	h.key('D')
 	if got := h.gh.DeployApprovals; len(got) != 1 || got[0].RunID != 77 || got[0].EnvIDs[0] != 9 {
 		t.Errorf("D in the detail did not approve the waiting prod deploy: %+v (status %q)", got, h.m.status)
+	}
+}
+
+// TestDInDetailOpenAcrossTheMerge: the detail was opened while the PR
+// was open and stays open while it merges (a release NOW). D, with no
+// refresh in between, re-reads the PR and approves the deploy waiting on
+// the merge commit; it never does nothing.
+func TestDInDetailOpenAcrossTheMerge(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.named("enter")
+	if h.m.view != ViewDetail {
+		t.Fatalf("view = %s", h.m.view)
+	}
+	id := model.Ident{Repo: infra, Number: 101}
+	sha := strings.Repeat("f", 40)
+	run := model.WorkflowRun{ID: 78, Name: "migrate", Status: "waiting", HeadSHA: sha, HeadBranch: "main", Event: "push",
+		HTMLURL: "https://github.com/acme/infra/actions/runs/78", CreatedAt: t0}
+	var prod model.PendingDeployment
+	prod.Environment.ID, prod.Environment.Name, prod.CurrentUserCanApprove = 9, "prod", true
+	h.gh.Mutate(func() {
+		h.gh.PRs[id].State = "MERGED"
+		h.gh.PRs[id].MergeCommit = &model.MergeCommit{Oid: sha}
+		h.gh.Runs = map[string][]model.WorkflowRun{sha: {run}}
+		h.gh.Pending = map[int64][]model.PendingDeployment{78: {prod}}
+	})
+	h.m.tp.Confirm = func(q string) bool { return true }
+	h.key('D') // no r: the detail still holds the open PR
+	if got := h.gh.DeployApprovals; len(got) != 1 || got[0].RunID != 78 {
+		t.Errorf("D did not re-read the merged PR: %+v (status %q, err %q)", got, h.m.status, h.m.errText)
+	}
+	if pr, ok := h.m.detail.(*model.PR); !ok || pr.State != "MERGED" {
+		t.Errorf("the detail keeps the fresh read: %+v", h.m.detail)
+	}
+
+	// still open: it says so, and the read failing says that
+	h.gh.Mutate(func() { h.gh.PRs[id].State, h.gh.PRs[id].MergeCommit = "OPEN", nil })
+	h.key('r')
+	h.key('D')
+	if !strings.Contains(h.m.status, "not merged yet") {
+		t.Errorf("open: status %q", h.m.status)
+	}
+	h.gh.Fail["pr_detail"] = errors.New("HTTP 502")
+	h.key('D')
+	if !strings.Contains(h.m.errText, "couldn't re-read") {
+		t.Errorf("a failed re-read says so: status %q err %q", h.m.status, h.m.errText)
 	}
 }
 

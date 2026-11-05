@@ -248,7 +248,8 @@ type Workflow struct {
 	window    workflow.Workflow               // the window workflow when enabled
 	org       string
 	nowRE     *regexp.Regexp
-	refusedRE *regexp.Regexp // the dispatcher's refusal of the command
+	refusedRE *regexp.Regexp    // the dispatcher's refusal of the command
+	bots      config.BotsConfig // who may post the release job's outcome comment
 	deploy    deploys.Cache
 
 	// worker goroutine only
@@ -294,6 +295,7 @@ func New(ctx *workflow.Context) *Workflow {
 		seen:       map[seenKey]bool{},
 		progress:   map[model.Ident]*track{},
 		refusedRE:  refusedREFor(cfg.ReleaseNowCommand),
+		bots:       ctx.Config.Bots,
 	}
 	if w.org == "" {
 		if len(ctx.Repos) > 0 {

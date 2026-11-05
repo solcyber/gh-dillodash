@@ -121,9 +121,9 @@ func TestOutcomeComments(t *testing.T) {
 		if c.sha != "" {
 			body += "\nMerge: " + c.sha
 		}
-		body += "\nRun: https://x/runs/1\n"
+		body += "\nRun: https://github.com/acme/infra/actions/runs/1\n"
 		o, ok := outcomeOf(comment(at, body))
-		if !ok || o.phase != c.phase || o.id != c.id || o.detail != c.detail || o.sha != c.sha || o.url != "https://x/runs/1" {
+		if !ok || o.phase != c.phase || o.id != c.id || o.detail != c.detail || o.sha != c.sha || o.url != "https://github.com/acme/infra/actions/runs/1" {
 			t.Errorf("%s: %+v %v", c.head, o, ok)
 		}
 	}
@@ -338,7 +338,7 @@ func TestDeployPending(t *testing.T) {
 	t0 := utc(3, 0)
 	pr := approved(makeRelease(relOpts{}), "alice")
 	held := comment(t0.Add(4*time.Minute), "## Release merged; the deploy is WAITING on an environment approval (release-now)\n\n"+
-		"Outcome: `deploy_pending` — migrate.yml waits on prod-migrations\nMerge: "+mergedSHA+"\nRun: https://x/runs/91\n")
+		"Outcome: `deploy_pending` — migrate.yml waits on prod-migrations\nMerge: "+mergedSHA+"\nRun: https://github.com/acme/infra/actions/runs/91\n")
 	mut := func(tr *track) { tr.nowPostedAt, tr.comments = t0, []model.Comment{held} }
 	p := deriveWith(w, pr, mut, t0.Add(3*time.Hour))
 	if p.Phase != PhasePending || !p.Terminal || p.Outcome != "deploy_pending" || p.Detail != "migrate.yml waits on prod-migrations" || p.MergeSHA != mergedSHA {
@@ -664,7 +664,7 @@ func TestProgressDrivesTheRow(t *testing.T) {
 
 func TestAnnounceOnce(t *testing.T) {
 	w, app, pr := pollFixture(t)
-	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), "## Release FAILED: the deploy did not succeed (release-now)\n\nOutcome: `deploy_failed` — migrate.yml failed\nMerge: "+mergedSHA+"\nRun: https://x/runs/91\n"))
+	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), "## Release FAILED: the deploy did not succeed (release-now)\n\nOutcome: `deploy_failed` — migrate.yml failed\nMerge: "+mergedSHA+"\nRun: https://github.com/acme/infra/actions/runs/91\n"))
 	clock.Now = func() time.Time { return utc(3, 6) }
 	poll(t, w, app)
 	poll(t, w, app)
@@ -672,7 +672,7 @@ func TestAnnounceOnce(t *testing.T) {
 	for _, l := range app.Log {
 		if strings.HasPrefix(l, "fail: ") && strings.Contains(l, "release FAILED") {
 			fails++
-			if !strings.Contains(l, "migrate.yml failed") || !strings.Contains(l, "run: https://x/runs/91") {
+			if !strings.Contains(l, "migrate.yml failed") || !strings.Contains(l, "run: https://github.com/acme/infra/actions/runs/91") {
 				t.Errorf("the message carries the detail and the run: %q", l)
 			}
 		}
@@ -687,7 +687,7 @@ func TestAnnounceOnce(t *testing.T) {
 // failure is announced like the first.
 func TestRedispatchAfterAnOutcomeComment(t *testing.T) {
 	w, app, pr := pollFixture(t)
-	failed := "## Release FAILED: the deploy did not succeed (release-now)\n\nOutcome: `deploy_failed` — migrate.yml failed\n"
+	failed := "## Release FAILED: the deploy did not succeed (release-now)\n\nOutcome: `deploy_failed` — migrate.yml failed\nRun: https://github.com/acme/infra/actions/runs/91\n"
 	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), failed))
 	clock.Now = func() time.Time { return utc(3, 6) }
 	poll(t, w, app)
@@ -738,7 +738,7 @@ func TestStartupIsQuiet(t *testing.T) {
 	stale := approved(makeRelease(relOpts{number: 43}), "alice")
 	app.Fake.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {PRs: []*model.PR{done, stale}, ProdOid: "m", StageOid: "s"}}
 	app.Fake.Comments = map[model.Ident][]model.Comment{
-		done.Ident():  {comment(utc(2, 40), `/release-now "`+reason+`"`), comment(utc(2, 50), "## Release FAILED: merge refused (release-now)\n\nOutcome: `refused` — stale\n")},
+		done.Ident():  {comment(utc(2, 40), `/release-now "`+reason+`"`), comment(utc(2, 50), "## Release FAILED: merge refused (release-now)\n\nOutcome: `refused` — stale\nRun: https://github.com/acme/infra/actions/runs/90\n")},
 		stale.Ident(): {comment(utc(3, 0).Add(-48*time.Hour), `/release-now "`+reason+`"`)},
 	}
 	s, _, err := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
@@ -875,7 +875,7 @@ func TestQueuedByApproval(t *testing.T) {
 // failure and not a launch.
 func TestAnnouncePending(t *testing.T) {
 	w, app, pr := pollFixture(t)
-	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), "## Release merged; the deploy is WAITING on an environment approval (release-now)\n\nOutcome: `deploy_pending` — migrate.yml waits on prod-migrations\nMerge: "+mergedSHA+"\nRun: https://x/runs/91\n"))
+	app.Fake.Comments[pr.Ident()] = append(app.Fake.Comments[pr.Ident()], comment(utc(3, 5), "## Release merged; the deploy is WAITING on an environment approval (release-now)\n\nOutcome: `deploy_pending` — migrate.yml waits on prod-migrations\nMerge: "+mergedSHA+"\nRun: https://github.com/acme/infra/actions/runs/91\n"))
 	clock.Now = func() time.Time { return utc(3, 6) }
 	poll(t, w, app)
 	poll(t, w, app)
@@ -893,5 +893,93 @@ func TestAnnouncePending(t *testing.T) {
 	}
 	if notes != 1 || app.Launched != 0 {
 		t.Errorf("one notice, no launch: %d %d\n%v", notes, app.Launched, app.Log)
+	}
+}
+
+// TestOutcomeOnlyFromTheJob: an outcome comment is believed only when a
+// bot posted it with a Run: line naming a run of the manifest repo.
+// Anyone can type "## Released"; it must not turn a release green.
+func TestOutcomeOnlyFromTheJob(t *testing.T) {
+	w, _ := newWF(t, true)
+	w.win.ManifestRepo = infra
+	t0 := utc(3, 0)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	cmd := comment(t0, `/release-now "`+reason+`"`)
+	cmd.Author.Login = "alice"
+	say := func(login, body string) model.Comment {
+		c := comment(t0.Add(10*time.Minute), body)
+		c.Author.Login = login
+		return c
+	}
+	derive := func(c model.Comment) Progress {
+		return deriveWith(w, pr, func(tr *track) { tr.comments = []model.Comment{cmd, c} }, t0.Add(11*time.Minute))
+	}
+	ours := releasedBody // Run: https://github.com/acme/infra/actions/runs/91
+	if p := derive(say("infra-bot", ours)); p.Phase != PhaseReleased || p.Source != "comment" || p.Ignored != "" {
+		t.Errorf("the job's own outcome is believed: %+v", p)
+	}
+	for name, c := range map[string]model.Comment{
+		"a person":       say("bob", ours),
+		"no run line":    say("infra-bot", "## Released (merged by hand, checked by bob)\n\nall good\n"),
+		"another repo":   say("infra-bot", strings.Replace(ours, "acme/infra", "acme/elsewhere", 1)),
+		"not a run link": say("infra-bot", strings.Replace(ours, "actions/runs/91", "pull/91", 1)),
+	} {
+		p := derive(c)
+		if p.Phase == PhaseReleased || p.Terminal {
+			t.Errorf("%s: an outcome not from the job turned it green: %+v", name, p)
+		}
+		if !strings.Contains(p.Ignored, "not believed") || !strings.Contains(p.Ignored, "@"+c.Author.Login) {
+			t.Errorf("%s: the card names the ignored comment: %q", name, p.Ignored)
+		}
+	}
+	// the conductor bot counts as the job's login too
+	w.win.ConductorBot = "acme-conductor"
+	if p := derive(say("acme-conductor[bot]", ours)); p.Phase != PhaseReleased {
+		t.Errorf("the conductor bot's outcome is believed: %+v", p)
+	}
+	// before the manifest repo is known, any repo's run will do
+	w.win.ManifestRepo = model.Repo{}
+	if p := derive(say("infra-bot", strings.Replace(ours, "acme/infra", "acme/elsewhere", 1))); p.Phase != PhaseReleased {
+		t.Errorf("no manifest repo known: a run link is enough: %+v", p)
+	}
+}
+
+// TestNotToldStopsTheClock: a dispatch that never reached the manifest
+// repo is its own phase: still followed, but no spinner, no running
+// clock and no timeout into "lost track".
+func TestNotToldStopsTheClock(t *testing.T) {
+	w, _ := newWF(t, true)
+	t0 := utc(3, 0)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	mut := func(tr *track) {
+		tr.nowPostedAt, tr.notTold = t0, true
+		tr.comments = []model.Comment{comment(t0, `/release-now "`+reason+`"`)}
+	}
+	for _, now := range []time.Time{t0.Add(time.Minute), t0.Add(3 * time.Hour)} {
+		p := deriveWith(w, pr, mut, now)
+		if p.Phase != PhaseNotTold || p.Terminal || !p.Since.Equal(t0) {
+			t.Fatalf("at %s: %+v", now, p)
+		}
+		if p.Moving(now) || !liveProgress(p, now) {
+			t.Errorf("still followed, but not moving: moving=%v live=%v", p.Moving(now), liveProgress(p, now))
+		}
+		if chip := w.progressChip(p, now); strings.ContainsAny(chip, "0123456789") || !strings.Contains(chip, "not told") {
+			t.Errorf("the chip has no clock: %q", chip)
+		}
+		if progressStyle(p) != "chip.act" {
+			t.Errorf("gold: you can act on it (M): %s", progressStyle(p))
+		}
+	}
+	// merged by hand afterwards: the chip says so, and once the app
+	// repo's deploy runs are read the deploy is followed from there
+	merged := *pr
+	merged.State = "MERGED"
+	merged.MergeCommit = &model.MergeCommit{Oid: mergedSHA}
+	if p := deriveWith(w, &merged, mut, t0.Add(time.Minute)); p.Phase != PhaseNotTold || w.progressChip(p, t0) != "merged by hand" {
+		t.Errorf("merged by hand, no deploy read yet: %+v", p)
+	}
+	merged.Set(ExtDeploy, deploys.State{Phase: "running"})
+	if p := deriveWith(w, &merged, mut, t0.Add(time.Minute)); p.Phase != PhaseDeploying {
+		t.Errorf("a merge moves it on to its deploy: %+v", p)
 	}
 }

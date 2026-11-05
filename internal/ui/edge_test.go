@@ -265,9 +265,15 @@ func TestGotoOwnerQualified(t *testing.T) {
 	for _, tc := range []struct{ typed, ref string }{
 		{"acme/infra#101", "acme/infra#101"},
 		{"beta/infra#101", "beta/infra#101"},
-		{"#101", "acme/infra#101"}, // the first repo is the default
+		{"#101", "beta/infra#101"}, // listed in both: the pick says which (the second here)
 	} {
 		h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return tc.typed, true }
+		h.m.tp.Pick = func(_ string, labels []string) int {
+			if len(labels) != 2 || labels[0] != "acme/infra#101" || labels[1] != "beta/infra#101" {
+				t.Errorf("%q: the pick offers both listed repos: %v", tc.typed, labels)
+			}
+			return 1
+		}
 		h.key(':')
 		if h.m.view != ViewDetail || h.m.detailRef() != tc.ref {
 			t.Fatalf("%q: view=%s ref=%s", tc.typed, h.m.view, h.m.detailRef())
@@ -277,6 +283,39 @@ func TestGotoOwnerQualified(t *testing.T) {
 	// the list rows carry the owner too
 	if s := h.screen(); !strings.Contains(s, "acme/infra#101") || !strings.Contains(s, "beta/infra#101") {
 		t.Errorf("rows lack owner-qualified refs:\n%s", s)
+	}
+}
+
+// TestGotoFindsTheListedRepo: a bare number opens the row the list
+// shows under it, whatever its repo (a release row lives in a release
+// repo, not the reviews repo); Esc on the pick goes nowhere.
+func TestGotoFindsTheListedRepo(t *testing.T) {
+	h := newHarness(t, infra, portal)
+	h.load()
+	h.m.mu.Lock()
+	var only []workflow.Row
+	for _, r := range h.m.rows {
+		if pr, ok := r.Item.(*model.PR); !ok || pr.Repo == portal {
+			only = append(only, r)
+		}
+	}
+	all := h.m.rows
+	h.m.rows = only // #101 is listed in the web-portal repo only
+	h.m.mu.Unlock()
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "101", true }
+	h.m.tp.Pick = func(string, []string) int { t.Error("one listed repo: no pick"); return -1 }
+	h.key(':')
+	if h.m.view != ViewDetail || h.m.detailRef() != "web-portal#101" {
+		t.Fatalf("view=%s ref=%s", h.m.view, h.m.detailRef())
+	}
+	h.named("esc")
+	h.m.mu.Lock()
+	h.m.rows = all
+	h.m.mu.Unlock()
+	h.m.tp.Pick = func(string, []string) int { return -1 }
+	h.key(':')
+	if h.m.view != ViewList || !strings.Contains(h.m.status, "go to cancelled") {
+		t.Errorf("Esc on the pick: view=%s status=%q", h.m.view, h.m.status)
 	}
 }
 
