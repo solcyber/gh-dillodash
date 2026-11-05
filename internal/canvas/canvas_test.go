@@ -87,7 +87,7 @@ func TestRawSegs(t *testing.T) {
 	c.PutStr(0, 0, "abcd", "a")
 	c.Put(0, 1, text.Raw("▀▄", "\x1b[38;2;1;2;3m"))
 	got := c.Render(plain)
-	want := "<a>a</>\x1b[0m\x1b[38;2;1;2;3m▀\x1b[0m\x1b[0m\x1b[38;2;1;2;3m▄\x1b[0m<a>d</>"
+	want := "<a>a</>\x1b[0m\x1b[38;2;1;2;3m▀▄\x1b[0m<a>d</>"
 	if got != want {
 		t.Errorf("render:\n%q\nwant\n%q", got, want)
 	}
@@ -105,5 +105,63 @@ func TestDim(t *testing.T) {
 	}
 	if c.StyleAt(2, 0) != "text" {
 		t.Error("rows outside the band are left")
+	}
+}
+
+func TestBlitClipsAndKeepsStyles(t *testing.T) {
+	dst := New(8, 3)
+	dst.PutStr(1, 0, "日xxxxx", "d") // a wide glyph on the blit's left edge
+	src := New(4, 2)
+	src.PutStr(0, 0, "ab", "a")
+	src.Fill(1, 0, 4, "sel", true, false)
+	src.PutRaw(1, 3, "▀", "\x1b[38;2;1;2;3m")
+	dst.Blit(src, 1, 1)
+	if got := dst.Text(1); got != " ab  xx " { // 日 lost its half; 本 never fitted
+		t.Errorf("row 1 = %q", got)
+	}
+	if dst.StyleAt(1, 1) != "a" || dst.StyleAt(2, 1) != "sel" {
+		t.Errorf("styles: %q %q", dst.StyleAt(1, 1), dst.StyleAt(2, 1))
+	}
+	raw := ""
+	dst.Walk(func(y, x int, ci CellInfo) {
+		if y == 2 && x == 4 {
+			raw = ci.Raw
+		}
+	})
+	if raw == "" {
+		t.Error("raw cell not copied")
+	}
+	// clipped at the bottom right: no panic, nothing outside
+	dst.Blit(src, 2, 6)
+	if got := dst.Text(2); len([]rune(got)) != 8 {
+		t.Errorf("row 2 = %q", got)
+	}
+	// a wide glyph cut by the right edge becomes a space
+	w := New(3, 1)
+	w.PutStr(0, 1, "語", "t")
+	small := New(2, 1)
+	small.Blit(w, 0, 0)
+	if got := small.Text(0); got != "  " {
+		t.Errorf("cut wide glyph = %q", got)
+	}
+}
+
+func TestBlank(t *testing.T) {
+	c := New(4, 1)
+	c.PutStr(0, 0, "a", "text")
+	c.PutStr(0, 2, " ", "chip")
+	if c.Blank(0, 0) || !c.Blank(0, 1) || c.Blank(0, 2) || !c.Blank(0, 3) || c.Blank(0, 9) {
+		t.Errorf("blank: %v %v %v %v", c.Blank(0, 0), c.Blank(0, 1), c.Blank(0, 2), c.Blank(0, 3))
+	}
+}
+
+func TestRenderMergesRawRuns(t *testing.T) {
+	c := New(3, 1)
+	for x := 0; x < 3; x++ {
+		c.PutRaw(0, x, " ", "\x1b[48;2;9;9;9m")
+	}
+	got := c.Render(plain)
+	if want := "\x1b[0m\x1b[48;2;9;9;9m   \x1b[0m"; got != want {
+		t.Errorf("render = %q, want %q", got, want)
 	}
 }
