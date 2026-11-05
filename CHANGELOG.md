@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.9.0]
+
+A room to watch the release window from, a far louder launch, and a
+release rail that only believes the release job.
+
+### Added
+
+- **The room.** During the release window the dashboard shrinks into a
+  window at the middle of the screen, crossed by its mullions, and the
+  rest of the screen is the room you watch it from: lamp-lit wall,
+  curtains, plants, a portrait of Amos, a landscape, a wall clock with the
+  real time, a mug steaming on the sill. Everything still works through
+  the glass. `W` (it is on the plaque under the window) goes back to the
+  normal dashboard, and brings the room back; each window starts in the
+  room. `[display] room = false` turns it off. The room needs 100x30; a
+  smaller terminal gets the normal dashboard. With motion off the room
+  holds still.
+- **The launch, psychedelic.** From 256 colors up a release lands in a
+  kaleidoscope plasma tunnel, with a rainbow rocket on a wiggle, smoke
+  rings, a ripple shockwave, spiral-galaxy fireworks, a melting rainbow
+  RELEASED! and Amos tumbling through. It runs 8 s; any key still ends it.
+  Every color it paints keeps one lightness, so it flows and never
+  flashes: a test plays every frame and holds it to the general-flash
+  limit (no more than three opposing luminance swings a second over a
+  large area). 16 colors and ASCII keep the classic launch.
+
+### Changed
+
+- `:` go to # searches every listed row, release rows included, and asks
+  which repo when more than one lists that number. `repo#N` still works.
+- A key pressed while an action is still running says so, instead of
+  vanishing.
+
+### Fixed
+
+- An outcome comment (`## Released`, `## Failed`, ...) counts only when
+  it is the release job's: posted by a bot, with a `Run:` line naming a
+  run of the manifest repo. Anyone else's is shown as not believed. A
+  release whose ending is known only from a label or a comment draws just
+  the outcome, not phases nobody saw run.
+- A `/release-now` whose dispatch failed reads `not told · M` in gold,
+  with no spinner and no running clock, instead of looking in flight.
+  After `M` it reads `merged by hand`.
+- `D` in a detail view that was open across the merge re-reads the PR and
+  finds the waiting deployment, instead of doing nothing; a failed read
+  says why.
+
 ## [1.8.0]
 
 The whole release night from the dashboard: review choices, runs,
