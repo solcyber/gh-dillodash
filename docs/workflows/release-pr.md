@@ -233,7 +233,7 @@ replays one offline; these shots are its steps.
 
 ![Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
 
-![The rocket climbs the tunnel on a rainbow wiggle, smoke rings and a spiral exhaust behind it, just before it bursts](../shots/release-launch-burst.png)
+![The rocket bursts: rainbow ripples roll out through the tunnel and the first spiral galaxy wheels open](../shots/release-launch-burst.png)
 
 ![When a release lands: a kaleidoscope tunnel, spiral-galaxy fireworks, Amos tumbling through every hue and RELEASED! swinging in rainbow block letters](../shots/release-launch.png)
 

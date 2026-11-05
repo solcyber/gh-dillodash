@@ -35,11 +35,13 @@ const (
 	nLvl
 )
 
-// lvlLC is each level's OKLab lightness and chroma.
+// lvlLC is each level's OKLab lightness and chroma. A chroma past the
+// gamut (0.40) means "as vivid as sRGB allows at this hue": fx.OKLCH
+// brings it in per hue without moving the lightness.
 var lvlLC = [nLvl][2]float64{
-	lvPlasmaBG: {0.42, 0.16},
-	lvPlasmaFG: {0.42, 0.16},
-	lvRipple:   {0.51, 0.19},
+	lvPlasmaBG: {0.50, 0.40},
+	lvPlasmaFG: {0.50, 0.40},
+	lvRipple:   {0.58, 0.40},
 	lvMid:      {0.70, 0.17},
 	lvBright:   {0.84, 0.17},
 	lvLetter:   {0.90, 0.16},
@@ -52,11 +54,27 @@ const hueSteps = 120 // 3 degrees
 var levels = func() (t [nLvl][hueSteps]fx.RGB) {
 	for l := range nLvl {
 		for h := range hueSteps {
-			t[l][h] = fx.OKLCH(lvlLC[l][0], lvlLC[l][1], float64(h)*360/hueSteps)
+			deg := float64(h) * 360 / hueSteps
+			if l <= lvRipple {
+				deg = electric(deg)
+			}
+			t[l][h] = fx.OKLCH(lvlLC[l][0], lvlLC[l][1], deg)
 		}
 	}
 	return t
 }()
+
+// electric bends the tunnel's hue wheel: the oranges, yellows and
+// yellow-greens (30-140 degrees, brown and olive at this lightness) take
+// a twentieth of the wheel; the greens, cyans, blues, violets, magentas
+// and reds that glow take the rest.
+func electric(u float64) float64 {
+	u = math.Mod(u, 360)
+	if u < 342 {
+		return 140 + u*250/342
+	}
+	return 30 + (u-342)*110/18
+}
 
 // hue is the level's color at h degrees.
 func hue(l lvl, h float64) fx.RGB { return levels[l][hueAt(h)] }
@@ -202,7 +220,8 @@ func (p *psyche) putOn(y, x int, glyph string, fg, bg fx.RGB) {
 func (p *psyche) rocketAt(te float64) (y, x int) {
 	q := fx.Clamp01(te / rocketSecs)
 	q *= q
-	y = int(math.Round(float64(p.bottom) - float64(p.bottom-p.top-1)*q))
+	peak := p.top + (p.bottom-p.top)/4 // it bursts high, with room for the galaxy
+	y = int(math.Round(float64(p.bottom) - float64(p.bottom-peak)*q))
 	amp := math.Min(float64(p.w)/10, 14) * math.Min(1, te*1.5)
 	x = (p.w-1)/2 + int(math.Round(math.Sin(te*5.5)*amp))
 	return y, x
@@ -228,8 +247,7 @@ func launchPsyche(c *canvas.Canvas, f *fx.Fx, h, w int, el float64, seed uint64,
 	p.ground = make([]fx.RGB, rows*w)
 	p.covered = make([]bool, rows*w)
 
-	_, bx := p.rocketAt(rocketSecs)
-	by := top + 1
+	by, bx := p.rocketAt(rocketSecs)
 	p.tunnel(el, by, bx)
 	p.chaser(el)
 	if el < rocketSecs+0.4 {
@@ -444,7 +462,7 @@ func (p *psyche) galaxies(el float64, seed uint64, by, bx int) {
 	}
 	rnd := rand.New(rand.NewPCG(seed, seed+7))
 	R := math.Max(3, math.Min(float64(p.bottom-p.top)/2.2, float64(p.w)/9))
-	bs := []burst{{rocketSecs, by, bx, rnd.Float64() * 360, 5, 1, R * 1.2}}
+	bs := []burst{{rocketSecs, by, bx, rnd.Float64() * 360, 3, 1, R * 1.5}}
 	for i := 0; i < 8; i++ {
 		ymax := max(p.top+2, (p.top+p.bottom)/2+2)
 		dir := 1.0
@@ -455,11 +473,11 @@ func (p *psyche) galaxies(el float64, seed uint64, by, bx int) {
 			at:  1.9 + 0.45*float64(i),
 			y:   p.top + 2 + rnd.IntN(max(1, ymax-p.top-1)),
 			x:   4 + rnd.IntN(max(1, p.w-8)),
-			hue: rnd.Float64() * 360, arms: 3 + rnd.IntN(3), spin: dir,
+			hue: rnd.Float64() * 360, arms: 2 + rnd.IntN(2), spin: dir,
 			radius: R * (0.7 + 0.5*rnd.Float64()),
 		})
 	}
-	const life, points = 1.9, 22
+	const life, points = 1.9, 48
 	for _, b := range bs {
 		t := el - b.at
 		if t < 0 || t >= life {
@@ -473,11 +491,17 @@ func (p *psyche) galaxies(el float64, seed uint64, by, bx int) {
 		for arm := 0; arm < b.arms; arm++ {
 			for k := 1; k <= points; k++ {
 				s := float64(k) / points
-				ang := float64(arm)*2*math.Pi/float64(b.arms) + b.spin*(s*4.2+t*3.2)
+				ang := float64(arm)*2*math.Pi/float64(b.arms) + b.spin*(s*3.4+t*3.2)
 				y := float64(b.y) + math.Sin(ang)*spread*s + 2.5*t*t
 				x := float64(b.x) + math.Cos(ang)*spread*s*2
-				p.put(int(math.Round(y)), int(math.Round(x)), string(sparks[(k+arm)%len(sparks)]),
-					hue(l, b.hue+s*160+t*120))
+				g := sparks[0] // fine at the tips,
+				switch {
+				case s < 0.35: // bold at the core
+					g = sparks[len(sparks)-1]
+				case s < 0.7:
+					g = sparks[min(1, len(sparks)-1)]
+				}
+				p.put(int(math.Round(y)), int(math.Round(x)), string(g), hue(l, b.hue+s*160+t*120))
 			}
 		}
 		if t < 0.5 {
@@ -610,10 +634,15 @@ func (p *psyche) word(el float64) {
 	if el > landed {
 		sway = int(math.Round(math.Sin((el-landed)*2.2) * 1.5))
 	}
-	// a dark plate behind the word keeps it readable over the tunnel
-	if el > wordAt+0.3 && el < meltAt {
+	// a dark plate behind the word keeps it readable over the tunnel;
+	// it opens out from the middle and closes again for the melt, never
+	// all at once
+	open := fx.EaseOut((el-wordAt-0.2)/0.5) * (1 - fx.EaseInOut((el-meltAt)/0.4))
+	if open > 0 {
+		half := float64(ww+6) / 2 * open
+		cx := float64(x0) + float64(ww-1)/2 + float64(sway)
 		for y := mid - 1; y <= mid+6; y++ {
-			for x := x0 - 3 + sway; x <= x0+ww+2+sway; x++ {
+			for x := int(math.Ceil(cx - half)); float64(x) <= cx+half; x++ {
 				p.put(y, x, block, hue(lvShadow, float64(x)*4+el*90))
 			}
 		}
