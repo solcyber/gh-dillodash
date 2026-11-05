@@ -456,11 +456,10 @@ func ApproveRefusals(pr *model.PR, cfg *config.TerraformApproveConfig) map[strin
 	return refused
 }
 
-// isBot reports whether login is the configured bot (a prefix match, so
-// "github-actions" also covers "github-actions[bot]").
-func isBot(login, bot string) bool {
-	return bot != "" && strings.HasPrefix(strings.ToLower(login), strings.ToLower(bot))
-}
+// isBot reports whether login is the configured bot: the login itself or
+// its "[bot]" App form ("github-actions" covers "github-actions[bot]"),
+// never a longer login that starts with it.
+func isBot(login, bot string) bool { return config.IsLogin(login, bot) }
 
 // PlanStateLabel is a candidate's one-line state for the card and the
 // pick menu; refused says the validator turned its last /approve down.

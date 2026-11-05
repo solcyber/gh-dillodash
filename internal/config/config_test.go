@@ -677,3 +677,27 @@ func TestNightKeys(t *testing.T) {
 		t.Errorf("defaults: no team, no workflow")
 	}
 }
+
+// TestIsLoginIsExact: a digest or conductor bot is trusted by its exact
+// login or its App form, never by a prefix: "deploy" must not trust
+// "deploy-er", and an empty bot trusts no one.
+func TestIsLoginIsExact(t *testing.T) {
+	for _, c := range []struct {
+		login, bot string
+		want       bool
+	}{
+		{"github-actions", "github-actions", true},
+		{"github-actions[bot]", "github-actions", true},
+		{"GitHub-Actions[bot]", "github-actions", true},
+		{"github-actions-impostor", "github-actions", false},
+		{"deploy-er", "deploy", false},
+		{"deploy[bot]", "deploy[bot]", true},
+		{"deploy", "deploy[bot]", false},
+		{"alice", "", false},
+		{"", "deploy", false},
+	} {
+		if got := IsLogin(c.login, c.bot); got != c.want {
+			t.Errorf("IsLogin(%q, %q) = %v, want %v", c.login, c.bot, got, c.want)
+		}
+	}
+}

@@ -56,15 +56,23 @@ run-name: deploy ${{ inputs.service }} ${{ inputs.version }} to ${{ inputs.envir
 
 ## Runs that belong to a listed PR
 
-A run whose head commit is the merge commit of a merged PR the dashboard
-already lists is left out: a merged review PR's, or a merged release's in
-the `release_pr` section. Those show under their PR, and `D` on that PR
+A run the merge of a listed PR pushed is left out: its event is `push`
+and its head commit is the merge commit of a merged PR the dashboard lists
+in the same repo, a merged review PR's or a merged release's in the
+`release_pr` section. Those show under their PR, and `D` on that PR
 approves them through its merge commit, so a release's deploy is never
 listed twice. The review PRs' runs are dropped at refresh (their
 environments are not even read); the releases are matched when the list is
-drawn. A run waiting on an open PR's head is listed: `D` on an open PR
-does not approve it (it approves merged PRs only), so this row is where it
-can be.
+drawn, so a release that has left its section (after `merged_keep_secs`)
+hands its still-waiting runs back to this one.
+
+Every other waiting run is listed. A `workflow_dispatch`,
+`repository_dispatch` or `schedule` run from the production branch carries
+the branch tip as its head, which is usually the last merged PR's merge
+commit; that PR did not start it, so it is never left out on those
+grounds. A run waiting on an open PR's head is listed too: `D` on an open
+PR does not approve it (it approves merged PRs only), so this row is where
+it can be.
 
 ## `D`
 

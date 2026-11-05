@@ -169,14 +169,20 @@ func TestNothingWaitingNoSection(t *testing.T) {
 // commit shows under that PR (its D approves it), not here: the review
 // PRs at refresh, and the release workflow's merged releases at
 // Sections time.
+// pushed is a run the push of a merge started (a deploy of that merge).
+func pushed(r model.WorkflowRun) model.WorkflowRun {
+	r.Event = "push"
+	return r
+}
+
 func TestRunsOnListedPRsAreDropped(t *testing.T) {
 	w, app := newWF(t)
 	app.Fake.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {
-		run(1001, "plan", "headsha", time.Minute),
-		run(1002, "deploy", "mergesha", 2*time.Minute),
-		run(1003, "deploy", "relsha", 3*time.Minute),
-		run(1004, "rotate", "loose", 4*time.Minute),
-		run(1005, "rotate", "laterlisted", 5*time.Minute),
+		pushed(run(1001, "plan", "headsha", time.Minute)),
+		pushed(run(1002, "deploy", "mergesha", 2*time.Minute)),
+		pushed(run(1003, "deploy", "relsha", 3*time.Minute)),
+		pushed(run(1004, "rotate", "loose", 4*time.Minute)),
+		pushed(run(1005, "rotate", "laterlisted", 5*time.Minute)),
 	}}
 	open := &model.PR{Repo: infra, Number: 3543, State: "OPEN", HeadRefOid: "headsha"}
 	merged := &model.PR{Repo: infra, Number: 3550, State: "MERGED", HeadRefOid: "branchtip", MergeCommit: &model.MergeCommit{Oid: "mergesha"}}
@@ -198,12 +204,44 @@ func TestRunsOnListedPRsAreDropped(t *testing.T) {
 	// at Sections time: the listed PRs as the app holds them now, and the
 	// releases (the release workflow's state, through CIProvider)
 	app.PRs = []*model.PR{{Repo: infra, Number: 3560, State: "MERGED", HeadRefOid: "tip", MergeCommit: &model.MergeCommit{Oid: "laterlisted"}}}
-	app.SetState(releaseName, releases{{Repo: etl, Number: 42, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "relsha"}}})
+	app.SetState(releaseName, releases{{Repo: infra, Number: 42, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "relsha"}}})
 	if got := ids(w.Sections(app, nil, "alice")); !reflect.DeepEqual(got, []int64{1004, 1001}) {
 		t.Errorf("sections kept %v", got)
 	}
 	if s := text.SegsText(w.SummarySegs(app)); !strings.Contains(s, "2 runs waiting") {
 		t.Errorf("the summary counts what is shown: %q", s)
+	}
+}
+
+// TestDispatchOnAMergeCommitIsListed: a workflow_dispatch from main carries
+// main's tip as its head, which is the last merged PR's merge commit. It
+// is not that PR's deploy, so it is listed; so is a push run whose merge
+// commit belongs to a PR listed in another repo, and a push run on a
+// release that has left the release section.
+func TestDispatchOnAMergeCommitIsListed(t *testing.T) {
+	w, app := newWF(t)
+	sched := run(1004, "nightly", "mergesha", 4*time.Minute)
+	sched.Event = "schedule"
+	app.Fake.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {
+		run(1001, "login", "mergesha", time.Minute),
+		pushed(run(1002, "deploy", "mergesha", 2*time.Minute)),
+		pushed(run(1003, "migrate", "othersha", 3*time.Minute)),
+		sched,
+		pushed(run(1005, "migrate", "gonesha", 5*time.Minute)),
+	}}
+	merged := &model.PR{Repo: infra, Number: 3550, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "mergesha"}}
+	elsewhere := &model.PR{Repo: etl, Number: 7, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "othersha"}}
+	if _, err := refresh(t, w, app, merged, elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	app.PRs = []*model.PR{merged, elsewhere}
+	app.SetState(releaseName, releases{})
+	// 1002 is the merge's own deploy: it shows under #3550, where D approves it
+	if got := ids(w.Sections(app, nil, "alice")); !reflect.DeepEqual(got, []int64{1005, 1004, 1003, 1001}) {
+		t.Errorf("sections kept %v", got)
+	}
+	if s := text.SegsText(w.SummarySegs(app)); !strings.Contains(s, "4 runs waiting") {
+		t.Errorf("the summary counts every listed run: %q", s)
 	}
 }
 
