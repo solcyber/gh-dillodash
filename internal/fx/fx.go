@@ -336,12 +336,22 @@ func Particles(seed uint64, count int, t float64, y0, x0 int, spread float64) []
 
 func uniform(r *rand.Rand, a, b float64) float64 { return a + r.Float64()*(b-a) }
 
-// The release launch: a rocket, fireworks, a shockwave, RELEASED! in
-// block letters, marching lights round the screen and an armadillo
-// stampede on the key bar. Loud on purpose, but it never strobes: no cell
-// changes color more than three times a second (WCAG 2.3.1), and it keeps
-// to the colorblind-safe palette. Any key ends it, and still does its job.
-const LaunchSecs = 6.0
+// The release launch. Loud on purpose: from 256 colors up it is a
+// kaleidoscope tunnel of plasma, a rainbow rocket on a wiggle with a
+// spiral exhaust and smoke rings, a ripple shockwave, spiral-galaxy
+// fireworks, RELEASED! in block letters that swing and melt, chaser
+// lights, Amos tumbling through every hue and the armadillo stampede.
+// Below 256 colors it is the classic launch in the dashboard's palette.
+//
+// It never flashes (WCAG 2.3.1, general flash): no area of a quarter of
+// the screen or more swings in relative luminance by 10% or more, one way
+// and back, more than three times in any second. The colors are what
+// makes that hold: everything cycles hue at a fixed OKLab lightness (see
+// OKLCH), so the spectrum flows while the brightness stays put; what
+// does change brightness (the letters, the sparks, the chaser) is small
+// or slow. The scenes tests sample every frame at 30 fps and check it.
+// Any key ends it, and still does its job.
+const LaunchSecs = 8.0
 
 // LaunchCycle is the color cycle of the marching lights and the letters.
 var LaunchCycle = []string{"fx.b4", "fx.b5", "fx.b6", "fx.b7", "fx.g3", "fx.g2", "fx.g1", "fx.b3"}
@@ -364,6 +374,19 @@ const LaunchWord = "RELEASED!"
 var (
 	LaunchRocket = []string{"  /\\  ", " /  \\ ", " |()| ", " |  | ", "/|__|\\"}
 	LaunchFlame  = []string{"  ''  ", " ^^^^ ", "  ^^  "}
+	// LaunchRocketBig is the psychedelic launch's rocket as a mask: #
+	// hull, / and \ its slopes, A the nose, O the porthole. The nose is
+	// the middle column of the first row.
+	LaunchRocketBig = []string{
+		`    A    `,
+		`   /#\   `,
+		`  /###\  `,
+		`  ##O##  `,
+		`  #####  `,
+		`  #####  `,
+		` /#####\ `,
+		`/##/ \##\`,
+	}
 )
 
 // LaunchWordWidth is the block-letter word's width in cells.

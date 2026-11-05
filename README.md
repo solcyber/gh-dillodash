@@ -65,7 +65,7 @@ symptoms.
 
 ![Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run](docs/shots/release-card.png)
 
-![When a release lands: the rocket, the fireworks and RELEASED! across the screen](docs/shots/release-launch.png)
+![When a release lands: a kaleidoscope tunnel, spiral-galaxy fireworks, Amos tumbling through every hue and RELEASED! swinging in rainbow block letters](docs/shots/release-launch.png)
 
 ![The help overlay: every key of the current view by group, the workflows' keys, and the legend of chips](docs/shots/help.png)
 

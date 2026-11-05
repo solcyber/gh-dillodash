@@ -233,7 +233,9 @@ replays one offline; these shots are its steps.
 
 ![Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run](../shots/release-card.png)
 
-![When a release lands: the rocket, the fireworks and RELEASED! across the screen](../shots/release-launch.png)
+![The rocket bursts: rainbow ripples roll out through the tunnel and the first spiral galaxy wheels open](../shots/release-launch-burst.png)
+
+![When a release lands: a kaleidoscope tunnel, spiral-galaxy fireworks, Amos tumbling through every hue and RELEASED! swinging in rainbow block letters](../shots/release-launch.png)
 
 From the moment a release is sent on its way, dillodash follows it to its
 outcome and shows where it stands, in near real time, without waiting for

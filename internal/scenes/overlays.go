@@ -9,6 +9,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/text"
+	"github.com/solcyber/gh-dillodash/internal/theme"
 )
 
 // Wipe sweeps a new view in behind a soft blue edge: from the right going
@@ -88,14 +89,32 @@ func Confetti(c *canvas.Canvas, f *fx.Fx, h, w int) {
 	}
 }
 
-// Launch is the /release launch, over everything but the status line (it
-// says what was posted). 0-1.5 s a rocket climbs out of the key bar; at
+// Launch is the release launch, over everything but the status line (it
+// says what was posted). From 256 colors up (and with more than ASCII to
+// draw with) it is the psychedelic launch, launchPsyche; below that the
+// classic one in the dashboard's own colors.
+func Launch(c *canvas.Canvas, f *fx.Fx, h, w int) {
+	if _, ok := f.T("launch"); !ok {
+		return
+	}
+	if tier := theme.Current(); tier >= theme.Color256 && glyphs.Active() != glyphs.ASCII {
+		if h-3-1 < 4 || w < 20 {
+			return
+		}
+		el, _ := f.Elapsed("launch")
+		launchPsyche(c, f, h, w, el, f.Seed("launch"), tier)
+		return
+	}
+	launchClassic(c, f, h, w)
+}
+
+// launchClassic is the launch below 256 colors. 0-1.5 s a rocket climbs out of the key bar; at
 // 1.5 s it bursts, a shockwave rolls out and seven more fireworks follow;
 // from 1.8 s RELEASED! drops in letter by letter and bobs; lights march
 // round the edge and armadillos stampede the key bar the whole time;
 // confetti cannons fire at 3.2 s. No cell changes color more than three
 // times a second: everything that cycles steps on int(el*3).
-func Launch(c *canvas.Canvas, f *fx.Fx, h, w int) {
+func launchClassic(c *canvas.Canvas, f *fx.Fx, h, w int) {
 	if _, ok := f.T("launch"); !ok {
 		return
 	}

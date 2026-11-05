@@ -196,12 +196,14 @@ is the static dashboard.
 | modals | Menus and the help pop open with a band of light round their border. A reason prompt flies a marching gold hazard stripe. |
 | status line | Messages type themselves in and fade after 6 s. Refusals shake. |
 | posting | A posted approval fires confetti while Amos rolls across the key bar; a comment or a review gets a smaller burst. |
-| release | A release posted now launches: a rocket climbs out of the key bar and bursts, a shockwave rolls out, fireworks follow, **RELEASED!** drops in letter by letter, lights march round the edge, confetti cannons fire and six armadillos stampede the key bar. Any key ends it and still does its own job. |
+| release | A release posted now launches, for eight seconds. From 256 colors up: the screen folds into a kaleidoscope tunnel of plasma, a rainbow rocket wiggles up it trailing smoke rings and a spiral exhaust, bursts in a rainbow ripple, spiral-galaxy fireworks wheel open, **RELEASED!** drops in letter by letter and sways in rainbow block letters, Amos tumbles through every hue, chaser lights run round the edge, confetti cannons fire, six armadillos stampede the key bar, and the letters melt as the tunnel collapses back into the dashboard. Below 256 colors (or with ASCII glyphs) the classic launch plays in the dashboard's own colors. Any key ends it and still does its own job. |
 | empty list | Amos trundles to and fro under a twinkling sky. |
 | the room | In the release window the plants sway, steam rises from the mug, the wall clock's second hand sweeps and the stars outside twinkle. |
 
 The rules behind it: nothing a decision rests on animates in; a tick is
 never an answer; ambient effects rest after five minutes without a key;
-nothing strobes (no cell changes color more than three times a second,
-WCAG 2.3.1, and the tests check the rate); mono terminals keep the moves
+nothing flashes (WCAG 2.3.1: no quarter of the screen swings in
+luminance by 10% and back more than three times a second; the launch
+cycles every hue at a fixed lightness, and the tests sample every frame
+at 30 fps to check); mono terminals keep the moves
 without the colors.
