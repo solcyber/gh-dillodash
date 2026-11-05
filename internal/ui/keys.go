@@ -144,8 +144,9 @@ var bindings = []binding{
 		Help: "r  refresh now", Doc: "refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed)", Do: doRefresh},
 	{Views: []string{ViewList, ViewDetail, "issue"}, Keys: []widgets.Key{R('R')}, Bar: "R", Label: "restart", Group: "any", Prio: 5, when: (*Model).pendingRestart,
 		Help: "R  restart into the update", Doc: "restart into the dillodash release installed in the background, keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it once one is installed)", Do: doRestart},
-	{Views: []string{anyView}, Keys: []widgets.Key{R('W')}, Bar: "W", Label: "room", Group: "any", Prio: 55, when: (*Model).roomChip,
-		Help: "W  the room: the view out of a window", Doc: "the room: while the release window is open the dashboard is the view out of a window, behind the glass in the middle of a room; `W` steps out to the plain dashboard and back in (the plaque on the wall says so, and the bar shows `W` while you are out). The next window opens in the room again. Outside the window `W` shows the room too", Do: doRoom},
+	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('W')}, Bar: "W", Label: "room", Group: "any", Prio: 55, when: (*Model).roomChipInWindow, Do: doRoom}, // the window's reminder chip; the "any" row below documents W
+	{Views: []string{anyView}, Keys: []widgets.Key{R('W')}, Bar: "W", Label: "room", Group: "any", Prio: 75, when: (*Model).roomChipOutside,
+		Help: "W  the room: the view out of a window", Doc: "the room: while the release window is open the dashboard is the view out of a window, behind the glass in the middle of a room, as a reminder; `W` steps out to the plain dashboard and back in (the plaque on the wall says so, and the bar shows `W` while you are out). The next window opens in the room again. Outside the window the dashboard is plain and `W` steps into the room any time (the bar shows `W` there too, among the first chips to go when the bar is short)", Do: doRoom},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('q')}, Bar: "q", Label: "quit", Group: "list", Prio: 0,
 		Help: "q  quit", Doc: "quit (press twice while an action is still talking to GitHub)", Do: doQuit},
 	{Views: []string{anyView}, Keys: []widgets.Key{R(':')}, Group: "any",
