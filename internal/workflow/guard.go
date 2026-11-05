@@ -30,7 +30,8 @@ func ResetMembershipCache() {
 // login is a bot login, or when [github] approvers_team is set and
 // the login is not an active member of it: the bot would refuse the post
 // anyway, and posting under the wrong identity costs a live release
-// minutes. When the token cannot read the team, it warns and allows.
+// minutes. When the token cannot read the team, it warns and allows;
+// with [github] approvers_team_strict it refuses instead.
 // The refusal names the login and, when the token came from the
 // environment, the variable to unset.
 func PostGuard(app App, what string) bool {
@@ -54,6 +55,10 @@ func PostGuard(app App, what string) bool {
 		var err error
 		m, err = app.GH().TeamMember(app.Context(), org, slug, me)
 		if err != nil {
+			if cfg.GitHub.ApproversTeamStrict {
+				app.Notice(fmt.Sprintf("%s not posted: couldn't check %s is in @%s (%s), and approvers_team_strict refuses an unchecked post", what, me, team, err))
+				return false
+			}
 			app.Notice(fmt.Sprintf("couldn't check %s is in @%s (%s) — posting %s anyway", me, team, err, what))
 			return true
 		}
@@ -62,6 +67,9 @@ func PostGuard(app App, what string) bool {
 		memberMu.Unlock()
 	}
 	switch {
+	case !m.Readable && cfg.GitHub.ApproversTeamStrict:
+		app.Notice(fmt.Sprintf("%s not posted: this token can't read @%s (it needs the organization's Members read), and approvers_team_strict refuses an unchecked post", what, team))
+		return false
 	case !m.Readable:
 		app.Notice(fmt.Sprintf("couldn't read @%s with this token (it needs the organization's Members read) — posting %s as %s unchecked", team, what, me))
 		return true
