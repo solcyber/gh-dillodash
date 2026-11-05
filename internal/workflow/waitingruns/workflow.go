@@ -169,9 +169,9 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			if r.Status != "" && r.Status != "waiting" {
 				continue
 			}
-			// a run on a listed PR's head or merge commit shows under
-			// that PR; reading its deployments here would be wasted
-			if listed[r.HeadSHA] {
+			// a push run on a listed PR's merge commit shows under that
+			// PR; reading its deployments here would be wasted
+			if listed.covers(repo, r) {
 				continue
 			}
 			pend, err := gh.PendingDeployments(ctx, repo, r.ID)
@@ -211,23 +211,41 @@ func tokenHint(err error, perm string, repo model.Repo) string {
 	return ""
 }
 
-// listedSHAs is the merge commits of the merged PRs: D on such a PR
-// approves the runs on its merge commit, so they are not listed again. A
-// run on an open PR's head stays: D on an open PR refuses (not merged),
-// and this row is then the only place the run can be approved.
-func listedSHAs(prs []*model.PR) map[string]bool {
-	out := map[string]bool{}
+// listedSet is the merge commits of the merged PRs the dashboard lists,
+// per repo: D on such a PR approves the runs on its merge commit.
+type listedSet map[string]bool
+
+// covers reports whether a waiting run already shows under a listed PR,
+// so the waiting section leaves it out. Only a run the merge itself
+// pushed counts: its event is "push" and its head is the merge commit of
+// a merged PR listed in the same repo. A workflow_dispatch from the
+// production branch, a repository_dispatch or a schedule also carries
+// the branch tip as its head, which is usually the last merged PR's merge
+// commit; that is a coincidence, not a deploy of that PR, so such a run
+// is always listed. A run waiting on an open PR's head is listed too: D
+// on an open PR refuses (not merged), and this row is then the only
+// place the run can be approved.
+func (l listedSet) covers(repo model.Repo, r model.WorkflowRun) bool {
+	return r.Event == "push" && l[listedKey(repo, r.HeadSHA)]
+}
+
+func listedKey(repo model.Repo, sha string) string {
+	return strings.ToLower(repo.String()) + "@" + sha
+}
+
+func listedSHAs(prs []*model.PR) listedSet {
+	out := listedSet{}
 	addSHAs(out, prs)
 	return out
 }
 
-func addSHAs(set map[string]bool, prs []*model.PR) {
+func addSHAs(set listedSet, prs []*model.PR) {
 	for _, p := range prs {
 		if p == nil {
 			continue
 		}
 		if p.State == "MERGED" && p.MergeCommit != nil && p.MergeCommit.Oid != "" {
-			set[p.MergeCommit.Oid] = true
+			set[listedKey(p.Repo, p.MergeCommit.Oid)] = true
 		}
 	}
 }
@@ -242,9 +260,9 @@ func (w *Workflow) Apply(app workflow.App, s workflow.State) {
 
 // ---- the list (UI goroutine) ----
 
-// visible is the applied state's runs minus those on a PR the dashboard
-// lists: a review PR's head or merge commit, or a merged release's (the
-// release workflow's rows). Those already show under their PR, whose D
+// visible is the applied state's runs minus the push runs on the merge
+// commit of a PR the dashboard lists (listedSet.covers): a merged review
+// PR's, or a merged release's (the release workflow's rows). Those already show under their PR, whose D
 // approves them through its merge commit; this is what keeps a release's
 // deploy from being listed twice. The worker drops the review PRs' runs
 // already; the releases are only known here, after every workflow ran.
@@ -259,7 +277,7 @@ func (w *Workflow) visible(app workflow.App) []*Item {
 	}
 	var out []*Item
 	for _, it := range st.Items {
-		if !listed[it.Run.HeadSHA] {
+		if !listed.covers(it.Repo, it.Run) {
 			out = append(out, it)
 		}
 	}

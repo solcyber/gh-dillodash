@@ -235,9 +235,9 @@ func ParseMarker(comments []model.Comment, cfg *config.MaintenanceWindowConfig) 
 	return found
 }
 
-func isBot(login, bot string) bool {
-	return bot != "" && strings.HasPrefix(strings.ToLower(login), strings.ToLower(bot))
-}
+// isBot reports whether login is the conductor bot (config.IsLogin: exact,
+// with or without the "[bot]" suffix).
+func isBot(login, bot string) bool { return config.IsLogin(login, bot) }
 
 // LatestPlanStack is what a queued row names: the marker's own stacks
 // (a set's members in apply order, joined as the conductor joins them),

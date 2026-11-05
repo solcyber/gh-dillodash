@@ -147,6 +147,20 @@ type BotsConfig struct {
 	Logins []string // lower-cased, deduped
 }
 
+// IsLogin reports whether login is the one bot account configured as bot
+// (a digest_bot, a conductor_bot): the same login, or the GitHub App's
+// "<bot>[bot]", case-insensitive. The match is exact, never a prefix:
+// what a bot posts is trusted, so a configured "deploy" must not trust a
+// person named "deploy-er". An empty bot matches nothing.
+func IsLogin(login, bot string) bool {
+	l := strings.ToLower(strings.TrimSpace(login))
+	b := strings.ToLower(strings.TrimSpace(bot))
+	if b == "" || l == "" {
+		return false
+	}
+	return l == b || l == b+"[bot]"
+}
+
 // IsBot reports whether a login is a bot: it ends in "[bot]", or it
 // equals a configured bot login, with or without that suffix
 // (case-insensitive). The match is exact, not a prefix: a configured

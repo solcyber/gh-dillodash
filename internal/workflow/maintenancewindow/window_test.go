@@ -206,6 +206,8 @@ func TestMarkersAndManifests(t *testing.T) {
 		markerComment("2026-10-21", true, "2026-10-21T16:31:00Z", bot)}, cfg)
 	check(t, "latest bot marker wins", mk != nil && mk.Night == "2026-10-21" && mk.PlanID == pid && mk.Revertible != nil && *mk.Revertible)
 	check(t, "a marker from a human is ignored", ParseMarker([]model.Comment{markerComment("2026-10-21", true, "2026-10-21T16:31:00Z", "mallory")}, cfg) == nil)
+	check(t, "a login that only starts with the bot's is a human", ParseMarker([]model.Comment{markerComment("2026-10-21", true, "2026-10-21T16:31:00Z", bot+"-er")}, cfg) == nil)
+	check(t, "the bot's App form is the bot", ParseMarker([]model.Comment{markerComment("2026-10-21", true, "2026-10-21T16:31:00Z", bot+"[bot]")}, cfg) != nil)
 	check(t, "malformed marker ignored", ParseMarker([]model.Comment{{Author: model.Actor{Login: bot}, Body: "<!-- window-queue {not json} -->"}}, cfg) == nil)
 	check(t, "non-dict marker JSON ignored", ParseMarker([]model.Comment{{Author: model.Actor{Login: bot}, Body: "<!-- window-queue [1, 2] -->"}}, cfg) == nil)
 	check(t, "stack from the newest digest", LatestPlanStack([]model.Comment{digestA}, nil) == "staging/15-canary")
