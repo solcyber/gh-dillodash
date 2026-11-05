@@ -80,6 +80,9 @@ func (m *Model) doApprove(app *lockedApp) {
 		return
 	}
 	where := m.where(m.repoOf(pr), pr.Number)
+	if m.writeRefused(app, m.repoOf(pr), "approving "+where) {
+		return
+	}
 	state := pr.State
 	if state == "" {
 		state = "OPEN"
@@ -144,6 +147,9 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 		return
 	}
 	where := m.where(repo, number)
+	if m.writeRefused(app, repo, "commenting on "+where) {
+		return
+	}
 	var body string
 	if useEditor || seed != "" {
 		argv, err := external.EditorCommand()
@@ -203,19 +209,12 @@ func (m *Model) doTag(app *lockedApp) {
 	default:
 		return
 	}
-	m.mu.Lock()
-	users, cached := m.users[repo]
-	m.mu.Unlock()
-	if !cached {
-		u, err := m.gh.AssignableUsers(m.ctx, repo)
-		if err != nil {
-			app.Fail(fmt.Sprintf("couldn't list who is assignable in %s: %s", repo, err))
-			return
-		}
-		m.mu.Lock()
-		m.users[repo] = u
-		m.mu.Unlock()
-		users = u
+	if m.writeRefused(app, repo, "tagging someone on "+repo.String()) {
+		return
+	}
+	users, ok := m.assignable(app, repo)
+	if !ok {
+		return
 	}
 	var others []model.Actor
 	for _, u := range users {
@@ -258,11 +257,14 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice("M merges a PR; open one first")
 		return
 	}
+	repo := m.repoOf(pr)
+	where := m.where(repo, pr.Number)
+	if m.writeRefused(app, repo, "merging "+where) {
+		return
+	}
 	if !workflow.StaleGate(app, "merge") {
 		return
 	}
-	repo := m.repoOf(pr)
-	where := m.where(repo, pr.Number)
 	if why := m.wf.MergeBlock(pr, m.me); why != "" {
 		app.Notice(where + ": " + why)
 		return
