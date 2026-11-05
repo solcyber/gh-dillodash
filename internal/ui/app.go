@@ -288,7 +288,7 @@ func toKey(k tea.KeyPressMsg) widgets.Key {
 // overlayKey: the help and message overlays scroll with j/k and the
 // paging keys; any other key closes them.
 func (m *Model) overlayKey(k widgets.Key) {
-	page := max(1, m.h-6)
+	page := max(1, m.layoutH()-6)
 	switch {
 	case k.Rune == 'j' || k.Name == "down":
 		m.helpTop++
@@ -353,7 +353,7 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	if view == ViewDetail && m.detailKind == "issue" {
 		view = "issue"
 	}
-	page := max(1, m.h-4)
+	page := max(1, m.layoutH()-4)
 	app := &lockedApp{m}
 	if b := lookup(view, k); b != nil && b.Do != nil {
 		return b.Do(m, k, page, app)

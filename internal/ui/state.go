@@ -191,6 +191,11 @@ type Model struct {
 	refreshStamp string
 	// canvas is the frame buffer View reuses between frames
 	canvas *canvas.Canvas
+	// the room (room.go): roomIn is whether the release window was open
+	// at the last look, roomFlip whether W flipped the room since then,
+	// roomInner the canvas the dashboard is drawn on behind the glass
+	roomIn, roomFlip bool
+	roomInner        *canvas.Canvas
 	// tickGen is the frame clock's generation (retick orphans old ticks)
 	tickGen int
 	// helpTop is the help/message overlay's scroll offset; lastMsg the

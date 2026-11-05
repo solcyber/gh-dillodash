@@ -49,6 +49,7 @@
 | list, detail, files, diff, fortress | `o` | open the URL in a browser when this host has one; otherwise like `y` |
 | list, detail, diff, fortress | `r` | refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed) |
 | list, detail | `R` | restart into the dillodash release installed in the background, keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it once one is installed) |
+| any | `W` | the room: while the release window is open the dashboard is the view out of a window, behind the glass in the middle of a room; `W` steps out to the plain dashboard and back in (the plaque on the wall says so, and the bar shows `W` while you are out). The next window opens in the room again. Outside the window `W` shows the room too |
 | list | `q` | quit (press twice while an action is still talking to GitHub) |
 | any | `:` | go to `#N`, `repo#N` or `owner/repo#N`: a PR first, then an issue; a bare `#N` opens the listed row with that number in any repo (release rows too), and asks which when several repos list it |
 | any | `?` | help: every key, the glyph legend, the version; `j`/`k` scroll it when it overflows |

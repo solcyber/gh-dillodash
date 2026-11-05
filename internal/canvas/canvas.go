@@ -259,9 +259,15 @@ func (c *Canvas) Render(r Renderer) string {
 			if ce.raw != "" {
 				flush()
 				have = false
+				// a run of cells sharing one literal SGR (a wall, a sky)
+				// is written once, not once per cell
 				b.WriteString("\x1b[0m")
 				b.WriteString(ce.raw)
 				b.WriteString(ce.g)
+				for x+1 < c.W && row[x+1].raw == ce.raw && row[x+1].width == 1 {
+					x++
+					b.WriteString(row[x].g)
+				}
 				b.WriteString("\x1b[0m")
 				continue
 			}
@@ -274,6 +280,51 @@ func (c *Canvas) Render(r Renderer) string {
 		flush()
 	}
 	return b.String()
+}
+
+// Blit copies src onto c with src's top-left at (y, x), clipped at c's
+// edges: every cell, its style, colors and selection included, so a
+// frame drawn on a smaller canvas lands whole inside a bigger one. A
+// wide glyph cut by the right edge becomes a space.
+func (c *Canvas) Blit(src *Canvas, y, x int) {
+	for sy := 0; sy < src.H; sy++ {
+		dy := y + sy
+		if dy < 0 || dy >= c.H {
+			continue
+		}
+		// a wide glyph of c's straddling either edge loses its other half
+		if x > 0 && x < c.W && c.cells[dy][x-1].width == 2 {
+			c.cells[dy][x-1] = cell{g: " ", width: 1, style: "text"}
+		}
+		if r := x + src.W; r > 0 && r < c.W && c.cells[dy][r].width == 0 {
+			c.cells[dy][r] = cell{g: " ", width: 1, style: "text"}
+		}
+		for sx := 0; sx < src.W; sx++ {
+			dx := x + sx
+			if dx < 0 || dx >= c.W {
+				continue
+			}
+			ce := src.cells[sy][sx]
+			switch {
+			case ce.width == 2 && (dx+1 >= c.W || sx+1 >= src.W):
+				ce = cell{g: " ", width: 1, style: ce.style, sel: ce.sel, band: ce.band}
+			case ce.width == 0 && dx == 0:
+				ce = cell{g: " ", width: 1, style: ce.style, sel: ce.sel, band: ce.band}
+			}
+			c.cells[dy][dx] = ce
+		}
+	}
+}
+
+// Blank reports whether (y, x) is an empty cell of the plain text
+// style: no glyph, no background, nothing a decoration drawn there
+// would hide.
+func (c *Canvas) Blank(y, x int) bool {
+	if y < 0 || y >= c.H || x < 0 || x >= c.W {
+		return false
+	}
+	ce := c.cells[y][x]
+	return ce.g == " " && ce.width == 1 && ce.raw == "" && !ce.sel && !ce.band && ce.extra == 0 && (ce.style == "text" || ce.style == "")
 }
 
 // CellInfo is one cell as Walk reports it.

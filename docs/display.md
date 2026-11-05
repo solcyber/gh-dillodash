@@ -144,6 +144,40 @@ Fortress mode is the one exception: it uses Dwarf Fortress's sixteen
 colors, including red and green, and every state there also has its own
 shape or motion. Amos is drawn in his own colors.
 
+## The room
+
+![The room: in the release window the dashboard is the view out of a window, behind its mullions, with curtains, plants, Amos's portrait, a wall clock and a mug of coffee on the sill; the plaque says W goes back to work](shots/room.png)
+
+While the release window is open (the `maintenance_window` workflow's
+`release_from` to `end`), dillodash is the view out of a window. The
+dashboard shrinks to the glass in the middle of the screen, a cross of
+cream mullions runs over it, and the night sky shows wherever the glass is
+blank. Around it is the room: a lamp-lit wall, teal curtains tied back on a
+brass rod, a monstera in the corner and a pothos hanging over Amos's
+portrait, a little landscape and a wall clock with the real time, a cactus
+and a mug of coffee on the sill, a rug on the floor. With motion on the
+plants sway, the steam rises and the second hand sweeps; after five minutes
+without a key they rest with everything else.
+
+The dashboard behind the glass is the whole dashboard, laid out to the
+glass: every key works, menus and the help open inside it, and a release's
+launch fills the room. Nothing in front of the glass covers a letter except
+the mullions themselves.
+
+![W steps out of the room: the plain dashboard, the same night, for getting work done](shots/room-off.png)
+
+`W` steps out to the plain dashboard (the brass plaque under the window
+says so) and back in; while you are out the key bar shows `W room`. The
+choice lasts until the window closes, so every night's window opens in the
+room again. Outside the window `W` shows the room anyway.
+
+The room needs a terminal of at least 100×30; smaller, the window is the
+plain dashboard and `W` says why. With 256 colors or more it is drawn in
+half-block pixels and Amos sits for his portrait; a 16-color terminal gets
+the nearest colors; with no color or `icons = "ascii"` the room is line
+art. `room = false` in `[display]` keeps the window plain (`W` still shows
+the room).
+
 ## Motion
 
 ![The splash while the first refresh runs: the logotype cascades in and Amos walks](shots/splash.png)
@@ -164,6 +198,7 @@ is the static dashboard.
 | posting | A posted approval fires confetti while Amos rolls across the key bar; a comment or a review gets a smaller burst. |
 | release | A release posted now launches: a rocket climbs out of the key bar and bursts, a shockwave rolls out, fireworks follow, **RELEASED!** drops in letter by letter, lights march round the edge, confetti cannons fire and six armadillos stampede the key bar. Any key ends it and still does its own job. |
 | empty list | Amos trundles to and fro under a twinkling sky. |
+| the room | In the release window the plants sway, steam rises from the mug, the wall clock's second hand sweeps and the stars outside twinkle. |
 
 The rules behind it: nothing a decision rests on animates in; a tick is
 never an answer; ambient effects rest after five minutes without a key;

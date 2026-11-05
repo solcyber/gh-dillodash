@@ -93,7 +93,7 @@ func (m *Model) fortressBuild() ([]*fortress.Item, []fortress.Lane) {
 // fortressPrepare brings the view up to date with the last refresh.
 func (m *Model) fortressPrepare() *fortress.View {
 	v := m.fortress.view
-	v.Prepare(m.h, m.w, m.refreshStamp, m.fortress.data != nil)
+	v.Prepare(m.layoutH(), m.layoutW(), m.refreshStamp, m.fortress.data != nil)
 	return v
 }
 

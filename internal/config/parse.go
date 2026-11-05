@@ -477,6 +477,7 @@ func (p *parser) parseDisplay(top *table, cfg *Config, ov Overrides) {
 	d.Clock = t.boolean("clock", d.Clock)
 	d.ClockTimezone = t.tz("clock_timezone", d.ClockTimezone)
 	d.ClockTZLabel = strings.TrimSpace(t.str("clock_tz_label", d.ClockTZLabel))
+	d.Room = t.boolean("room", d.Room)
 	t.done()
 
 	if ov.RefreshSecs != nil {
