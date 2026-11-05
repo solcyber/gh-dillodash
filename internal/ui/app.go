@@ -342,7 +342,12 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		if k.Rune == 'R' && m.upd.Pending() {
 			return doRestart(m, k, 0, nil) // queued until the action settles
 		}
-		return nil // an action is mid-flight: its modal owns the keys
+		// an action is mid-flight: the key is dropped, and says so unless
+		// the action's own spinner already does
+		if m.status == "" || m.statusKind != "spin" {
+			m.setStatus("busy — the last action is still running; press it again in a moment")
+		}
+		return nil
 	}
 	view := m.view
 	if view == ViewDetail && m.detailKind == "issue" {
