@@ -62,13 +62,20 @@ func (m *Model) layoutH() int {
 	return m.h
 }
 
-// roomChip gates W in the key bar: the window is open, the screen has
-// room for the room, and you stepped out of it. In the room the plaque
-// on the wall names the key instead.
-func (m *Model) roomChip() bool {
-	if !m.inReleaseWindow() {
-		return false
-	}
+// roomChipInWindow and roomChipOutside gate W in the key bar: the screen
+// has room for the room and it is not shown (in the room the plaque on
+// the wall names the key instead). In the release window the chip is the
+// reminder that you stepped out, so it stays late when the bar is short;
+// outside the window it is a way in, and among the first to go.
+func (m *Model) roomChipInWindow() bool {
+	return m.inReleaseWindow() && m.roomChipFits()
+}
+
+func (m *Model) roomChipOutside() bool {
+	return !m.inReleaseWindow() && m.roomChipFits()
+}
+
+func (m *Model) roomChipFits() bool {
 	_, fits := scenes.RoomFit(m.h, m.w)
 	_, shown := m.roomAt(m.h, m.w)
 	return fits && !shown

@@ -169,3 +169,31 @@ func TestRoomScreen(t *testing.T) {
 		}
 	}
 }
+
+// TestRoomChipAnyTime: the bar offers W outside the window (a way in)
+// and in the window once you stepped out (the reminder); in the room
+// the plaque names it instead.
+func TestRoomChipAnyTime(t *testing.T) {
+	open := false
+	h := roomHarness(t, &open, 160, 48)
+	bar := func() string {
+		lines := strings.Split(h.screen(), "\n")
+		return lines[len(lines)-1]
+	}
+	if !strings.Contains(bar(), "W  room") {
+		t.Errorf("outside the window the bar has no W:\n%s", bar())
+	}
+	h.key('W')
+	if !shown(h) || strings.Contains(bar(), "W  room") {
+		t.Errorf("in the room the bar still offers W:\n%s", bar())
+	}
+	h.key('W')
+	open = true
+	if !shown(h) {
+		t.Fatal("no room in the window")
+	}
+	h.key('W')
+	if shown(h) || !strings.Contains(bar(), "W  room") {
+		t.Errorf("stepped out in the window, the bar has no W:\n%s", bar())
+	}
+}
