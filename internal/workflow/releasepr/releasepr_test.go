@@ -49,6 +49,7 @@ func (winStub) Name() string { return WindowName }
 func newCfg(window bool) *config.Config {
 	cfg := config.Default()
 	cfg.Reviews.Repos = []model.Repo{infra}
+	cfg.Bots.Logins = append(cfg.Bots.Logins, "infra-bot") // the release job's login in these fixtures
 	rel := config.DefaultReleasePR()
 	rel.Auto = false
 	rel.Repos = []model.Repo{portal, etl}
@@ -319,7 +320,7 @@ func TestApproveNowDispatchFailure(t *testing.T) {
 	if len(app.Fake.Approvals) != 1 || len(comments(app)) != 1 {
 		t.Errorf("the review and the comment still landed: %v %v", app.Fake.Approvals, comments(app))
 	}
-	if p, ok := w.progressOf(pr); !ok || p.Phase != PhaseDispatched || !strings.Contains(p.Detail, "not told") {
+	if p, ok := w.progressOf(pr); !ok || p.Phase != PhaseNotTold || !strings.Contains(p.Detail, "not told") {
 		t.Errorf("the card says nobody will pick it up: %+v", p)
 	}
 	if !logHas(app, "fail", "was not told") || !strings.Contains(app.Last(), "press M to merge by hand") {
