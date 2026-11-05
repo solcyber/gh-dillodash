@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.10.0]
+
+Issue triage from the detail view, a hand-off to an agent, and a
+dashboard that can be held to the repos and the team it is for.
+
+### Added
+
+- **Triage keys** in the detail view. `L` adds one of the repo's labels or
+  removes one the item carries (the menu marks them `[x]`). On an issue,
+  `s` assigns a repo user or unassigns an assignee, and `Z` closes it as
+  completed or as not planned, or reopens it after a confirm. The detail
+  updates at once; the next refresh brings GitHub's word.
+- **`H` hands the open PR or issue to an agent**: it adds `[agent]
+  handoff_label` and, when `handoff_comment` is set, posts it, after a
+  confirm. An agent that is a GitHub App's bot cannot be @-mentioned into
+  a notification, so it watches the label. The bar shows `H` only while a
+  label is configured.
+- **`[github] allowed_repos`**: the only repos dillodash writes to. Every
+  comment, review, merge, command, label, assignment, close or reopen,
+  deployment approval or rejection, re-run, cancel and dispatch to any
+  other repo is refused before a prompt, and again in the GitHub client
+  underneath, so no key goes around it, including an item opened with `:`.
+  Reading is unaffected. A test fails when a new write is added to the
+  client without the guard.
+- **`[github] approvers_team_strict = true`** refuses a command a bot
+  accepts only from an approver when the team cannot be read (a token
+  without the organization's Members read, or a failed check), instead of
+  warning and posting unchecked.
+- **`[display] profile`**: a short badge in the header, for someone who
+  runs more than one config.
+- `terraform_approve` reads `Window: **n/a (apply on approval)**` (or
+  `**n/a**`) from a repo with no maintenance window: never disruptive, a
+  plain `/approve`, the same as a digest with no Window line.
+
 ## [1.9.0]
 
 A room to watch the release window from, a far louder launch, and a

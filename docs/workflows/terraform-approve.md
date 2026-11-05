@@ -82,6 +82,11 @@ https://github.com/<owner>/<repo>/actions/runs/<run id>
   where the verdict is `non-disruptive`, `disruptive · revertible` or
   `disruptive · NOT revertible`. A note containing `shadow` marks it
   advisory.
+- A repo that applies on approval, with no maintenance window, writes
+  `Window: **n/a (apply on approval)**` (or `**n/a**`), or leaves the line
+  out. Either way the plan is never disruptive: `a` posts a plain
+  `/approve`, with no queue question and no `--outside-window` offer, even
+  when the same config runs the window workflow for another repo.
 - A link to the Actions run identifies which run posted it; a digest from
   an older run than the newest one for the head is stale.
 
