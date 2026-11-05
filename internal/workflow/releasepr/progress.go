@@ -36,6 +36,7 @@ const (
 	PhaseScheduled   = "scheduled"        // window:scheduled, the slot ahead
 	PhaseWaitingSlot = "waiting for slot" // the manifest item waits (terraform items, /release), or the slot passed with no run
 	PhaseDispatched  = "dispatched"       // the command is posted (or the manifest says dispatched), no run seen yet
+	PhaseNotTold     = "not told"         // this session posted the command but its dispatch to the manifest repo failed: nothing will pick it up (M merges it by hand)
 	PhaseSetup       = "setup"            // the run's steps before the validation
 	PhaseValidating  = "validating"
 	PhaseMerging     = "merging"
@@ -136,9 +137,27 @@ type Progress struct {
 
 	DeployDone, DeployTotal int // the app repo's runs on the merge, from the deploy state
 
-	Source    string // comment | label | run | manifest | command | deploy
+	Source string // comment | label | run | manifest | command | deploy
+	// Ignored names an outcome comment that was not the release job's
+	// (no bot author, or no Run: line naming a run of the manifest
+	// repo): it is shown, never believed
+	Ignored   string
 	PollErr   string // the last poll's failure and what happens next, shown in the card
 	UpdatedAt time.Time
+}
+
+// OutcomeOnly reports an ending known only from a label or a comment,
+// with no run of the release job behind it: the rail shows the outcome,
+// not phases nobody saw happen.
+func (p Progress) OutcomeOnly() bool {
+	return p.Terminal && p.RunID == 0 && p.RunURL == "" && len(p.Steps) == 0 && (p.Source == "label" || p.Source == "comment")
+}
+
+// Moving reports a release whose clock runs and whose chip spins: in
+// flight, and not stalled on a dispatch that never reached the
+// manifest repo.
+func (p Progress) Moving(now time.Time) bool {
+	return liveProgress(p, now) && p.Phase != PhaseNotTold
 }
 
 // Elapsed is how long the current phase has run at now.
@@ -757,6 +776,7 @@ var (
 	mergeLineRE   = regexp.MustCompile(`(?m)^Merge: ([0-9a-f]{7,40})`)
 	runLineRE     = regexp.MustCompile(`(?m)^Run: (\S+)`)
 	approverRE    = regexp.MustCompile(`(?m)^Approver: @?(\S+)`)
+	runURLRE      = regexp.MustCompile(`^https?://[^/]+/([^/]+)/([^/]+)/actions/runs/(\d+)(?:[/?#]|$)`)
 )
 
 // outcome is what an outcome comment says.
@@ -802,6 +822,32 @@ func outcomeOf(c model.Comment) (outcome, bool) {
 	return o, true
 }
 
+// fromJob reports whether an outcome comment is the release job's, not
+// a person's (or another bot's) words in its shape: it is posted by a
+// bot (a [bots] login or the window's conductor bot), and its Run: line
+// names an Actions run of the manifest repo (any repo's run while the
+// manifest repo is not known yet). Anyone can post "## Released"; only
+// the job posts it with its own run. w.mu is held by the caller.
+func (w *Workflow) fromJob(c model.Comment, o outcome) bool {
+	login := c.Author.Login
+	bot := w.bots.IsBot(login)
+	if !bot && w.win != nil && w.win.ConductorBot != "" {
+		bot = strings.HasPrefix(strings.ToLower(login), strings.ToLower(w.win.ConductorBot))
+	}
+	if !bot {
+		return false
+	}
+	m := runURLRE.FindStringSubmatch(o.url)
+	if m == nil {
+		return false
+	}
+	target := w.manifestTarget
+	if target.IsZero() && w.win != nil {
+		target = w.win.ManifestRepo
+	}
+	return target.IsZero() || (strings.EqualFold(m[1], target.Owner) && strings.EqualFold(m[2], target.Name))
+}
+
 // refusedREFor is the dispatcher's refusal of the command.
 func refusedREFor(cmd string) *regexp.Regexp {
 	if cmd == "" {
@@ -828,11 +874,19 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 	var cmdAt, refusedAt time.Time
 	var refusedWhy string
 	var out *outcome
+	var ignored *model.Comment
 	refRE := w.refusedRE
-	for _, c := range t.comments {
-		if o, ok := outcomeOf(c); ok && (out == nil || o.at.After(out.at)) {
-			oc := o
-			out = &oc
+	for i, c := range t.comments {
+		if o, ok := outcomeOf(c); ok {
+			switch {
+			case !w.fromJob(c, o):
+				if ignored == nil || c.CreatedAt.After(ignored.CreatedAt) {
+					ignored = &t.comments[i]
+				}
+			case out == nil || o.at.After(out.at):
+				oc := o
+				out = &oc
+			}
 		}
 		if w.nowRE != nil && w.nowRE.MatchString(strings.TrimSpace(c.Body)) && c.CreatedAt.After(cmdAt) {
 			cmdAt = c.CreatedAt
@@ -852,6 +906,13 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 	// when the release was sent on its way
 	if !cmdAt.IsZero() {
 		p.Started = cmdAt
+	}
+	if ignored != nil && (out == nil || ignored.CreatedAt.After(out.at)) && !cmdAt.After(ignored.CreatedAt) {
+		who := ignored.Author.Login
+		if who == "" {
+			who = "someone"
+		}
+		p.Ignored = "@" + who + " posted an outcome with no release-job run behind it — not believed"
 	}
 	// a command posted after a finished run asks for another run: the old
 	// one is history, and the listing will find the new one
@@ -999,10 +1060,17 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 		}
 	}
 	if !cmdAt.IsZero() {
-		p.Phase, p.Source, p.Since = PhaseDispatched, "command", cmdAt
 		if t.notTold && cmdAt.Equal(t.nowPostedAt) {
-			p.Detail = "the manifest repo was not told — M merges it by hand"
+			// nothing will pick it up: no spinner, no clock, no timeout;
+			// still followed, so a merge by hand or a re-fire moves it on
+			p.Phase, p.Source, p.Since = PhaseNotTold, "command", cmdAt
+			p.Detail = "the manifest repo was not told — M merges it by hand, or a fires the dispatch again"
+			if pr.State == "MERGED" {
+				p.Detail = "merged by hand — no release job will post an outcome"
+			}
+			return p
 		}
+		p.Phase, p.Source, p.Since = PhaseDispatched, "command", cmdAt
 		return w.timeout(p, now)
 	}
 	return Progress{} // nothing in flight
@@ -1203,6 +1271,11 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 		return "waiting for slot"
 	case PhaseDispatched:
 		return "dispatched " + el
+	case PhaseNotTold:
+		if p.MergeSHA != "" {
+			return "merged by hand"
+		}
+		return markErr() + "not told · M"
 	case PhaseDeploying:
 		if p.DeployTotal > 0 {
 			return fmt.Sprintf("deploying %d/%d · %s", p.DeployDone, p.DeployTotal, el)
@@ -1246,8 +1319,9 @@ func progressStyle(p Progress) string {
 	switch p.Phase {
 	case PhaseReleased:
 		return "chip.released"
-	case PhasePending, PhaseBumped:
-		// you can act: D approves the waiting deploy, a releases NOW
+	case PhasePending, PhaseBumped, PhaseNotTold:
+		// you can act: D approves the waiting deploy, a releases NOW, M
+		// merges what the manifest repo was never told about
 		return "chip.act"
 	case PhaseFailed, PhaseRefused, PhaseUnverifiable:
 		return "chip.fail"
@@ -1268,7 +1342,7 @@ func (w *Workflow) rowLive(app workflow.App, row workflow.Row) bool {
 		return false
 	}
 	p, ok := w.progressOf(pr)
-	return ok && liveProgress(p, app.Now())
+	return ok && p.Moving(app.Now())
 }
 
 var _ workflow.Poller = (*Workflow)(nil)

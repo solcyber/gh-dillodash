@@ -94,7 +94,11 @@ and a PR that is not a release, then offers:
   workflows, so this is how the conductor there learns to merge now. The
   payload only points at the comment; the receiver re-reads it by id. If
   the dispatch fails after the comment landed, the status line says the
-  manifest repo was not told and points at `M`.
+  manifest repo was not told and points at `M`, and the row says **`✗ not
+  told · M`** in bold gold: no spinner and no running clock, because
+  nothing will pick it up. It stays followed, so `a` firing the dispatch
+  again or `M` merging it by hand moves it on (once merged by hand it says
+  `merged by hand` until the app repo's deploy runs are read).
 - A **hotfix** lists NOW first (enter picks it): a hotfix into production
   is an emergency by definition.
 - A release **you already approved for this head** is queued already
@@ -247,7 +251,15 @@ headings, each followed by ` (<how>)`: `## Released`, `## Release NOT
 RUN`, `## Release FAILED: merge refused`, `## Release merged; the deploy
 is WAITING on an environment approval`, `## Release FAILED: the deploy did
 not succeed`, `## Release UNVERIFIABLE`, and `## Release FAILED
-VERIFICATION, NOT reverted`. Any other heading is not an outcome. On a window night the
+VERIFICATION, NOT reverted`. Any other heading is not an outcome. An
+outcome comment is believed only when it is the job's own: posted by a bot
+(a `[bots]` login, or the window's `conductor_bot`) **and** carrying a
+`Run:` line that names an Actions run of the `manifest_repo`
+(`https://<host>/<owner>/<repo>/actions/runs/<id>`). Anyone can type
+`## Released`; a heading from a person, or with no such `Run:` line, is
+shown in the card as not believed and never turns a release green. A
+release that ends by a label alone, with no run seen, draws the outcome
+and says so, not every phase as passed. On a window night the
 manifest item's status says *scheduled*, *waiting for slot* (terraform
 items first, or `/release`), *dispatched*. The app repo's own deploy runs
 on the merge give the `n/m` while deploying. The newest signal wins, so a
