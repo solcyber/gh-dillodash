@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
+	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -46,7 +47,7 @@ func (m *Model) authorStyle(login string) string {
 		return "author.bot"
 	}
 	for _, b := range m.wf.BotLogins() {
-		if strings.HasPrefix(l, b) {
+		if config.IsLogin(l, b) {
 			return "author.bot"
 		}
 	}

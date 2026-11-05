@@ -832,7 +832,7 @@ func (w *Workflow) fromJob(c model.Comment, o outcome) bool {
 	login := c.Author.Login
 	bot := w.bots.IsBot(login)
 	if !bot && w.win != nil && w.win.ConductorBot != "" {
-		bot = strings.HasPrefix(strings.ToLower(login), strings.ToLower(w.win.ConductorBot))
+		bot = config.IsLogin(login, w.win.ConductorBot)
 	}
 	if !bot {
 		return false
