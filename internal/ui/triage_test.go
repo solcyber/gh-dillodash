@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -191,7 +192,7 @@ func TestAllowedReposRefusesWrites(t *testing.T) {
 
 	h.key('q')
 	h.named("enter") // the first row: infra#101, a PR
-	for _, k := range []rune{'a', 'M'} {
+	for _, k := range []rune{'a', 'M', 'D'} {
 		h.key(k)
 		if !strings.Contains(h.m.status, "allowed_repos") {
 			t.Errorf("%c on a PR: status %q", k, h.m.status)
@@ -199,6 +200,16 @@ func TestAllowedReposRefusesWrites(t *testing.T) {
 	}
 	if len(h.gh.Calls) != 0 {
 		t.Errorf("no write on the PR: %+v", h.gh.Calls)
+	}
+
+	// X: a listed dispatch to a repo outside allowed_repos is refused once
+	// it is picked, before its inputs or the confirm
+	h.m.cfg.Dispatches = []config.DispatchConfig{{Name: "freeze", Repo: infra, Workflow: "window.yml", Ref: "main",
+		Inputs: []config.DispatchInput{{Name: "phase", Type: "string"}}}}
+	asked = 0
+	h.key('X')
+	if !strings.Contains(h.m.status, "allowed_repos") || asked != 1 || len(h.gh.Calls) != 0 {
+		t.Errorf("X: status %q, asked %d, calls %+v", h.m.status, asked, h.gh.Calls)
 	}
 
 	h.key('q')

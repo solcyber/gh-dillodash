@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
 // The membership answers of this session, per team and login: a team's
@@ -93,4 +94,17 @@ func tokenHint(app App) string {
 		return "; gh auth switch (or GH_TOKEN=<your token>) to post as yourself"
 	}
 	return fmt.Sprintf("; the token comes from %s — unset it to post as gh's own login, or export your own token in it", s)
+}
+
+// WriteRefused says why a write to repo is refused, before any prompt:
+// the repo is not in [github] allowed_repos. False means go on. The
+// client refuses the write again underneath (ghapi.WithAllowedRepos);
+// this only spares the person a confirm that cannot be sent.
+func WriteRefused(app App, repo model.Repo, what string) bool {
+	cfg := app.Config()
+	if cfg == nil || cfg.GitHub.WriteAllowed(repo) {
+		return false
+	}
+	app.Notice(fmt.Sprintf("%s refused: %s is not in [github] allowed_repos — this dashboard is read-only there", what, repo))
+	return true
 }

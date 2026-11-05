@@ -417,9 +417,41 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseWaitingRuns(wt, cfg)
 	p.parseDispatch(wt, cfg)
 	wt.done()
+	p.checkAllowedRepos(cfg)
 
 	top.done()
 	return cfg
+}
+
+// checkAllowedRepos warns about a workflow that writes to a repo outside
+// [github] allowed_repos: the dashboard would refuse every one of its
+// writes there, which is a config mistake, not a policy.
+func (p *parser) checkAllowedRepos(cfg *Config) {
+	if len(cfg.GitHub.AllowedRepos) == 0 {
+		return
+	}
+	outside := func(where string, repos ...model.Repo) {
+		for _, r := range repos {
+			if !r.IsZero() && !cfg.GitHub.WriteAllowed(r) {
+				p.warnf(where, "%s is outside [github] allowed_repos; every write there will be refused", r)
+			}
+		}
+	}
+	if ta := cfg.TerraformApprove; ta != nil {
+		outside("[workflows.terraform_approve] repos", ta.Repos...)
+	}
+	if mw := cfg.MaintenanceWindow; mw != nil {
+		outside("[workflows.maintenance_window] manifest_repo", mw.ManifestRepo)
+	}
+	if rp := cfg.ReleasePR; rp != nil && !rp.Auto {
+		outside("[workflows.release_pr] repos", rp.Repos...)
+	}
+	if wr := cfg.WaitingRuns; wr != nil {
+		outside("[workflows.waiting_runs] repos", wr.Repos...)
+	}
+	for _, d := range cfg.Dispatches {
+		outside(fmt.Sprintf("[[workflows.dispatch]] %q", d.Name), d.Repo)
+	}
 }
 
 func (p *parser) parseGitHub(top *table, cfg *Config) {

@@ -88,6 +88,9 @@ func (m *Model) doDispatch(app *lockedApp) {
 		return
 	}
 	d := list[i]
+	if m.writeRefused(app, d.Repo, d.Name) {
+		return
+	}
 	typed := d.Kind() == "event" // an event payload keeps booleans and numbers typed
 	values := map[string]any{}
 	for _, in := range d.Inputs {

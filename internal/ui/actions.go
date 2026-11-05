@@ -361,6 +361,9 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	}
 	repo := m.repoOf(pr)
 	where := m.where(repo, pr.Number)
+	if m.writeRefused(app, repo, "approving the deployments of "+where) {
+		return
+	}
 	if app.CurrentView() == ViewDetail && (pr.State != "MERGED" || mergeSHA(pr) == "") {
 		// a detail left open across a merge (a release NOW merged it
 		// meanwhile) still holds the PR as it was: read it again before

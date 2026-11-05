@@ -23,7 +23,9 @@ dashboard that can be held to the repos and the team it is for.
   other repo is refused before a prompt, and again in the GitHub client
   underneath, so no key goes around it, including an item opened with `:`.
   Reading is unaffected. A test fails when a new write is added to the
-  client without the guard.
+  client without the guard. A workflow configured to write to a repo
+  outside the list (`terraform_approve`, `waiting_runs`, a
+  `[[workflows.dispatch]]`, ...) is a warning at load and in `config check`.
 - **`[github] approvers_team_strict = true`** refuses a command a bot
   accepts only from an approver when the team cannot be read (a token
   without the organization's Members read, or a failed check), instead of

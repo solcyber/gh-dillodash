@@ -8,6 +8,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
+	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 // Issue triage from the detail view: labels (L), assignees (s), close
@@ -18,11 +19,7 @@ import (
 // writeRefused says why a write to repo is refused, before any prompt:
 // the repo is not in [github] allowed_repos. False means go on.
 func (m *Model) writeRefused(app *lockedApp, repo model.Repo, what string) bool {
-	if m.cfg == nil || m.cfg.GitHub.WriteAllowed(repo) {
-		return false
-	}
-	app.Notice(fmt.Sprintf("%s refused: %s is not in [github] allowed_repos — this dashboard is read-only there", what, repo))
-	return true
+	return workflow.WriteRefused(app, repo, what)
 }
 
 // hasHandoff gates the H chip: [agent] handoff_label is set.

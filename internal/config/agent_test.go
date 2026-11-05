@@ -66,3 +66,42 @@ profile = "OPS"
 		}
 	}
 }
+
+// TestAllowedReposWarnsOnWorkflowsOutside: a workflow that writes to a repo
+// outside allowed_repos is a config mistake (every write there would be
+// refused), so it warns; a workflow inside the list does not.
+func TestAllowedReposWarnsOnWorkflowsOutside(t *testing.T) {
+	c := mustParse(t, `
+[github]
+allowed_repos = ["acme/ops"]
+
+[reviews]
+repos = ["acme/ops"]
+
+[workflows.terraform_approve]
+enabled = true
+repos = ["acme/ops"]
+
+[workflows.waiting_runs]
+enabled = true
+repos = ["acme/ops", "acme/infra"]
+
+[[workflows.dispatch]]
+name = "rotate"
+repo = "acme/web-portal"
+workflow = "rotate.yml"
+ref = "main"
+`)
+	joined := strings.Join(c.Warnings, "\n")
+	for _, want := range []string{
+		"[workflows.waiting_runs] repos: acme/infra is outside [github] allowed_repos",
+		`[[workflows.dispatch]] "rotate": acme/web-portal is outside [github] allowed_repos`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "terraform_approve") || strings.Contains(joined, "acme/ops is outside") {
+		t.Errorf("a workflow inside allowed_repos warned:\n%s", joined)
+	}
+}
