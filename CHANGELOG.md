@@ -38,6 +38,24 @@ dashboard that can be held to the repos and the team it is for.
   `**n/a**`) from a repo with no maintenance window: never disruptive, a
   plain `/approve`, the same as a digest with no Window line.
 
+### Fixed
+
+- **Waiting runs on the branch tip are listed.** A `workflow_dispatch`,
+  `repository_dispatch` or `schedule` run from the production branch has
+  the tip as its head, usually the last merged PR's merge commit, and the
+  waiting approvals section left it out as if it were that PR's deploy,
+  so a hand-dispatched gated run showed nowhere (#48). Only a `push` run
+  on the merge commit of a PR listed in the same repo is left out now.
+- **`digest_bot` and `conductor_bot` match exactly.** They matched by
+  prefix, so a configured `deploy` also trusted a login `deploy-er`: its
+  queue markers, refusals and release outcomes. They now match the login
+  or its `[bot]` App form, case-insensitive, like `[bots] logins`.
+- **The gallery is reproducible.** The day shots ran on the wall clock
+  (the header clock, every age, which night is next) and the spinner on
+  the process's age, so every regeneration rewrote every picture. They are
+  drawn at a fixed instant now, and a snapshot's spinner turns with its
+  clock; a test renders a shot twice and compares.
+
 ## [1.9.0]
 
 A room to watch the release window from, a far louder launch, and a

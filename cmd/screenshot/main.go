@@ -122,14 +122,13 @@ func render(s shot, scripts [][]string) ([]*canvas.Canvas, error) {
 	return ui.SnapshotsWith(context.Background(), o, s.Opts, cols, rows, scripts)
 }
 
-// wallNow is the real clock, put back after a night shot.
-var wallNow = clock.Now
-
 // options are the dashboard's options for a shot: a fresh fixture (the
 // demo's, or the release night's) and its workflows.
 func options(s shot, version string) (ui.Options, error) {
+	// the day is drawn at its own instant too: the header clock, every
+	// "3h ago" and which night is tonight all read the clock
+	clock.Now = func() time.Time { return demo.DayEpoch }
 	cfg := demo.Config()
-	clock.Now = wallNow
 	var gh ghapi.Client = demo.Client()
 	if s.Night {
 		// the night is drawn at its own instant, not the wall clock's: a
