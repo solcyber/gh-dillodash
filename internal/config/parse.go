@@ -403,6 +403,7 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseBots(top, cfg)
 	p.parseUpdate(top, cfg)
 	p.parseMerge(top, cfg)
+	p.parseAgent(top, cfg)
 
 	// [repos."owner/name"] is reserved for per-repo settings
 	if _, ok := top.get("repos"); ok {
@@ -438,6 +439,28 @@ func (p *parser) parseGitHub(top *table, cfg *Config) {
 		} else {
 			cfg.GitHub.ApproversTeam = strings.TrimPrefix(team, "@")
 		}
+	}
+	cfg.GitHub.ApproversTeamStrict = t.boolean("approvers_team_strict", false)
+	if cfg.GitHub.ApproversTeamStrict && cfg.GitHub.ApproversTeam == "" {
+		t.warnf("approvers_team_strict", "has no effect without approvers_team")
+	}
+	if repos, ok := t.repos("allowed_repos"); ok {
+		if len(repos) == 0 && !hasErrorAt(p.errs, t.where("allowed_repos")) {
+			t.errf("allowed_repos", "must list at least one \"owner/name\" (leave it out to allow every repo)")
+		}
+		cfg.GitHub.AllowedRepos = repos
+	}
+	t.done()
+}
+
+// parseAgent reads [agent]: the label (and optional comment) H hands an
+// item to the agent with.
+func (p *parser) parseAgent(top *table, cfg *Config) {
+	t, _ := top.sub("agent")
+	cfg.Agent.HandoffLabel = strings.TrimSpace(t.str("handoff_label", ""))
+	cfg.Agent.HandoffComment = strings.TrimSpace(t.str("handoff_comment", ""))
+	if cfg.Agent.HandoffComment != "" && cfg.Agent.HandoffLabel == "" {
+		t.warnf("handoff_comment", "has no effect without handoff_label")
 	}
 	t.done()
 }
@@ -478,6 +501,11 @@ func (p *parser) parseDisplay(top *table, cfg *Config, ov Overrides) {
 	d.ClockTimezone = t.tz("clock_timezone", d.ClockTimezone)
 	d.ClockTZLabel = strings.TrimSpace(t.str("clock_tz_label", d.ClockTZLabel))
 	d.Room = t.boolean("room", d.Room)
+	d.Profile = strings.TrimSpace(t.str("profile", d.Profile))
+	if n := len([]rune(d.Profile)); n > 12 {
+		t.errf("profile", "%q is %d characters; a header badge holds at most 12", d.Profile, n)
+		d.Profile = ""
+	}
 	t.done()
 
 	if ov.RefreshSecs != nil {

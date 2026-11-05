@@ -199,6 +199,56 @@ func (c *GitHub) PostComment(ctx context.Context, repo model.Repo, number int, b
 	return res.ID, err
 }
 
+// RepoLabels is every label defined in the repo, in GitHub's order (up
+// to ten pages of 100).
+func (c *GitHub) RepoLabels(ctx context.Context, repo model.Repo) ([]model.Label, error) {
+	var out []model.Label
+	for page := 1; page <= 10; page++ {
+		var batch []model.Label
+		if err := c.restJSON(ctx, http.MethodGet, repoPath(repo, fmt.Sprintf("labels?per_page=100&page=%d", page)), nil, &batch); err != nil {
+			return nil, err
+		}
+		out = append(out, batch...)
+		if len(batch) < 100 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// AddLabels adds labels to an issue or a PR.
+func (c *GitHub) AddLabels(ctx context.Context, repo model.Repo, number int, labels []string) error {
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("issues/%d/labels", number)),
+		map[string]any{"labels": labels}, nil)
+}
+
+// RemoveLabel removes one label from an issue or a PR.
+func (c *GitHub) RemoveLabel(ctx context.Context, repo model.Repo, number int, label string) error {
+	return c.restJSON(ctx, http.MethodDelete, repoPath(repo, fmt.Sprintf("issues/%d/labels/%s", number, url.PathEscape(label))), nil, nil)
+}
+
+// AddAssignees assigns logins to an issue or a PR.
+func (c *GitHub) AddAssignees(ctx context.Context, repo model.Repo, number int, logins []string) error {
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("issues/%d/assignees", number)),
+		map[string]any{"assignees": logins}, nil)
+}
+
+// RemoveAssignees unassigns logins from an issue or a PR.
+func (c *GitHub) RemoveAssignees(ctx context.Context, repo model.Repo, number int, logins []string) error {
+	return c.restJSON(ctx, http.MethodDelete, repoPath(repo, fmt.Sprintf("issues/%d/assignees", number)),
+		map[string]any{"assignees": logins}, nil)
+}
+
+// SetIssueState closes or reopens an issue: state "closed" with reason
+// "completed" or "not_planned", or "open" (reason "reopened").
+func (c *GitHub) SetIssueState(ctx context.Context, repo model.Repo, number int, state, reason string) error {
+	body := map[string]any{"state": state}
+	if reason != "" {
+		body["state_reason"] = reason
+	}
+	return c.restJSON(ctx, http.MethodPatch, repoPath(repo, fmt.Sprintf("issues/%d", number)), body, nil)
+}
+
 // Dispatch fires a repository_dispatch event (the receiving repo's
 // workflows subscribe to eventType). GitHub answers 204.
 func (c *GitHub) Dispatch(ctx context.Context, repo model.Repo, eventType string, payload map[string]any) error {

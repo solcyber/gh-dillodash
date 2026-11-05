@@ -18,7 +18,7 @@ import (
 
 // Call is one recorded mutation.
 type Call struct {
-	Op      string // approve, request_changes, dismiss_review, comment, merge, approve_deployments, reject_deployments, dispatch, dispatch_workflow, rerun, rerun_failed, cancel_run
+	Op      string // approve, request_changes, dismiss_review, comment, merge, approve_deployments, reject_deployments, dispatch, dispatch_workflow, rerun, rerun_failed, cancel_run, add_labels, remove_label, add_assignees, remove_assignees, set_state
 	Repo    model.Repo
 	Number  int
 	Body    string         // review/comment body, or the deployment comment
@@ -32,6 +32,9 @@ type Call struct {
 	ID      int64          // comment: the id handed back (1, 2, ... per fake); dismiss_review: the review id
 	File    string         // dispatch_workflow: the workflow file
 	Ref     string         // dispatch_workflow: the ref
+	Names   []string       // add_labels, remove_label: the labels; add/remove_assignees: the logins
+	State   string         // set_state: "open" or "closed"
+	Reason  string         // set_state: completed, not_planned or ""
 }
 
 // Client is the fake. Fill the maps, then hand it to the UI; every
@@ -100,6 +103,8 @@ type Client struct {
 	// Teams is each "org/team"'s members for TeamMember; a team that is
 	// not in the map is unreadable.
 	Teams map[string][]string
+	// LabelDefs are RepoLabels' answers.
+	LabelDefs map[model.Repo][]model.Label
 
 	// Fail makes the named op return the error: whoami, team_member, list, pr_detail,
 	// issue_detail, users, comments, labelled, approve, request_changes,
@@ -107,7 +112,8 @@ type Client struct {
 	// waiting_runs, repo_waiting_runs, pending, approve_deployments,
 	// reject_deployments, rerun, rerun_failed, cancel_run, job_logs,
 	// workflow_runs, file_runs, jobs, files, diff, compare, tags,
-	// org_repos, rulesets, fortress, releases.
+	// org_repos, rulesets, fortress, releases, repo_labels, add_labels,
+	// remove_label, add_assignees, remove_assignees, set_state.
 	Fail map[string]error
 
 	// JobLog is JobLogs' answer per job id.
@@ -394,6 +400,61 @@ func (f *Client) PostComment(ctx context.Context, repo model.Repo, number int, b
 	f.mu.Unlock()
 	f.after(c)
 	return id, nil
+}
+
+// RepoLabels serves LabelDefs.
+func (f *Client) RepoLabels(ctx context.Context, repo model.Repo) ([]model.Label, error) {
+	if err := f.fail("repo_labels"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]model.Label(nil), f.LabelDefs[repo]...), nil
+}
+
+// AddLabels records the labels added.
+func (f *Client) AddLabels(ctx context.Context, repo model.Repo, number int, labels []string) error {
+	if err := f.fail("add_labels"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "add_labels", Repo: repo, Number: number, Names: append([]string(nil), labels...)})
+	return nil
+}
+
+// RemoveLabel records the label removed.
+func (f *Client) RemoveLabel(ctx context.Context, repo model.Repo, number int, label string) error {
+	if err := f.fail("remove_label"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "remove_label", Repo: repo, Number: number, Names: []string{label}})
+	return nil
+}
+
+// AddAssignees records the logins assigned.
+func (f *Client) AddAssignees(ctx context.Context, repo model.Repo, number int, logins []string) error {
+	if err := f.fail("add_assignees"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "add_assignees", Repo: repo, Number: number, Names: append([]string(nil), logins...)})
+	return nil
+}
+
+// RemoveAssignees records the logins unassigned.
+func (f *Client) RemoveAssignees(ctx context.Context, repo model.Repo, number int, logins []string) error {
+	if err := f.fail("remove_assignees"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "remove_assignees", Repo: repo, Number: number, Names: append([]string(nil), logins...)})
+	return nil
+}
+
+// SetIssueState records the close or reopen.
+func (f *Client) SetIssueState(ctx context.Context, repo model.Repo, number int, state, reason string) error {
+	if err := f.fail("set_state"); err != nil {
+		return err
+	}
+	f.record(Call{Op: "set_state", Repo: repo, Number: number, State: state, Reason: reason})
+	return nil
 }
 
 // Dispatch records the repository_dispatch event.

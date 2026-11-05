@@ -161,6 +161,19 @@ type Client interface {
 	// with the inputs (actions write). GitHub answers 204 and no run id.
 	DispatchWorkflow(ctx context.Context, repo model.Repo, file, ref string, inputs map[string]any) error
 
+	// Triage writes on an issue or a PR (issues write; a PR's labels and
+	// assignees are its issue's). RepoLabels is every label defined in
+	// the repo (up to ten pages of 100). AddLabels and AddAssignees add
+	// to what is there; RemoveLabel and RemoveAssignees take away.
+	// SetIssueState closes ("closed" with reason "completed" or
+	// "not_planned") or reopens ("open") an issue.
+	RepoLabels(ctx context.Context, repo model.Repo) ([]model.Label, error)
+	AddLabels(ctx context.Context, repo model.Repo, number int, labels []string) error
+	RemoveLabel(ctx context.Context, repo model.Repo, number int, label string) error
+	AddAssignees(ctx context.Context, repo model.Repo, number int, logins []string) error
+	RemoveAssignees(ctx context.Context, repo model.Repo, number int, logins []string) error
+	SetIssueState(ctx context.Context, repo model.Repo, number int, state, reason string) error
+
 	// WaitingRuns is the workflow runs on headSHA waiting on an environment.
 	WaitingRuns(ctx context.Context, repo model.Repo, headSHA string) ([]model.WorkflowRun, error)
 	// RepoWaitingRuns is every run in repo waiting on an environment, on

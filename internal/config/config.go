@@ -31,6 +31,7 @@ type Config struct {
 	Bots     BotsConfig
 	Update   UpdateConfig
 	Merge    MergeConfig // [merge]
+	Agent    AgentConfig // [agent]
 	Warnings []string
 
 	TerraformApprove  *TerraformApproveConfig
@@ -50,6 +51,40 @@ type GitHubConfig struct {
 	// validates by its author, dillodash checks the login is a member
 	// ("" = no check beyond the bot rule)
 	ApproversTeam string
+	// ApproversTeamStrict refuses the command when the team's membership
+	// cannot be read (a token without the organization's Members read,
+	// or an error), instead of warning and posting unchecked.
+	ApproversTeamStrict bool
+	// AllowedRepos, when set, are the only repos dillodash writes to:
+	// every comment, review, merge, command, label, assignment, state
+	// change, dispatch and run action on any other repo is refused, even
+	// one opened with ':'. Empty = no restriction.
+	AllowedRepos []model.Repo
+}
+
+// WriteAllowed reports whether dillodash may write to repo: always when
+// allowed_repos is unset, else only to a listed repo (case-insensitive).
+func (g GitHubConfig) WriteAllowed(repo model.Repo) bool {
+	if len(g.AllowedRepos) == 0 {
+		return true
+	}
+	for _, r := range g.AllowedRepos {
+		if strings.EqualFold(r.String(), repo.String()) {
+			return true
+		}
+	}
+	return false
+}
+
+// AgentConfig is [agent]: the agent issues are handed to. An agent that
+// cannot be @-mentioned (a GitHub App's bot) watches a label instead.
+type AgentConfig struct {
+	// HandoffLabel is the label H adds to hand the open item to the
+	// agent ("" = H is off).
+	HandoffLabel string
+	// HandoffComment, when set, is posted with the label (the agent's
+	// first instruction, a note for the humans watching).
+	HandoffComment string
 }
 
 // ReviewsConfig is [reviews].
@@ -77,6 +112,9 @@ type DisplayConfig struct {
 	// Room draws the dashboard as seen through a window from a room
 	// while the release window is open (W steps out of it and back).
 	Room bool
+	// Profile is a short badge drawn in the header ("" = none): which
+	// config this dashboard runs, when one person runs more than one.
+	Profile string
 }
 
 // ClockLocal is the header clock's second zone with its label (both

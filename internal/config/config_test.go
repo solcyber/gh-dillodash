@@ -168,7 +168,7 @@ approval_comment = "ok {workflow} #{run} ({repo})"
 	if len(c.Warnings) != 0 {
 		t.Fatalf("warnings: %v", c.Warnings)
 	}
-	if c.GitHub != (GitHubConfig{Host: "github.example.com", Login: "alice"}) {
+	if !reflect.DeepEqual(c.GitHub, GitHubConfig{Host: "github.example.com", Login: "alice"}) {
 		t.Errorf("github = %+v", c.GitHub)
 	}
 	if want := []model.Repo{repo("acme/infra"), repo("acme/app")}; !reflect.DeepEqual(c.Reviews.Repos, want) {
