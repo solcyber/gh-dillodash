@@ -403,11 +403,13 @@ type roomKey struct {
 }
 
 type still struct {
-	key   roomKey
-	px    *pix
-	cells *canvas.Canvas
-	boxes []box
-	mug   cellRect // the mug's cells; the steam rises from it
+	key     roomKey
+	px      *pix
+	cells   *canvas.Canvas
+	boxes   []box
+	mug     cellRect  // the mug's cells; the steam rises from it
+	page    quotePage // the framed quote, when hasPage
+	hasPage bool
 }
 
 var (
@@ -587,14 +589,44 @@ func buildRoom(h, w int, l RoomLayout, in RoomInfo) *still {
 	if !fits(clockR) {
 		clockR.y = g.rodY + 2 // below the rod's end
 	}
-	if fits(clockR) {
+	clockOn := fits(clockR)
+	if clockOn {
 		cr := clockR
 		s.boxes = append(s.boxes, box{r: cr, draw: func(q *pix, t float64, in RoomInfo) { wallClock(q, cr, in) }})
 		placed = append(placed, cr)
 	}
-	// a landscape under it
+	// the framed page: under the clock if the wall there is tall enough,
+	// else under the window below the plaque, else over the plant
+	var hangRect cellRect
+	if hang.h >= 9 && hang.x >= 1 {
+		hangRect = cellRect{y: hang.y, x: hang.x - 1, h: hang.h, w: hang.w + 2}
+	}
+	underClock := 3
+	if clockOn {
+		underClock = clockR.y + clockR.h + 2
+	}
+	page, hasPage := quoteFit([]quoteZone{
+		{x0: rightZone.x + 1, x1: w - 2, y0: underClock, y1: g.floorY - 1, minW: 22, maxW: 40, wire: true},
+		{x0: g.leftOut, x1: g.rightIn + 1, y0: g.sillY + 4, y1: g.floorY - 1, minW: 30, maxW: 72, mid: true},
+		{x0: 2, x1: g.leftOut - 1, y0: 3, y1: g.floorY - 1, minW: 22, maxW: 40, wire: true},
+	}, 3, false, func(z quoteZone, r cellRect) bool {
+		room := cellRect{y: r.y, x: r.x, h: r.h, w: r.w + 1} // and its shadow
+		if z.wire {
+			room.y, room.h = r.y-2, r.h+2
+		}
+		return fits(room) && !quoteOverlaps(room, hangRect)
+	})
+	if hasPage {
+		quoteHang(p, page)
+		placed = append(placed, cellRect{y: page.r.y - 2, x: page.r.x, h: page.r.h + 2, w: page.r.w + 1})
+	}
+
+	// a landscape under the clock, or under the page
 	lw := min(24, rightZone.w-3)
 	land := cellRect{y: clockR.y + clockR.h + 2, x: rightZone.x + (rightZone.w-lw)/2, h: 8, w: lw}
+	if hasPage && !fits(land) && page.r.x >= rightZone.x {
+		land.y = page.r.y + page.r.h + 3
+	}
 	if lw >= 12 && fits(land) {
 		landscape(p, land)
 		picWire(p, land)
@@ -651,6 +683,10 @@ func buildRoom(h, w int, l RoomLayout, in RoomInfo) *still {
 		for i, ch := range " amos " {
 			s.cells.PutRaw(ny, nx+i, string(ch), sgrFg(ink, brass))
 		}
+	}
+	if hasPage {
+		quoteInk(s.cells, page)
+		s.page, s.hasPage = page, true
 	}
 	plaque(s.cells, p, g, in.Sign)
 	return s
@@ -1281,5 +1317,8 @@ func lineRoom(c *canvas.Canvas, l RoomLayout, in RoomInfo) {
 	if in.Sign != "" {
 		label := "[ " + in.Sign + " ]"
 		c.PutStr(g.sillY+2, l.X+(l.W-text.Width(label))/2, label, "hdr.app")
+	}
+	if page, ok := quoteLinePage(g, len(plant), ascii); ok {
+		quoteLine(c, page, ascii)
 	}
 }
