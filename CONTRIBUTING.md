@@ -74,8 +74,9 @@ public for good.
 
 `go run . --demo` opens the dashboard on the fixture without touching
 GitHub. All four workflows are on: a release is in flight (the rail and
-the mission-control card), a PR is queued for tonight's window, and two
-Actions runs wait on an environment, one of them on you. `go run ./cmd/screenshot` renders the same fixture
+the mission-control card), a PR is queued for tonight's window, and three
+Actions runs wait on an environment, two of them (one workflow, told
+apart by run number and trigger) on you. `go run ./cmd/screenshot` renders the same fixture
 offline with the embedded font and the theme's colors: `docs/screenshot.png`
 (the README's picture) and the gallery in `docs/shots/`, one PNG per shot
 in `cmd/screenshot/shots.go`; `-only name,…` renders a few. Regenerate

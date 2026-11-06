@@ -94,6 +94,31 @@ func (it *Item) where() string {
 	return fmt.Sprintf("%s %s run %d", it.Repo.Name, text.Ellip(it.Name(), 40), it.Run.ID)
 }
 
+// Num is the run's number as the Actions page shows it ("#412"), else
+// "run" when GitHub gave none.
+func (it *Item) Num() string {
+	if it.Run.RunNumber > 0 {
+		return fmt.Sprintf("#%d", it.Run.RunNumber)
+	}
+	return "run"
+}
+
+// Trigger is what the run ran on: "stage @3f888d2 (#230)" — the branch,
+// the short head SHA, and the PR when GitHub lists one.
+func (it *Item) Trigger() string {
+	var parts []string
+	if it.Run.HeadBranch != "" {
+		parts = append(parts, it.Run.HeadBranch)
+	}
+	if sha := it.Run.HeadSHA; sha != "" {
+		parts = append(parts, "@"+sha[:min(7, len(sha))])
+	}
+	if len(it.Run.PullRequests) > 0 && it.Run.PullRequests[0].Number > 0 {
+		parts = append(parts, fmt.Sprintf("(#%d)", it.Run.PullRequests[0].Number))
+	}
+	return strings.Join(parts, " ")
+}
+
 // State is one refresh's waiting runs, oldest first, and the warnings
 // the refresh met.
 type State struct {
@@ -388,8 +413,8 @@ func (w *Workflow) SearchText(row workflow.Row) string {
 }
 
 func searchParts(it *Item) []string {
-	return append([]string{"waiting run", it.Repo.String(), it.Name(), it.Run.DisplayTitle, it.Run.HeadBranch,
-		it.Run.Actor.Login, fmt.Sprint(it.Run.ID)}, it.Envs()...)
+	return append([]string{"waiting run", it.Repo.String(), it.Name(), it.Run.DisplayTitle, it.Trigger(),
+		it.Run.Actor.Login, fmt.Sprint(it.Run.ID), it.Num()}, it.Envs()...)
 }
 
 func matches(parts, terms []string) bool {
@@ -430,22 +455,21 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				if !ok {
 					return ""
 				}
-				if it.Run.HTMLURL != "" {
-					return it.Run.HTMLURL
-				}
-				host := ""
-				if cfg := app.Config(); cfg != nil {
-					host = cfg.GitHub.Host
-				}
-				return ghapi.RunURL(host, it.Repo, it.Run.ID)
+				return runURL(app, it)
 			},
 			Open: func(app workflow.App, row workflow.Row) bool {
 				it, ok := row.Item.(*Item)
 				if !ok {
 					return false
 				}
-				app.Notice(it.where() + " is an Actions run, not a PR — o opens it on GitHub; D approves it")
+				app.Notice(it.where() + " is an Actions run, not a PR — " + runURL(app, it) + " — o opens it; D approves it")
 				return true
+			},
+			NumText: func(row workflow.Row) string {
+				if it, ok := row.Item.(*Item); ok {
+					return it.Num()
+				}
+				return "run"
 			},
 			Title: func(row workflow.Row) string {
 				if it, ok := row.Item.(*Item); ok {
@@ -455,6 +479,18 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 			},
 		},
 	}
+}
+
+// runURL is the run's page: GitHub's html_url, else built from its id.
+func runURL(app workflow.App, it *Item) string {
+	if it.Run.HTMLURL != "" {
+		return it.Run.HTMLURL
+	}
+	host := ""
+	if cfg := app.Config(); cfg != nil {
+		host = cfg.GitHub.Host
+	}
+	return ghapi.RunURL(host, it.Repo, it.Run.ID)
 }
 
 // multi reports whether the rows name their repo.
@@ -471,10 +507,11 @@ func maxw(items []workflow.Row, f func(*Item) string, limit int) int {
 }
 
 func branchText(it *Item) string {
-	if it.Run.HeadBranch == "" {
+	t := it.Trigger()
+	if t == "" {
 		return ""
 	}
-	return glyphs.Ico("branch") + it.Run.HeadBranch
+	return glyphs.Ico("branch") + t
 }
 
 // chipSegs is a run's environment chips: "approve: <env>" (gold) for one
@@ -510,7 +547,7 @@ func (w *Workflow) layout(app workflow.App, items []workflow.Row, width, numW, r
 	cols := workflow.Layout{
 		"chips":    min(48, chipsW),
 		"workflow": maxw(items, (*Item).Name, 24),
-		"branch":   maxw(items, branchText, 20),
+		"branch":   maxw(items, branchText, 32),
 		"actor":    maxw(items, func(it *Item) string { return text.OrQ(it.Run.Actor.Login) }, 14),
 		"age":      3,
 	}
@@ -559,7 +596,7 @@ func (w *Workflow) segs(app workflow.App, row workflow.Row, L workflow.Layout, w
 	// the icon cell stays when the glyph set has no shield (ascii), so
 	// the row lines up with the PR rows' columns
 	segs := []text.Seg{text.S(text.Pad(glyphs.G("shield"), 1)+" ", "icon.queued")}
-	segs = append(segs, text.S(text.Pad("run", L["num"])+" ", "num.issue"))
+	segs = append(segs, text.S(text.Pad(text.Ellip(it.Num(), L["num"]), L["num"])+" ", "num.issue"))
 	if rw, ok := L["repo"]; ok {
 		segs = append(segs, text.S(text.Pad(text.Ellip(it.Repo.Name, rw), rw)+" ", "stack"))
 	}

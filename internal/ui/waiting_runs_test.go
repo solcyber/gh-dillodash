@@ -25,7 +25,7 @@ func TestDOnAWaitingRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.m.wf = set
-	run := model.WorkflowRun{ID: 4242, Name: "deploy", Status: "waiting", HeadSHA: strings.Repeat("d", 40), HeadBranch: "main",
+	run := model.WorkflowRun{ID: 4242, RunNumber: 17, Name: "deploy", Status: "waiting", HeadSHA: strings.Repeat("d", 40), HeadBranch: "main",
 		Event: "workflow_dispatch", DisplayTitle: "deploy web-portal to prod", Actor: model.Actor{Login: "bob"},
 		HTMLURL: "https://github.com/acme/infra/actions/runs/4242", CreatedAt: t0.Add(-time.Hour)}
 	var prod model.PendingDeployment
@@ -34,7 +34,7 @@ func TestDOnAWaitingRun(t *testing.T) {
 	h.gh.Pending = map[int64][]model.PendingDeployment{4242: {prod}}
 	h.load()
 	s := h.screen()
-	for _, want := range []string{"waiting approvals  1", "  run  [approve: prod] deploy main bob ", "deploy web-portal to prod", " D  deploys ", "1 run waiting, 1 on you (D)"} {
+	for _, want := range []string{"waiting approvals  1", "  #17  [approve: prod] deploy main @ddddddd bob ", "deploy web-portal to prod", " D  deploys ", "1 run waiting, 1 on you (D)"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("screen lacks %q:\n%s", want, s)
 		}

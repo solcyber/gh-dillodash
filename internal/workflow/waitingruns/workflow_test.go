@@ -412,6 +412,7 @@ func TestRowURLOpenAndFilter(t *testing.T) {
 	w, app := newWF(t)
 	r := run(4242, "deploy", "s1", time.Minute)
 	r.Actor.Login = "carol"
+	r.RunNumber = 318
 	app.Fake.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {r}, etl: {run(5151, "backfill", "s2", time.Hour)}}
 	app.Fake.Pending = map[int64][]model.PendingDeployment{4242: {pending("prod", 55, true)}, 5151: {pending("staging", 77, false)}}
 	if _, err := refresh(t, w, app); err != nil {
@@ -427,7 +428,7 @@ func TestRowURLOpenAndFilter(t *testing.T) {
 	if u := rk.URL(app, rows[2]); u != "https://github.com/acme/infra/actions/runs/4242" {
 		t.Errorf("built URL = %q", u)
 	}
-	if !rk.Open(app, rows[2]) || app.Last() != "notice: infra deploy run 4242 is an Actions run, not a PR — o opens it on GitHub; D approves it" {
+	if !rk.Open(app, rows[2]) || app.Last() != "notice: infra deploy run 4242 is an Actions run, not a PR — https://github.com/acme/infra/actions/runs/4242 — o opens it; D approves it" {
 		t.Errorf("open: %q", app.Last())
 	}
 	if rk.Title(rows[2]) != "deploy from main" {
@@ -435,7 +436,7 @@ func TestRowURLOpenAndFilter(t *testing.T) {
 	}
 	for terms, want := range map[string][]int64{
 		"carol": {4242}, "staging": {5151}, "etl": {5151}, "deploy prod": {4242}, "backfill from": {5151},
-		"waiting": {5151, 4242}, "nothing": nil,
+		"waiting": {5151, 4242}, "nothing": nil, "#318": {4242}, "4242": {4242},
 	} {
 		if got := ids(w.Sections(app, strings.Fields(terms), "alice")); !reflect.DeepEqual(got, want) {
 			t.Errorf("filter %q: %v, want %v", terms, got, want)
@@ -696,5 +697,48 @@ func TestAnnounceNewRunOnYou(t *testing.T) {
 	w.ApplyPoll(app, patch)
 	if app.Last() != before {
 		t.Errorf("said twice: %q", app.Last())
+	}
+}
+
+// TestRunIdentity: two waiting runs of one workflow differ on the row
+// alone: the run number (as the Actions page shows it) in the number
+// column, and the branch, short SHA and PR they ran on.
+func TestRunIdentity(t *testing.T) {
+	w, app := newWF(t)
+	a := run(4242, "deploy", "3f888d2c0ffee", time.Hour)
+	a.RunNumber = 412
+	b := run(4243, "deploy", "9b1e4a7d00d1e", time.Minute)
+	b.RunNumber, b.HeadBranch, b.Event = 413, "stage", "push"
+	b.PullRequests = []model.RunPR{{Number: 230}}
+	app.Fake.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {b, a}}
+	app.Fake.Pending = map[int64][]model.PendingDeployment{4242: {pending("prod", 55, true)}, 4243: {pending("stg", 56, true)}}
+	if _, err := refresh(t, w, app); err != nil {
+		t.Fatal(err)
+	}
+	rows := w.Sections(app, nil, "alice")
+	rk := w.RowKinds()[RowRun]
+	lines := render(app, w, rows, 160)
+	first, second := text.SegsText(lines[0]), text.SegsText(lines[1])
+	for _, c := range []struct {
+		line string
+		want []string
+	}{
+		{first, []string{"#412", "main @3f888d2"}},
+		{second, []string{"#413", "stage @9b1e4a7 (#230)"}},
+	} {
+		for _, want := range c.want {
+			if !strings.Contains(c.line, want) {
+				t.Errorf("row lacks %q: %q", want, c.line)
+			}
+		}
+	}
+	if rk.NumText(rows[1]) != "#412" || rk.NumText(rows[2]) != "#413" {
+		t.Errorf("number column: %q %q", rk.NumText(rows[1]), rk.NumText(rows[2]))
+	}
+	// no run number from GitHub: the column says what the row is
+	it := rows[1].Item.(*Item)
+	it.Run.RunNumber, it.Run.HeadSHA, it.Run.PullRequests = 0, "", nil
+	if it.Num() != "run" || it.Trigger() != "main" {
+		t.Errorf("bare run: %q %q", it.Num(), it.Trigger())
 	}
 }
