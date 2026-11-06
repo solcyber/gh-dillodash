@@ -165,15 +165,22 @@ func pending(env string, mine bool, reviewers ...string) model.PendingDeployment
 // that waits on the database team.
 func waitingRuns(gh *fake.Client) {
 	infra, portal := Repos[0], Repos[1]
-	deploy := model.WorkflowRun{ID: 7101, Name: "deploy", Path: ".github/workflows/deploy.yml", Status: "waiting", Event: "workflow_dispatch",
-		DisplayTitle: "deploy tier=prod · v2026.10.28", HeadBranch: "main", Actor: actor("bob"), RunAttempt: 1,
+	deploy := model.WorkflowRun{ID: 7101, RunNumber: 412, Name: "deploy", Path: ".github/workflows/deploy.yml", Status: "waiting", Event: "workflow_dispatch",
+		DisplayTitle: "deploy tier=prod · v2026.10.28", HeadBranch: "main", HeadSHA: "3f888d2c0ffee", Actor: actor("bob"), RunAttempt: 1,
 		HTMLURL: "https://github.com/acme/infra/actions/runs/7101", CreatedAt: at(25 * time.Minute), UpdatedAt: at(24 * time.Minute)}
-	vacuum := model.WorkflowRun{ID: 7102, Name: "db-maintenance", Path: ".github/workflows/db-maintenance.yml", Status: "waiting", Event: "workflow_dispatch",
-		DisplayTitle: "vacuum the sessions table", HeadBranch: "main", Actor: actor("carol"), RunAttempt: 1,
+	// a second run of the same workflow, from a merge to stage: the run
+	// number and the trigger tell the two rows apart
+	deploy2 := model.WorkflowRun{ID: 7103, RunNumber: 413, Name: "deploy", Path: ".github/workflows/deploy.yml", Status: "waiting", Event: "push",
+		DisplayTitle: "deploy tier=stg · v2026.10.29", HeadBranch: "stage", HeadSHA: "9b1e4a7d00d1e", Actor: actor("alice"), RunAttempt: 1,
+		PullRequests: []model.RunPR{{Number: 230}},
+		HTMLURL:      "https://github.com/acme/infra/actions/runs/7103", CreatedAt: at(4 * time.Minute), UpdatedAt: at(4 * time.Minute)}
+	vacuum := model.WorkflowRun{ID: 7102, RunNumber: 57, Name: "db-maintenance", Path: ".github/workflows/db-maintenance.yml", Status: "waiting", Event: "workflow_dispatch",
+		DisplayTitle: "vacuum the sessions table", HeadBranch: "main", HeadSHA: "e5d1c0a77b2f4", Actor: actor("carol"), RunAttempt: 1,
 		HTMLURL: "https://github.com/acme/web-portal/actions/runs/7102", CreatedAt: at(2 * time.Hour), UpdatedAt: at(2 * time.Hour)}
-	gh.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {deploy}, portal: {vacuum}}
+	gh.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {deploy2, deploy}, portal: {vacuum}}
 	gh.Pending = map[int64][]model.PendingDeployment{
 		7101: {pending("prod", true, "alice", "team:sre")},
+		7103: {pending("stg", true, "alice", "team:sre")},
 		7102: {pending("prod-db", false, "team:dba")},
 	}
 }

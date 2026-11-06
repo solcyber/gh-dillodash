@@ -22,8 +22,8 @@ type shot struct {
 
 // The fixture's list, top to bottom (the cursor starts on the first
 // row): infra#44 (draft), web-portal#92, infra#41 (plan digests),
-// infra#42, the waiting runs web-portal 7102 (waits on the dba team) and
-// infra 7101 (waits on you), the releases web-portal#91 and #90 (in
+// infra#42, the waiting runs web-portal 7102 (waits on the dba team),
+// infra 7101 and infra 7103 (two runs of one workflow, both on you), the releases web-portal#91 and #90 (in
 // flight), the stage line, the window night with its manifest infra#20
 // and the queued infra#43, then the issues web-portal#19, infra#17,
 // infra#18. Expect pins each script to what it means to show, so a new
@@ -41,17 +41,17 @@ var shots = []shot{
 	{Name: "goto", Steps: []string{":", "91"}},
 	{Name: "terraform-approve", Steps: []string{"j", "j", "enter"}, Expect: []string{"infra#41", "plans"}},
 	{Name: "terraform-approve-menu", Steps: []string{"j", "j", "enter", "a"}, Expect: []string{"for which plan"}},
-	{Name: "approve-menu", Steps: []string{"j", "j", "j", "j", "j", "j", "enter", "a"}, Expect: []string{"web-portal#91", "release NOW"}},
-	{Name: "release-now-prompt", Steps: []string{"j", "j", "j", "j", "j", "j", "enter", "a", "2", "the referral fix is holding up signups"}, Expect: []string{"web-portal#91", "/release-now"}},
-	{Name: "release-rail", Steps: []string{"j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"deploying 2/3"}},
-	{Name: "release-card", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter"}, Expect: []string{"web-portal#90", "T+"}},
-	{Name: "release-launch", Steps: []string{"j", "j", "j", "j", "j", "j", "j"},
+	{Name: "approve-menu", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "a"}, Expect: []string{"web-portal#91", "release NOW"}},
+	{Name: "release-now-prompt", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "a", "2", "the referral fix is holding up signups"}, Expect: []string{"web-portal#91", "/release-now"}},
+	{Name: "release-rail", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"deploying 2/3"}},
+	{Name: "release-card", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "enter"}, Expect: []string{"web-portal#90", "T+"}},
+	{Name: "release-launch", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 3.1}}}},
-	{Name: "release-launch-burst", Steps: []string{"j", "j", "j", "j", "j", "j", "j"},
+	{Name: "release-launch-burst", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 2.05}}}},
 	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j"}, Expect: []string{"waiting approvals", "approve: prod"}},
-	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
-	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "p"}, Expect: []string{"#910 on stage", "go/910"}},
+	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
+	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "p"}, Expect: []string{"#910 on stage", "go/910"}},
 	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy run 7101"}},
 	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},
@@ -87,7 +87,7 @@ var shots = []shot{
 var (
 	heroScripts = [][]string{
 		{"j"},
-		{"j", "j", "j", "j", "j", "enter"},
+		{"j", "j", "j", "j", "j", "j", "enter"},
 	}
 	heroExpect = "web-portal#91"
 )

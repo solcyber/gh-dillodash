@@ -343,7 +343,10 @@ type RateLimit struct {
 
 // WorkflowRun is the subset of an Actions run the dashboard reads.
 type WorkflowRun struct {
-	ID         int64     `json:"id"`
+	ID int64 `json:"id"`
+	// RunNumber is the run's number in its workflow, the "#N" the
+	// Actions page shows (the ID is the number in the run's URL).
+	RunNumber  int       `json:"run_number"`
 	Name       string    `json:"name"`
 	Path       string    `json:"path"`
 	HeadSHA    string    `json:"head_sha"`
@@ -363,6 +366,14 @@ type WorkflowRun struct {
 	// the pusher of a push. A re-run keeps it (GitHub's triggering_actor
 	// names who re-ran it; the dashboard does not read that one).
 	Actor Actor `json:"actor"`
+	// PullRequests is the PRs whose head the run ran on, as GitHub lists
+	// them (a pull_request run; usually empty for a push or a dispatch).
+	PullRequests []RunPR `json:"pull_requests"`
+}
+
+// RunPR is a PR a workflow run lists: its number is all the rows use.
+type RunPR struct {
+	Number int `json:"number"`
 }
 
 // WorkflowJob is one job of an Actions run with its steps, as
