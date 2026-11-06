@@ -176,7 +176,7 @@ func TestReportWaitingRuns(t *testing.T) {
 	wr.Repos = []model.Repo{infra, {Owner: "acme", Name: "etl-jobs"}}
 	cfg.WaitingRuns = wr
 	out, _ = report(t, "alice", "keyring", cfg)
-	if !strings.Contains(out, "  waiting_runs         on  repos: acme/infra, acme/etl-jobs\n") {
+	if !strings.Contains(out, "  waiting_runs         on  repos: acme/infra, acme/etl-jobs; read every 30s\n") {
 		t.Errorf("waiting_runs on:\n%s", out)
 	}
 }

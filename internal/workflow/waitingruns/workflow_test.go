@@ -623,3 +623,78 @@ func TestHelpAndLegend(t *testing.T) {
 		t.Errorf("legend: %q", l)
 	}
 }
+
+// TestPollPicksUpANewRunBetweenRefreshes: with poll_secs on, the poll
+// reads the repos again, so a run that starts waiting after a refresh is
+// listed within poll_secs; a push run the last refresh saw under a listed
+// PR stays out of the poll's state too.
+func TestPollPicksUpANewRunBetweenRefreshes(t *testing.T) {
+	w, app := newWF(t)
+	if !w.Live(app) || w.PollEvery() != 30*time.Second {
+		t.Fatalf("live %v every %v", w.Live(app), w.PollEvery())
+	}
+	merged := &model.PR{Repo: infra, Number: 9, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "m9"}}
+	if _, err := refresh(t, w, app, merged); err != nil {
+		t.Fatal(err)
+	}
+	if st := app.State(Name).(*State); len(st.Items) != 0 {
+		t.Fatalf("nothing waits yet: %+v", st.Items)
+	}
+	push := run(4300, "deploy", "m9", time.Minute)
+	push.Event = "push"
+	app.Fake.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {run(4242, "migrate", "s1", time.Minute), push}}
+	app.Fake.Pending = map[int64][]model.PendingDeployment{4242: {pending("stg", 56, true, "team:approvers")}}
+	patch, err := w.Poll(context.Background(), app.Fake)
+	if err != nil || patch == nil {
+		t.Fatalf("poll: %v %v", patch, err)
+	}
+	w.ApplyPoll(app, patch)
+	st := app.State(Name).(*State)
+	if got := []int64{}; len(st.Items) != 1 || st.Items[0].Run.ID != 4242 {
+		for _, it := range st.Items {
+			got = append(got, it.Run.ID)
+		}
+		t.Fatalf("polled items = %v, want [4242]", got)
+	}
+}
+
+// TestPollOff: poll_secs = 0 leaves the runs to the refresh.
+func TestPollOff(t *testing.T) {
+	w, app := newWF(t)
+	w.cfg.PollSecs = 0
+	if w.Live(app) {
+		t.Error("poll_secs = 0 is not live")
+	}
+}
+
+// TestAnnounceNewRunOnYou: the first state only primes; a run that then
+// starts waiting on the viewer is said once (a team reviewer counts, by
+// GitHub's current_user_can_approve); one waiting on someone else is not.
+func TestAnnounceNewRunOnYou(t *testing.T) {
+	w, app := newWF(t)
+	app.Fake.RepoRuns = map[model.Repo][]model.WorkflowRun{infra: {run(4242, "deploy", "s1", time.Minute)}}
+	app.Fake.Pending = map[int64][]model.PendingDeployment{4242: {pending("prod", 55, true)}}
+	if _, err := refresh(t, w, app); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(app.Last(), "waits on you") {
+		t.Fatalf("the first state primes silently: %q", app.Last())
+	}
+	app.Fake.RepoRuns[etl] = []model.WorkflowRun{run(5151, "Migrate", "s2", 0), run(5152, "backfill", "s3", 0)}
+	app.Fake.Pending[5151] = []model.PendingDeployment{pending("stg", 77, true, "team:approvers")}
+	app.Fake.Pending[5152] = []model.PendingDeployment{pending("prod", 78, false, "bob")}
+	patch, err := w.Poll(context.Background(), app.Fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.ApplyPoll(app, patch)
+	if want := "notice: etl-jobs Migrate run 5151 waits on you (stg) — D approves it"; app.Last() != want {
+		t.Fatalf("last = %q, want %q", app.Last(), want)
+	}
+	before := app.Last()
+	patch, _ = w.Poll(context.Background(), app.Fake)
+	w.ApplyPoll(app, patch)
+	if app.Last() != before {
+		t.Errorf("said twice: %q", app.Last())
+	}
+}

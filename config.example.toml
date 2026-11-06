@@ -173,6 +173,7 @@ enabled = false
 enabled = false
 # repos = []                                # default: every [reviews] repo
 # approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
+# poll_secs = 30                            # read the waiting runs this often between refreshes (floor 10; 0 = with the refresh only)
 
 # ============================================================================
 # Dispatch — the workflows X may run (nothing else is ever dispatched).

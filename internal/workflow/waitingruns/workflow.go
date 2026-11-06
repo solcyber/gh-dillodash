@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -104,13 +106,21 @@ type Workflow struct {
 	workflow.Base
 	cfg *config.WaitingRunsConfig
 
-	last *State // worker goroutine only: the last state without a rate limit
+	mu     sync.Mutex
+	last   *State    // the last state without a rate limit (refresh and poll)
+	listed listedSet // the last refresh's listed merge commits, for the poll
+
+	// UI goroutine only: the runs that waited on the viewer at the last
+	// apply, so a run that starts waiting on them is said once.
+	mine   map[int64]bool
+	primed bool
 }
 
 var (
 	_ workflow.Workflow       = (*Workflow)(nil)
 	_ workflow.DeployProvider = (*Workflow)(nil)
 	_ workflow.RowDeployer    = (*Workflow)(nil)
+	_ workflow.Poller         = (*Workflow)(nil)
 )
 
 func init() {
@@ -146,11 +156,23 @@ func (w *Workflow) ProvidesDeploys() bool { return true }
 // blink out while GitHub says wait.
 func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo, prs []*model.PR, _ []*model.Issue) (workflow.State, []string, error) {
 	listed := listedSHAs(prs)
+	w.mu.Lock()
+	w.listed = listed
+	w.mu.Unlock()
+	return w.read(ctx, gh, listed)
+}
+
+// read is one pass over the repos: the refresh's, and the poll's between
+// refreshes (with the listed merge commits the last refresh saw).
+func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) (*State, []string, error) {
 	st := &State{}
 	var warns []string
-	limited := func(err error) (workflow.State, []string, error) {
-		if w.last != nil {
-			return w.last, warns, err
+	limited := func(err error) (*State, []string, error) {
+		w.mu.Lock()
+		last := w.last
+		w.mu.Unlock()
+		if last != nil {
+			return last, warns, err
 		}
 		sortItems(st.Items)
 		st.Warnings = warns
@@ -188,8 +210,42 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	}
 	sortItems(st.Items)
 	st.Warnings = warns
+	w.mu.Lock()
 	w.last = st
+	w.mu.Unlock()
 	return st, warns, nil
+}
+
+// ---- poll (between refreshes) ----
+
+// PollEvery is poll_secs.
+func (w *Workflow) PollEvery() time.Duration {
+	return time.Duration(w.cfg.PollSecs) * time.Second
+}
+
+// Live is always true while poll_secs is on: a run can start waiting at
+// any moment, and the refresh alone (refresh_secs) is too slow for an
+// approval that is usually given within minutes.
+func (w *Workflow) Live(workflow.App) bool { return w.cfg.PollSecs > 0 }
+
+// Poll reads the waiting runs again. Its warnings are left to the next
+// refresh; only a rate limit comes back as an error.
+func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
+	w.mu.Lock()
+	listed := w.listed
+	w.mu.Unlock()
+	st, _, err := w.read(ctx, gh, listed)
+	if err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+// ApplyPoll lands a poll's state like a refresh's.
+func (w *Workflow) ApplyPoll(app workflow.App, patch any) {
+	if st, ok := patch.(*State); ok && st != nil {
+		w.Apply(app, st)
+	}
 }
 
 // sortItems puts the run waiting longest first.
@@ -255,7 +311,41 @@ func addSHAs(set listedSet, prs []*model.PR) {
 func (w *Workflow) Apply(app workflow.App, s workflow.State) {
 	if st, ok := s.(*State); ok && st != nil {
 		app.SetState(Name, st)
+		w.announce(app)
 	}
+}
+
+// announce says a run that newly waits on the viewer, once; the first
+// state after a start only primes it (the header already counts them).
+func (w *Workflow) announce(app workflow.App) {
+	now := map[int64]bool{}
+	var fresh []*Item
+	for _, it := range w.visible(app) {
+		if len(it.Mine()) == 0 {
+			continue
+		}
+		now[it.Run.ID] = true
+		if w.primed && !w.mine[it.Run.ID] {
+			fresh = append(fresh, it)
+		}
+	}
+	w.mine, w.primed = now, true
+	switch len(fresh) {
+	case 0:
+	case 1:
+		it := fresh[0]
+		app.Notice(fmt.Sprintf("%s waits on you (%s) — D approves it", it.where(), strings.Join(envNames(it.Mine()), ", ")))
+	default:
+		app.Notice(fmt.Sprintf("%d runs started waiting on you — D on each approves it", len(fresh)))
+	}
+}
+
+func envNames(pend []model.PendingDeployment) []string {
+	out := make([]string, 0, len(pend))
+	for _, p := range pend {
+		out = append(out, envName(p))
+	}
+	return out
 }
 
 // ---- the list (UI goroutine) ----

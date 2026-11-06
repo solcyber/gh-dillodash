@@ -103,11 +103,20 @@ environments it waits on that you review (a reason prompt, then a confirm;
 the run fails there and deploys nothing), **cancel** it, or read a job's
 log in `$PAGER`. `D` keeps approving and nothing else.
 
-## Refresh and failures
+## Refresh, poll and failures
 
 Every refresh reads one page (50) of each repo's waiting runs
 (`GET /repos/{owner}/{repo}/actions/runs?status=waiting`) and the pending
-deployments of each run. A repo whose runs can't be read is a warning
+deployments of each run.
+
+An environment approval is usually given within minutes, often well
+inside one `refresh_secs`, so between refreshes the same read runs every
+`poll_secs` (default 30, floor 10; `0` leaves it to the refresh). Each
+poll costs one REST call per repo plus one per waiting run. When a run
+starts waiting on an environment you can approve (GitHub's
+`current_user_can_approve`, which counts a team you belong to as well as
+you by name), the status line says so once:
+`<repo> <workflow> run <id> waits on you (<env>) — D approves it`. A repo whose runs can't be read is a warning
 naming the permission when GitHub answered 403, and the other repos still
 list; a rate limit pauses the workflow with the rest of the dashboard and
 keeps the last rows.
