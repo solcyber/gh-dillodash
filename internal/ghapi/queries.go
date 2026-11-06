@@ -29,28 +29,39 @@ fragment ListRepo on Repository {
   pullRequests(states: OPEN, last: 100,
                orderBy: {field: CREATED_AT, direction: ASC}) {
     totalCount
+    nodes { ...ListPR }
+  }
+}
+` + listPRFragment
+
+// listPRFragment is a list row's PR: the review state (each approval's
+// commit, so a stale one shows; latestReviews for a dismissed one), the
+// merge state, and the head commit's check rollup. The repo-list query
+// and the review-request search both read it.
+const listPRFragment = `
+fragment ListPR on PullRequest {
+  number title isDraft reviewDecision updatedAt createdAt headRefName
+  headRefOid baseRefName additions deletions mergeable mergeStateStatus
+  author { login }
+  labels(first: 10) { nodes { name } }
+  latestOpinionatedReviews(first: 20) {
+    nodes { databaseId author { login } state submittedAt commit { oid } }
+  }
+  latestReviews(first: 20) {
+    nodes { author { login } state submittedAt }
+  }
+  commits(last: 1) {
     nodes {
-      number title isDraft reviewDecision updatedAt createdAt headRefName
-      headRefOid additions deletions
-      author { login }
-      labels(first: 10) { nodes { name } }
-      latestOpinionatedReviews(first: 20) {
-        nodes { databaseId author { login } state }
-      }
-      commits(last: 1) {
-        nodes {
-          commit {
-            committedDate
-            statusCheckRollup {
-              state
-              contexts(first: 50) {
-                totalCount
-                nodes {
-                  __typename
-                  ... on CheckRun { name status conclusion }
-                  ... on StatusContext { context state description }
-                }
-              }
+      commit {
+        committedDate
+        statusCheckRollup {
+          state
+          contexts(first: 50) {
+            totalCount
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion }
+              ... on StatusContext { context state description }
             }
           }
         }
@@ -158,12 +169,15 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       number title body isDraft reviewDecision baseRefName headRefName
       headRefOid state additions deletions changedFiles updatedAt createdAt
-      mergedAt mergeCommit { oid }
+      mergedAt mergeCommit { oid } mergeable mergeStateStatus
       author { login }
       labels(first: 10) { nodes { name } }
       commits(last: 1) { nodes { commit { committedDate } } }
       latestOpinionatedReviews(first: 20) {
-        nodes { databaseId author { login } state }
+        nodes { databaseId author { login } state submittedAt commit { oid } }
+      }
+      latestReviews(first: 20) {
+        nodes { author { login } state submittedAt }
       }
       comments(last: 100) {
         totalCount
@@ -206,7 +220,7 @@ fragment RelPR on PullRequest {
   baseRefName additions deletions
   author { login }
   labels(first: 10) { nodes { name } }
-  latestOpinionatedReviews(first: 20) { nodes { databaseId author { login } state submittedAt } }
+  latestOpinionatedReviews(first: 20) { nodes { databaseId author { login } state submittedAt commit { oid } } }
   commits(last: 1) { nodes { commit { committedDate statusCheckRollup {
     state contexts(first: 50) { totalCount nodes { __typename
       ... on CheckRun { name status conclusion }

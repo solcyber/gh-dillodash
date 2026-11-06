@@ -736,8 +736,10 @@ func (m *Model) copyURL() {
 	}
 }
 
-func (m *Model) openInBrowser() {
-	url := m.currentURL()
+func (m *Model) openInBrowser() { m.openOrCopy(m.currentURL()) }
+
+// openOrCopy opens url in a browser, else copies it, else shows it.
+func (m *Model) openOrCopy(url string) {
 	if url == "" {
 		return
 	}

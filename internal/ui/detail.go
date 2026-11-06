@@ -124,15 +124,7 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	if state == "" {
 		state = "OPEN"
 	}
-	listed := m.detailListed
-	if listed == nil {
-		for _, p := range m.allPRs {
-			if p.Ident() == pr.Ident() {
-				listed = p
-				break
-			}
-		}
-	}
+	listed := m.listedFor(pr)
 	label, style, _, _ := m.decision(pr, listed)
 	meta := []text.Seg{text.S(glyphs.Ico("person"), "faint"), text.S(author, m.authorStyle(author)),
 		text.S("  "+glyphs.G("sep")+"  ", "rule"), text.S(glyphs.Ico("branch"), "faint"),
@@ -161,6 +153,16 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 		}
 	}
 	lines = append(lines, markdown.Wrap(meta, wrap, nil, nil, false)...)
+	if s := model.StuckOf(pr, listed, m.me); s.Kind != model.StuckNone {
+		why := []text.Seg{text.S(glyphs.G("fail")+" ", "sum.attn"), text.S(s.Reason, "sum.attn")}
+		switch {
+		case s.Kind == model.StuckStale && s.ApprovedSHA != "" && s.HeadSHA != "":
+			why = append(why, text.S("   u ", "md.inline"), text.S("the changes since the approval", "faint"))
+		case s.AuthorAction():
+			why = append(why, text.S("   the author's to clear", "faint"))
+		}
+		lines = append(lines, markdown.Wrap(why, wrap, nil, nil, false)...)
+	}
 	if cards := m.wf.DetailCards(m, pr, listed, wrap); len(cards) > 0 {
 		lines = append(lines, text.Line{})
 		lines = append(lines, cards...)

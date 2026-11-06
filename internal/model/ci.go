@@ -171,6 +171,12 @@ const (
 	LabelChanges    = "changes requested"
 	LabelAwaiting   = "awaiting review"
 	LabelMerged     = "merged"
+	// LabelReReview: my approval is stale (the head moved after it) or
+	// was dismissed; it needs my look again.
+	LabelReReview = "re-review"
+	// LabelStuck: approved, but it will not merge by itself (a stale
+	// approval by someone else, a conflict, a failed or missing check).
+	LabelStuck = "approved · stuck"
 )
 
 // ChipForLabel maps a decision label to the style of its chip.
@@ -181,11 +187,14 @@ var ChipForLabel = map[string]string{
 	LabelMerged:     "chip.merged",
 	LabelChanges:    "chip.changes",
 	LabelDraft:      "chip.draft",
+	LabelReReview:   "chip.await",
+	LabelStuck:      "chip.fail",
 }
 
 // DecisionLabel is the PR's chip: DRAFT, approved by me (a review of
-// mine, or one this session just posted), approved, changes requested,
-// else awaiting review.
+// mine on the current head, or one this session just posted), approved,
+// changes requested, else awaiting review. The stuck labels come from
+// StuckOf, which the UI asks first.
 func DecisionLabel(pr *PR, me string, localApproved bool) string {
 	if pr.IsDraft {
 		return LabelDraft
@@ -193,7 +202,7 @@ func DecisionLabel(pr *PR, me string, localApproved bool) string {
 	if localApproved {
 		return LabelApprovedMe
 	}
-	if me != "" && pr.MyReviewState(me) == "APPROVED" {
+	if pr.MyApprovalStands(me) {
 		return LabelApprovedMe
 	}
 	switch pr.ReviewDecision {

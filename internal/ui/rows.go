@@ -29,6 +29,14 @@ func (m *Model) decision(pr *model.PR, listed *model.PR) (label, style string, n
 	if c := m.wf.Classify(pr, listed, m.me, local); c != nil {
 		return c.Label, c.Style, c.NeedsYou, c.Done
 	}
+	if s := model.StuckOf(pr, listed, m.me); s.Kind != model.StuckNone {
+		if s.Mine {
+			return model.LabelReReview, model.ChipForLabel[model.LabelReReview], true, false
+		}
+		// a conflict or a red check is the author's to clear
+		mine := m.me != "" && strings.EqualFold(pr.Author.Login, m.me)
+		return model.LabelStuck, model.ChipForLabel[model.LabelStuck], mine && s.AuthorAction(), false
+	}
 	label = model.DecisionLabel(pr, m.me, local)
 	style = model.ChipForLabel[label]
 	if style == "" {
@@ -121,10 +129,11 @@ func (m *Model) refilter() {
 	} else {
 		// hide PRs approved by others, but keep ones I approved visible
 		// (marked, dimmed) until they're merged, so it's always evident
-		// what I have and haven't approved
+		// what I have and haven't approved; an approved PR that is stuck
+		// (stale approval, conflict, red or blocked) stays too
 		m.prs = m.prs[:0:0]
 		for _, p := range rest {
-			if p.ReviewDecision != "APPROVED" || m.iApproved(p) {
+			if p.ReviewDecision != "APPROVED" || m.iApproved(p) || model.StuckOf(p, nil, m.me).Kind != model.StuckNone {
 				m.prs = append(m.prs, p)
 			}
 		}
@@ -531,8 +540,13 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 			tstyle = "title.attn"
 		}
 		suffix := ""
+		if label == model.LabelStuck || label == model.LabelReReview {
+			if s := model.StuckOf(item, nil, m.me); s.Reason != "" {
+				suffix = "  " + s.Reason
+			}
+		}
 		if len(c.Failed) > 0 {
-			suffix = "  " + glyphs.G("fail") + " " + strings.Join(c.Failed, ", ")
+			suffix += "  " + glyphs.G("fail") + " " + strings.Join(c.Failed, ", ")
 		}
 		room := max(0, w-3-text.SegsWidth(segs))
 		sw := min(text.Width(suffix), max(0, room-16))

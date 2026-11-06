@@ -70,7 +70,7 @@ func (m *Model) refresh(again bool) {
 	m.lastRefresh = started
 	m.nextRefreshAt = started + float64(m.cfg.Display.RefreshSecs)
 	gh, repos, wf, ctx := m.gh, m.repos, m.wf, m.ctx
-	ci := m.ci
+	ci, ahead, me := m.ci, m.ahead, m.me
 	go func() {
 		out := &refreshResult{started: started}
 		defer func() {
@@ -107,6 +107,7 @@ func (m *Model) refresh(again bool) {
 				warns = append(warns, n)
 			}
 		}
+		ahead.annotate(ctx, gh, out.allPRs, me)
 		sort.SliceStable(out.allPRs, func(i, j int) bool {
 			return out.allPRs[i].CreatedAt.Before(out.allPRs[j].CreatedAt)
 		})

@@ -10,7 +10,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -228,11 +227,12 @@ func StaleGate(app App, action string) bool {
 
 // IApproved reports a review approval of pr by the viewer that still
 // stands: one posted with a this session (for the current head), or
-// the viewer's review on GitHub. The core's a refuses such a PR unless
+// the viewer's review on GitHub on the current head (an approval of an
+// older commit is stale and does not count). The core's a refuses such a PR unless
 // a workflow takes it first; a workflow that does must not submit a
 // second review.
 func IApproved(app App, pr *model.PR) bool {
-	return app.LocalApproved(pr) || pr.MyReviewState(app.Me()) == "APPROVED"
+	return app.LocalApproved(pr) || pr.MyApprovalStands(app.Me())
 }
 
 // Refresh results: a workflow computes State on the worker goroutine and
@@ -330,16 +330,7 @@ type ManifestItem struct {
 
 // HeadMoved reports a frozen head that is not the current one. Either
 // side empty can't be told (false); a short sha matches as a prefix.
-func HeadMoved(frozen, head string) bool {
-	frozen, head = strings.ToLower(strings.TrimSpace(frozen)), strings.ToLower(strings.TrimSpace(head))
-	if frozen == "" || head == "" {
-		return false
-	}
-	if len(frozen) > len(head) {
-		frozen, head = head, frozen
-	}
-	return !strings.HasPrefix(head, frozen)
-}
+func HeadMoved(frozen, head string) bool { return model.ShaMoved(frozen, head) }
 
 // ManifestItemProvider is implemented by a window workflow's state: the
 // manifest item of a release PR (repo short name and number), newest

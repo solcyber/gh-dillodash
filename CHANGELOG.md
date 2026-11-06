@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Stuck approvals.** An approved PR that will not merge by itself no
+  longer drops off the list. My approval of an older commit (the head
+  moved after it) or one that was dismissed reads `re-review`, counts as
+  needing me, and the row says `stale: approved 1a2b3c4, head 5d6e7f8
+  (+2)`. Someone else's stale approval, a conflict with the base, a
+  failed check that blocks the merge, or a merge blocked by a rule reads
+  `approved · stuck` with the reason; such a PR stays listed even while
+  approved-by-others PRs are hidden. On my own PR a conflict or a red
+  check counts as needing me. The detail repeats the reason.
+- **`u` opens the changes since a stale approval**: the compare view from
+  the approved commit to the head, so a re-approve is a look at the
+  delta. The bar shows it while the selected PR's approval is stale.
+- Release rows: my stale approval reads `needs approval` again, and
+  someone else's reads `approved by <login> · stale`.
+
+### Fixed
+
+- `a` no longer refuses a re-approval with "already approved by you"
+  after the head moved: an approval counts only for the commit it was
+  given on.
+- `M` in the detail refuses a PR GitHub says cannot merge (a conflict, a
+  blocked merge): the detail query now reads the merge state the check
+  needs, which it had silently skipped.
+- List rows carry their base branch, so a `release/*` or `hotfix/*` head
+  into a branch other than production is no longer taken for a release.
+- The screenshot tool bounds each 24-bit colour channel when it paints.
+
 ## [1.10.0]
 
 Issue triage from the detail view, a hand-off to an agent, and a

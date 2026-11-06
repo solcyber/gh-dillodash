@@ -435,6 +435,23 @@ func TestQueryShapes(t *testing.T) {
 	if strings.Contains(q, "$o2") {
 		t.Error("list query has an extra alias")
 	}
+	// a stuck approval is read from the list: each approval's commit, a
+	// dismissed review, the merge state and the base branch
+	for _, want := range []string{"fragment ListPR on PullRequest", "nodes { ...ListPR }", "baseRefName",
+		"mergeable mergeStateStatus", "state submittedAt commit { oid }", "latestReviews(first: 20)"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("list query lacks %q", want)
+		}
+	}
+	// the detail feeds the M guard and the stale check
+	for _, want := range []string{"mergeable mergeStateStatus", "commit { oid } }", "latestReviews(first: 20)"} {
+		if !strings.Contains(prDetailQuery, want) {
+			t.Errorf("PR detail query lacks %q", want)
+		}
+	}
+	if !strings.Contains(releaseQuery, "state submittedAt commit { oid }") {
+		t.Error("release query lacks the approval commit")
+	}
 	fq := fortressQuery(3)
 	if !strings.Contains(fq, "f2: repository(owner: $o2, name: $n2)") || !strings.Contains(fq, "defaultBranchRef") {
 		t.Errorf("fortress query: %s", fq)
