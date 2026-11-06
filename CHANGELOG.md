@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.12.0]
+
+A change can be followed and moved through every tier of a
+branch-per-tier repo, not only the last hop. Waiting runs are read every
+30 seconds, and a run that starts waiting on you is announced.
+
+### Added
+
+- **The `promote` workflow** (`[workflows.promote]`,
+  [docs](docs/workflows/promote.md)). It is for repos with a first tier,
+  a staging tier and production (`dev` → `stage` → `main`).
+  - **The section.** A `promote` section has one row per change. It shows
+    where the change is: `on dev`, `→ stage #N · ready` (or `checks`,
+    `behind`, `conflicts`), `stage · untagged`, `stage · hold`,
+    `stage · go`, or `stage · go · after #N` when a unit ahead of it holds
+    the cut. It also shows what the change's tier deploy did: `dev ✓`,
+    `stage deploying`, `stage waits · D`, or `stage ✗ <workflow>`.
+  - **`p`** moves a change one tier on. On the first tier it opens the
+    promotion PR: the change is applied to the staging head file by file,
+    in one GitHub-signed commit. Any file the staging tier changed on its
+    own makes it refuse. On an open promotion PR, `p` merges it once
+    GitHub says it can. On a staging unit, it tags the unit `go/<N>` or
+    `hold/<N>`.
+  - **`D`** approves the deploy the change's tier waits on.
+  - **The last hop** is still the release PR. The tag menu says which
+    release PR carries the unit.
+- **`first_tier_reviews = "open"`** lists every open, non-draft PR into a
+  requested repo's first tier, whether or not a review was requested.
+  GitHub Apps are left out. An agent's account counts, even when `[bots]`
+  lists it.
+- **`[workflows.waiting_runs] poll_secs`** (default 30, floor 10, `0`
+  turns it off) reads the waiting runs between refreshes. The status
+  line says once when a run starts waiting on an environment you can
+  approve, including one that a team you're in reviews. `config check`
+  prints the cadence and the promote line.
+
+### Fixed
+
+- A waiting run could be approved on GitHub before the dashboard listed
+  it: with `refresh_secs = 300`, a run approved within five minutes
+  never showed.
+
 ## [1.11.0]
 
 An approval that will not merge by itself stays in view, a busy repo can
