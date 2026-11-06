@@ -77,6 +77,8 @@ var bindings = []binding{
 		Help: "X  run a listed workflow", Doc: "run a workflow the config lists under `[[workflows.dispatch]]`: pick it, fill its inputs, confirm the exact payload; the status line follows the new run (the bar shows it while one is listed)", Do: doDispatch},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('P')}, Bar: "P", Label: "pull config", Group: "list", Prio: 5, when: (*Model).configStale,
 		Help: "P  pull the newer config", Doc: "pull the newer config from the repo it was pulled from (`config pull`) and restart into it, keeping your place (the bar shows it while the header says the config is outdated)", Do: doConfigPull},
+	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R('u')}, Bar: "u", Label: "since approval", Group: "any", Prio: 15, when: (*Model).staleSelected,
+		Help: "u  changes since a stale approval", Doc: "open the compare view from a stale approval's commit to the head: what changed since the PR was approved, so a re-approve is a look at the delta (the bar shows it while the selected PR's approval is on an older commit)", Do: doSinceApproval},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('d')}, Bar: "d", Label: "fortress", Group: "list", Prio: 60, wfBefore: true,
 		Help: "d  fortress mode", Doc: "fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits", Do: doFortress},
 	// detail (and the issue view where it applies)

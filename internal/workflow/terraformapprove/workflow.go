@@ -94,7 +94,7 @@ func (w *Workflow) Classify(pr, listed *model.PR, me string, localApproved bool)
 	if r, ok := ctx.Get("window").(Reapprover); ok && r != nil && r.NeedsReapprove() {
 		return &workflow.Classification{Label: RequeueLabel, Style: "chip.await", NeedsYou: true}
 	}
-	if me != "" && pr.MyReviewState(me) == "APPROVED" {
+	if pr.MyApprovalStands(me) {
 		return nil
 	}
 	switch pr.ReviewDecision {

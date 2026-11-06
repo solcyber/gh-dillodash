@@ -1378,3 +1378,31 @@ func TestDeployStuckSecsReachesTheCache(t *testing.T) {
 		t.Errorf("refreshEvery default = %v", w.refreshEvery())
 	}
 }
+
+// TestLabelSaysAStaleApprovalIsStale: an approval of an older commit is
+// not "approved by me" (it needs mine again) and someone else's says
+// stale; an approval of the head is unchanged.
+func TestLabelSaysAStaleApprovalIsStale(t *testing.T) {
+	w, _ := newWF(t, false)
+	rel := makeRelease(relOpts{number: 743})
+	rel.HeadRefOid = strings.Repeat("e", 40)
+	old := &model.ReviewCommit{Oid: strings.Repeat("1", 40)}
+	head := &model.ReviewCommit{Oid: rel.HeadRefOid}
+
+	approved(rel, "alice").Opinions.Nodes[0].Commit = old
+	if got := w.Label(rel, "alice", false); got != LabelNeeds {
+		t.Errorf("my stale approval: %q", got)
+	}
+	approved(rel, "bob").Opinions.Nodes[0].Commit = old
+	if got := w.Label(rel, "alice", false); got != "approved by bob · stale" {
+		t.Errorf("bob's stale approval: %q", got)
+	}
+	approved(rel, "bob").Opinions.Nodes[0].Commit = head
+	if got := w.Label(rel, "alice", false); got != "approved by bob" {
+		t.Errorf("bob's approval of the head: %q", got)
+	}
+	approved(rel, "alice").Opinions.Nodes[0].Commit = head
+	if got := w.Label(rel, "alice", false); got != model.LabelApprovedMe {
+		t.Errorf("my approval of the head: %q", got)
+	}
+}

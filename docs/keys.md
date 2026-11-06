@@ -17,6 +17,7 @@
 | list | `x` | the Actions runs of the selected row (a release's run, a waiting run, the runs on a PR's commit): re-run the failed jobs or every job, cancel, reject the deployment it waits on, or read a job's log in `$PAGER` |
 | list, detail | `X` | run a workflow the config lists under `[[workflows.dispatch]]`: pick it, fill its inputs, confirm the exact payload; the status line follows the new run (the bar shows it while one is listed) |
 | list | `P` | pull the newer config from the repo it was pulled from (`config pull`) and restart into it, keeping your place (the bar shows it while the header says the config is outdated) |
+| list, detail | `u` | open the compare view from a stale approval's commit to the head: what changed since the PR was approved, so a re-approve is a look at the delta (the bar shows it while the selected PR's approval is on an older commit) |
 | list | `d` | fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits |
 | detail | `a` | approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm |
 | detail | `M` | merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first |

@@ -226,6 +226,10 @@ func Client() *fake.Client {
 		pr(portal, 91, "release/2026-10-28", "infra-bot", "release/2026-10-28", 3*time.Hour, 1204, 388, "build:success", "e2e:success"),
 		pr(portal, 92, "fix: the signup form loses the referral code", "carol", "fix-referral", 2*24*time.Hour, 18, 4, "build:success", "e2e:failure"),
 	}
+	// approved, but it conflicts with its base: the list keeps it, stuck
+	portalPRs[1].ReviewDecision = "APPROVED"
+	portalPRs[1].Opinions.Nodes = []model.Review{{Author: actor("bob"), State: "APPROVED"}}
+	portalPRs[1].Mergeable, portalPRs[1].MergeStateStatus = "CONFLICTING", "DIRTY"
 	issues := []*model.Issue{
 		issue(infra, 17, "nightly load ran 40 minutes late on Tuesday", "carol", 2*24*time.Hour, "ops"),
 		issue(infra, 18, "drop the legacy VPN endpoint", "bob", 11*24*time.Hour, "enhancement"),
@@ -250,7 +254,9 @@ func Client() *fake.Client {
 			d.Reviews.Nodes = append(d.Reviews.Nodes, model.Review{Author: actor("alice"), State: "APPROVED", SubmittedAt: at(2 * time.Hour), Body: "Drill looks complete."})
 		}
 		d.Reviews.TotalCount = len(d.Reviews.Nodes)
-		d.MergeStateStatus = "CLEAN"
+		if d.MergeStateStatus == "" {
+			d.MergeStateStatus = "CLEAN"
+		}
 		gh.PRs[p.Ident()] = &d
 		gh.Files[p.Ident()] = []model.PRFile{
 			{Filename: "terraform/live/prod/07-warehouse/iam.tf", Status: "modified", Additions: p.Additions - 4, Deletions: p.Deletions, Patch: "@@ -12,6 +12,9 @@ resource \"aws_iam_role\" \"deploy\" {\n   name = \"deploy\"\n+  inline_policy {\n+    name = \"warehouse-read\"\n+  }\n }\n-# old comment\n"},

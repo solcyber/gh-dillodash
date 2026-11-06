@@ -93,6 +93,22 @@ type Review struct {
 	State       string    `json:"state"`
 	SubmittedAt time.Time `json:"submittedAt"`
 	Body        string    `json:"body"`
+	// Commit is the commit the review was submitted on; nil when the
+	// query did not read it.
+	Commit *ReviewCommit `json:"commit"`
+}
+
+// ReviewCommit is a review's commit { oid }.
+type ReviewCommit struct {
+	Oid string `json:"oid"`
+}
+
+// CommitOid is the review's commit sha ("" when unknown).
+func (r Review) CommitOid() string {
+	if r.Commit == nil {
+		return ""
+	}
+	return r.Commit.Oid
 }
 
 // Reviews is a review connection.
@@ -177,13 +193,21 @@ type PR struct {
 	Deletions        int                `json:"deletions"`
 	ChangedFiles     int                `json:"changedFiles"`
 	MergeStateStatus string             `json:"mergeStateStatus"`
+	Mergeable        string             `json:"mergeable"`
 	MergeCommit      *MergeCommit       `json:"mergeCommit"`
 	Author           Actor              `json:"author"`
 	Labels           Labels             `json:"labels"`
 	Opinions         OpinionatedReviews `json:"latestOpinionatedReviews"`
-	Commits          Commits            `json:"commits"`
-	Comments         Comments           `json:"comments"`
-	Reviews          Reviews            `json:"reviews"`
+	// LatestReviews is latestReviews: each reviewer's newest review,
+	// DISMISSED ones included (latestOpinionatedReviews leaves those out).
+	LatestReviews OpinionatedReviews `json:"latestReviews"`
+	Commits       Commits            `json:"commits"`
+	Comments      Comments           `json:"comments"`
+	Reviews       Reviews            `json:"reviews"`
+
+	// ApprovalAhead is how many commits the head is ahead of a stale
+	// approval's commit (a compare call fills it; 0 = not known).
+	ApprovalAhead int `json:"-"`
 
 	// Ext carries per-workflow annotations, keyed by workflow name.
 	Ext map[string]any `json:"-"`
@@ -273,6 +297,35 @@ func (p *PR) MyReviewState(me string) string {
 		}
 	}
 	return ""
+}
+
+// MyApprovalStands reports an approving review of mine that covers the
+// PR's head. An approval on an older commit is stale: the head moved
+// after it and I have not seen the change. When either sha is unknown
+// (a query that did not read it) the approval is taken to stand.
+func (p *PR) MyApprovalStands(me string) bool {
+	if me == "" {
+		return false
+	}
+	for _, r := range p.Opinions.Nodes {
+		if strings.EqualFold(r.Author.Login, me) {
+			return r.State == "APPROVED" && !ShaMoved(r.CommitOid(), p.HeadRefOid)
+		}
+	}
+	return false
+}
+
+// ShaMoved reports two shas that name different commits. Either side
+// empty can't be told (false); a short sha matches as a prefix.
+func ShaMoved(a, b string) bool {
+	a, b = strings.ToLower(strings.TrimSpace(a)), strings.ToLower(strings.TrimSpace(b))
+	if a == "" || b == "" {
+		return false
+	}
+	if len(a) > len(b) {
+		a, b = b, a
+	}
+	return !strings.HasPrefix(b, a)
 }
 
 // RateLimit is GraphQL's rateLimit {} block.

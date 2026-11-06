@@ -138,6 +138,7 @@ type Model struct {
 	clockLoc        *clock.Local  // the header clock's second zone; nil: no clock
 	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
 	ci              *ghapi.CIFallback
+	ahead           *aheadCache // commits a head is ahead of a stale approval
 	ciClusters      map[model.Ident]model.CICluster
 
 	approvedByMe map[model.Ident]string // ident -> head SHA at the time
@@ -281,6 +282,7 @@ func New(ctx context.Context, o Options) *Model {
 		deployCache:     deploys.Cache{StuckAfter: deployStuck(o.Config)},
 		ciClusters:      map[model.Ident]model.CICluster{},
 		approvedByMe:    map[model.Ident]string{},
+		ahead:           &aheadCache{},
 		users:           map[model.Repo][]model.Actor{},
 		glide:           map[string]glideEntry{},
 		wfState:         map[string]any{},
@@ -365,7 +367,7 @@ func (m *Model) localApproved(pr *model.PR) bool {
 }
 
 func (m *Model) iApproved(pr *model.PR) bool {
-	return m.localApproved(pr) || pr.MyReviewState(m.me) == "APPROVED"
+	return m.localApproved(pr) || pr.MyApprovalStands(m.me)
 }
 
 // repoOf is the repo an item belongs to (its own, else the first).

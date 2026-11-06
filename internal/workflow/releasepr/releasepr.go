@@ -819,20 +819,35 @@ func (w *Workflow) Label(pr *model.PR, me string, localApproved bool) string {
 	if localApproved {
 		return model.LabelApprovedMe
 	}
-	if me != "" && pr.MyReviewState(me) == "APPROVED" {
+	if pr.MyApprovalStands(me) {
 		return model.LabelApprovedMe
 	}
 	if pr.ReviewDecision == "CHANGES_REQUESTED" {
 		return model.LabelChanges
 	}
+	// my approval of an older head no longer counts: it needs mine again
+	if s := model.StuckOf(pr, nil, me); s.Kind == model.StuckStale && s.Mine {
+		return LabelNeeds
+	}
+	// an approval of the head first; one of an older commit says so
+	stale := ""
 	for _, r := range pr.Opinions.Nodes {
-		if r.State == "APPROVED" {
-			who := r.Author.Login
-			if who == "" {
-				who = "?"
-			}
+		if r.State != "APPROVED" {
+			continue
+		}
+		who := r.Author.Login
+		if who == "" {
+			who = "?"
+		}
+		if !model.ShaMoved(r.CommitOid(), pr.HeadRefOid) {
 			return "approved by " + who
 		}
+		if stale == "" {
+			stale = "approved by " + who + " · stale"
+		}
+	}
+	if stale != "" {
+		return stale
 	}
 	if pr.ReviewDecision == "APPROVED" {
 		return model.LabelApproved

@@ -423,10 +423,15 @@ func (m *Model) summarySegs() []text.Seg {
 	me := strings.ToLower(m.me)
 	need := 0
 	for _, p := range m.prs {
-		if p.IsDraft || strings.ToLower(p.Author.Login) == me {
+		if p.IsDraft {
 			continue
 		}
-		if _, _, needsYou, _ := m.decision(p, nil); needsYou {
+		label, _, needsYou, _ := m.decision(p, nil)
+		// my own PR counts only when it is stuck on me (a conflict, a red check)
+		if strings.ToLower(p.Author.Login) == me && label != model.LabelStuck {
+			continue
+		}
+		if needsYou {
 			need++
 		}
 	}
@@ -668,6 +673,10 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 	status = append(status, scenes.Chip("approved by me", "chip.mine")...)
 	status = append(status, sp)
 	status = append(status, scenes.Chip("changes requested", "chip.changes")...)
+	status = append(status, sp)
+	status = append(status, scenes.Chip(model.LabelReReview, model.ChipForLabel[model.LabelReReview])...)
+	status = append(status, sp)
+	status = append(status, scenes.Chip(model.LabelStuck, model.ChipForLabel[model.LabelStuck])...)
 	status = append(status, sp)
 	status = append(status, scenes.Chip("DRAFT", "chip.draft")...)
 	rows = append(rows, nil, ci, status)
