@@ -44,6 +44,7 @@ func (m *Model) openFortressCity(city string) {
 	if f.view == nil {
 		f.view = fortress.NewView(city)
 		f.view.Build = m.fortressBuild
+		f.view.Epigraph = m.cfg == nil || m.cfg.Display.FortressEpigraph
 	}
 	f.view.Open(city)
 	m.view = ViewFortress
@@ -132,6 +133,13 @@ func (m *Model) fortressKey(k widgets.Key) bool {
 		v.SetZoom(fortress.ZoomFit)
 	case k.Rune == 'c':
 		m.openFortressCity(fortress.NextCity(v.City))
+	case k.Rune == 'b':
+		v.Epigraph = !v.Epigraph
+		if v.Epigraph {
+			m.setStatus("the map's epigraph: on (Borges, " + fortress.EpigraphTitle + ") — b hides it")
+		} else {
+			m.setStatus("the map's epigraph: off — b shows it")
+		}
 	case isEnter(k):
 		under := v.Under()
 		switch {

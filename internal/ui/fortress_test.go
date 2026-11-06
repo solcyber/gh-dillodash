@@ -233,3 +233,39 @@ func TestFortressLanesPerRepo(t *testing.T) {
 		t.Errorf("counts: dwarves %d ruins %d statues %d", d, r, st)
 	}
 }
+
+func TestFortressEpigraphToggle(t *testing.T) {
+	h := fortressHarness(t, "manhattan")
+	h.m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	h.key('d')
+	if !h.m.fortress.view.Epigraph || !strings.Contains(h.screen(), fortress.EpigraphTitle) {
+		t.Fatalf("the epigraph is not on by default:\n%s", h.screen())
+	}
+	if !strings.Contains(h.screen(), "Borges") {
+		t.Error("the key bar lacks b Borges")
+	}
+	h.key('b')
+	if h.m.fortress.view.Epigraph || strings.Contains(h.screen(), fortress.EpigraphTitle) || !strings.Contains(h.m.status, "epigraph: off") {
+		t.Errorf("b did not hide it: status %q", h.m.status)
+	}
+	h.key('b')
+	if !strings.Contains(h.screen(), fortress.EpigraphTitle) || !strings.Contains(h.m.status, "epigraph: on") {
+		t.Errorf("b did not bring it back: status %q", h.m.status)
+	}
+	// the setting survives the next city
+	h.key('b')
+	h.key('c')
+	if strings.Contains(h.screen(), fortress.EpigraphTitle) {
+		t.Error("the next city brought the epigraph back")
+	}
+}
+
+func TestFortressEpigraphConfigOff(t *testing.T) {
+	h := fortressHarness(t, "chicago")
+	h.m.cfg.Display.FortressEpigraph = false
+	h.m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	h.key('d')
+	if h.m.fortress.view.Epigraph || strings.Contains(h.screen(), fortress.EpigraphTitle) {
+		t.Error("fortress_epigraph = false still shows it")
+	}
+}

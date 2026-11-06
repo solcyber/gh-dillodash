@@ -718,3 +718,99 @@ func TestKowloonGeography(t *testing.T) {
 }
 
 func KowloonXY2y(lat float64) float64 { _, y := KowloonXY(lat, 114.1903); return y }
+
+func TestEpigraphKeepsOffWhatMatters(t *testing.T) {
+	glyphs.Use(glyphs.ASCII)
+	defer glyphs.Use(glyphs.Nerd)
+	for _, city := range CityKeys {
+		for _, size := range [][2]int{{60, 200}, {50, 160}, {40, 120}} {
+			h, w := size[0], size[1]
+			v := newTestView(t, fixtureInput())
+			v.Open(city)
+			v.Epigraph = true
+			v.Prepare(h, w, "g1", true)
+			c := canvas.New(w, h)
+			v.Draw(c, h, w, Frame{Still: true, Tier: theme.Mono, Season: "x"})
+			screen := strings.Join(c.Lines(), "\n")
+			p := v.epi
+			if p == nil || !p.ok || !v.EpigraphShown() {
+				t.Fatalf("%s %dx%d: no epigraph", city, w, h)
+			}
+			for _, want := range []string{EpigraphTitle, "J. L. Borges", "Disciplines of", "Lerida, 1658"} {
+				if !strings.Contains(strings.ReplaceAll(screen, "\n", " "), want) && !strings.Contains(screen, want) {
+					t.Errorf("%s %dx%d: screen lacks %q:\n%s", city, w, h, want, screen)
+				}
+			}
+			if strings.ContainsAny(screen, "…—é") {
+				t.Errorf("%s %dx%d: non-ASCII text in the ASCII set", city, w, h)
+			}
+			in := func(y, x int) bool {
+				return y >= p.top && y < p.top+p.bh && x >= p.left-1 && x <= p.left+p.bw
+			}
+			// never the panels, the cursor or the log
+			pl, pt := v.panelsBox(h, w)
+			if p.left+p.bw >= pl-1 && p.top+p.bh > pt {
+				t.Errorf("%s %dx%d: the epigraph %+v reaches the panels at (%d, %d)", city, w, h, p, pt, pl)
+			}
+			if in(2+v.Cur.R-v.Top, Margin+v.Cur.C-v.Left) {
+				t.Errorf("%s %dx%d: the epigraph hides the cursor", city, w, h)
+			}
+			if p.top < 5 && p.left < Margin+61 {
+				t.Errorf("%s %dx%d: the epigraph covers the log", city, w, h)
+			}
+			// nor, given the room, any thing on the map (at 120x40 there
+			// is none: the least it can cover, and the cursor moves it)
+			if w < 160 {
+				continue
+			}
+			for cell := range v.Cells {
+				if in(2+cell.R-v.Top, Margin+cell.C-v.Left) {
+					t.Errorf("%s %dx%d: the epigraph covers %v", city, w, h, cell)
+				}
+			}
+		}
+	}
+}
+
+func TestEpigraphFollowsTheCursorAndToggles(t *testing.T) {
+	glyphs.Use(glyphs.ASCII)
+	defer glyphs.Use(glyphs.Nerd)
+	h, w := 50, 160
+	v := newTestView(t, fixtureInput())
+	v.Epigraph = true
+	v.Prepare(h, w, "g1", true)
+	draw := func() string {
+		c := canvas.New(w, h)
+		v.Draw(c, h, w, Frame{Still: true, Tier: theme.Mono})
+		return strings.Join(c.Lines(), "\n")
+	}
+	draw()
+	first := *v.epi
+	// a step that keeps its distance leaves the box where it is
+	v.Move(0, 1)
+	draw()
+	if v.epi.top != first.top || v.epi.left != first.left {
+		t.Errorf("the box moved for a far cursor: %+v -> %+v", first, *v.epi)
+	}
+	// walking into it moves the box off the cursor
+	v.Cur = Cell{first.top - 2 + first.bh/2 + v.Top, first.left - Margin + first.bw/2 + v.Left}
+	draw()
+	p := v.epi
+	cy, cx := 2+v.Cur.R-v.Top, Margin+v.Cur.C-v.Left
+	if p.ok && cy >= p.top && cy < p.top+p.bh && cx >= p.left && cx < p.left+p.bw {
+		t.Errorf("the box %+v hides the cursor at (%d, %d)", *p, cy, cx)
+	}
+	// off: no box
+	v.Epigraph = false
+	if s := draw(); strings.Contains(s, EpigraphTitle) || v.EpigraphShown() {
+		t.Error("the epigraph shows while off")
+	}
+	// too small a screen: no box rather than a clipped one
+	v.Epigraph = true
+	v.Prepare(20, 60, "g1", true)
+	c := canvas.New(60, 20)
+	v.Draw(c, 20, 60, Frame{Still: true, Tier: theme.Mono})
+	if strings.Contains(strings.Join(c.Lines(), "\n"), EpigraphTitle) || v.EpigraphShown() {
+		t.Error("a 60x20 screen drew the epigraph")
+	}
+}
