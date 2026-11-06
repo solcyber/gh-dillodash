@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
@@ -119,5 +120,41 @@ func TestRequestedReposListOnlyMyPRs(t *testing.T) {
 	h.key('r')
 	if s := h.screen(); !strings.Contains(s, "#101") {
 		t.Errorf("the review repo's list must survive a failed search:\n%s", s)
+	}
+}
+
+// TestOpenFirstTierListsUnrequestedPRs: with promote's first_tier_reviews
+// = "open", every open PR into a requested repo's first tier joins the
+// list, though nobody asked for a review; a bot's does not, and a PR into
+// another branch still needs the request.
+func TestOpenFirstTierListsUnrequestedPRs(t *testing.T) {
+	h := newHarness(t)
+	etl := model.Repo{Owner: "acme", Name: "etl"}
+	agent := pr(etl, 206, "opt-out flag for the digest", "agent-x", false)
+	agent.BaseRefName = "dev"
+	bump := pr(etl, 207, "bump the actions group", "dependabot", false)
+	bump.BaseRefName = "dev"
+	h.gh.OpenInto = []*model.PR{agent, bump}
+	h.m.requested = []model.Repo{etl}
+	h.m.cfg.Reviews.Requested = []model.Repo{etl}
+	pc := config.DefaultPromote()
+	pc.Repos, pc.FirstTierReviews = []model.Repo{etl}, "open"
+	h.m.cfg.Promote = pc
+	h.m.multi = true
+	h.load()
+	s := h.screen()
+	if !strings.Contains(s, "etl#206") {
+		t.Errorf("an unrequested first-tier PR should list:\n%s", s)
+	}
+	if strings.Contains(s, "etl#207") {
+		t.Errorf("a bot's PR should not list:\n%s", s)
+	}
+	if n := h.gh.Reads["open_into"]; n != 1 {
+		t.Errorf("open_into reads %d", n)
+	}
+	pc.FirstTierReviews = "requested"
+	h.key('r')
+	if s := h.screen(); strings.Contains(s, "etl#206") {
+		t.Errorf("first_tier_reviews = requested lists only requested PRs:\n%s", s)
 	}
 }

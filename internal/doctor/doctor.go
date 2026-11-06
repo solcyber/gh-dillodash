@@ -222,6 +222,12 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 	} else {
 		on("waiting_runs", false, "")
 	}
+	if pm := cfg.Promote; pm != nil {
+		on("promote", true, fmt.Sprintf("  repos: %s; tiers %s → %s → %s; first-tier PRs listed: %s",
+			joinRepos(pm.Repos), pm.First(), pm.Stage(), pm.Prod(), pm.FirstTierReviews))
+	} else {
+		on("promote", false, "")
+	}
 	if listed > 0 && readOnly == listed {
 		failed = true
 		fmt.Fprintln(w, "write: FAILED: every review repo is read-only to this token, so the dashboard could only watch — gh auth switch to an account with push, or ask for it")

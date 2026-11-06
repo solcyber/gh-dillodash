@@ -191,3 +191,38 @@ func (g *repoGuard) SetIssueState(ctx context.Context, repo model.Repo, number i
 	}
 	return g.Client.SetIssueState(ctx, repo, number, state, reason)
 }
+
+func (g *repoGuard) CreateBranch(ctx context.Context, repo model.Repo, branch, sha string) error {
+	if err := g.check(repo, "creating a branch"); err != nil {
+		return err
+	}
+	return g.Client.CreateBranch(ctx, repo, branch, sha)
+}
+
+func (g *repoGuard) DeleteRef(ctx context.Context, repo model.Repo, ref string) error {
+	if err := g.check(repo, "deleting a ref"); err != nil {
+		return err
+	}
+	return g.Client.DeleteRef(ctx, repo, ref)
+}
+
+func (g *repoGuard) CommitOnBranch(ctx context.Context, repo model.Repo, branch, expectedHead, headline, body string, adds []model.FileAdd, dels []string) (string, error) {
+	if err := g.check(repo, "committing"); err != nil {
+		return "", err
+	}
+	return g.Client.CommitOnBranch(ctx, repo, branch, expectedHead, headline, body, adds, dels)
+}
+
+func (g *repoGuard) CreatePR(ctx context.Context, repo model.Repo, base, head, title, body string) (int, error) {
+	if err := g.check(repo, "opening a pull request"); err != nil {
+		return 0, err
+	}
+	return g.Client.CreatePR(ctx, repo, base, head, title, body)
+}
+
+func (g *repoGuard) CreateTag(ctx context.Context, repo model.Repo, name, message, sha string) error {
+	if err := g.check(repo, "tagging"); err != nil {
+		return err
+	}
+	return g.Client.CreateTag(ctx, repo, name, message, sha)
+}

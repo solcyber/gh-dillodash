@@ -176,6 +176,25 @@ enabled = false
 # poll_secs = 30                            # read the waiting runs this often between refreshes (floor 10; 0 = with the refresh only)
 
 # ============================================================================
+# Workflow: promote
+# Branch-per-tier repos (a first tier, a staging tier, production): one row
+# per change shows where it is and its tier's deploy. p moves it one tier on
+# (opens the promotion PR, merges it, tags the staging unit go or hold); D
+# approves the deploy its tier waits on. Production is reached through the
+# release PR (release_pr).
+# ============================================================================
+[workflows.promote]
+enabled = false
+# repos = []                                # default: every [reviews] repo (name requested repos here to follow them)
+# tiers = ["dev", "stage", "main"]          # first, staging, production
+# first_tier_reviews = "requested"          # "open": every open PR into the first tier joins the list (a requested repo's), not only the ones that ask for your review
+# lookback_days = 14                        # read the PRs merged this many days back
+# go_tag_prefix = "go/"                     # default: release_pr's
+# hold_tag_prefix = "hold/"                 # default: release_pr's
+# branch_prefix = "promote/"                # a promotion branch is <prefix><number>-<staging tier>
+# approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
+
+# ============================================================================
 # Dispatch — the workflows X may run (nothing else is ever dispatched).
 # Each entry is a workflow file run with workflow_dispatch, or a
 # repository_dispatch event; X picks one, asks each input, shows the exact

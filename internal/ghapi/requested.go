@@ -26,6 +26,12 @@ const requestedFirst = 50
 // repos (each group's qualifiers under requestedQueryMax) times each of
 // requestedWhose.
 func requestedSearches(repos []model.Repo) []string {
+	return repoSearches(repos, requestedWhose)
+}
+
+// repoSearches is the search text for each group of repos (each group's
+// qualifiers under requestedQueryMax) times each of whose.
+func repoSearches(repos []model.Repo, whose []string) []string {
 	var groups []string
 	cur := ""
 	for _, r := range repos {
@@ -44,7 +50,7 @@ func requestedSearches(repos []model.Repo) []string {
 	}
 	var out []string
 	for _, g := range groups {
-		for _, w := range requestedWhose {
+		for _, w := range whose {
 			out = append(out, "is:pr is:open archived:false "+w+" "+g)
 		}
 	}
@@ -75,11 +81,22 @@ type requestedSearch struct {
 // A search that fails is a note; the call fails only when the request
 // does.
 func (c *GitHub) ListRequested(ctx context.Context, repos []model.Repo) (ListResult, error) {
+	return c.listSearches(ctx, repos, requestedSearches(repos), "requested repos")
+}
+
+// ListOpenInto reads every open, non-draft PR into base in repos (the
+// promote workflow's first_tier_reviews = "open"): PRs only, de-duped.
+func (c *GitHub) ListOpenInto(ctx context.Context, repos []model.Repo, base string) (ListResult, error) {
+	return c.listSearches(ctx, repos, repoSearches(repos, []string{"draft:false base:" + base}), "open "+base+" PRs")
+}
+
+// listSearches runs searches in one request of aliases and keeps the PRs
+// of repos; what names them in notes.
+func (c *GitHub) listSearches(ctx context.Context, repos []model.Repo, searches []string, what string) (ListResult, error) {
 	var out ListResult
 	if len(repos) == 0 {
 		return out, nil
 	}
-	searches := requestedSearches(repos)
 	vars := make(map[string]any, len(searches))
 	for i, q := range searches {
 		vars[fmt.Sprintf("q%d", i)] = q
@@ -108,7 +125,7 @@ func (c *GitHub) ListRequested(ctx context.Context, repos []model.Repo) (ListRes
 					break
 				}
 			}
-			out.Notes = append(out.Notes, "requested repos: a search failed ("+msg+")")
+			out.Notes = append(out.Notes, what+": a search failed ("+msg+")")
 			continue
 		}
 		for _, raw := range s.Nodes {
@@ -134,7 +151,7 @@ func (c *GitHub) ListRequested(ctx context.Context, repos []model.Repo) (ListRes
 			out.PRs = append(out.PRs, &p)
 		}
 		if s.IssueCount > len(s.Nodes) {
-			out.Notes = append(out.Notes, fmt.Sprintf("requested repos: showing %d of %d PRs for %q", len(s.Nodes), s.IssueCount, strings.Fields(searches[i])[3]))
+			out.Notes = append(out.Notes, fmt.Sprintf("%s: showing %d of %d PRs for %q", what, len(s.Nodes), s.IssueCount, strings.Fields(searches[i])[3]))
 		}
 	}
 	return out, nil

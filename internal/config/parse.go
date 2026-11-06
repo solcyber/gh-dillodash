@@ -415,6 +415,7 @@ func (p *parser) parse(data []byte, ov Overrides) *Config {
 	p.parseMaintenanceWindow(wt, cfg)
 	p.parseReleasePR(wt, cfg)
 	p.parseWaitingRuns(wt, cfg)
+	p.parsePromote(wt, cfg)
 	p.parseDispatch(wt, cfg)
 	wt.done()
 	p.checkAllowedRepos(cfg)
@@ -448,6 +449,9 @@ func (p *parser) checkAllowedRepos(cfg *Config) {
 	}
 	if wr := cfg.WaitingRuns; wr != nil {
 		outside("[workflows.waiting_runs] repos", wr.Repos...)
+	}
+	if pr := cfg.Promote; pr != nil {
+		outside("[workflows.promote] repos", pr.Repos...)
 	}
 	for _, d := range cfg.Dispatches {
 		outside(fmt.Sprintf("[[workflows.dispatch]] %q", d.Name), d.Repo)

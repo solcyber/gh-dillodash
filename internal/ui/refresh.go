@@ -70,6 +70,10 @@ func (m *Model) refresh(again bool) {
 	m.lastRefresh = started
 	m.nextRefreshAt = started + float64(m.cfg.Display.RefreshSecs)
 	gh, repos, requested, wf, ctx := m.gh, m.repos, m.requested, m.wf, m.ctx
+	openFirst, firstTier, bots := m.cfg.OpenFirstTier(), "", m.cfg.Bots
+	if len(openFirst) > 0 {
+		firstTier = m.cfg.Promote.First()
+	}
 	ci, ahead, me := m.ci, m.ahead, m.me
 	go func() {
 		out := &refreshResult{started: started}
@@ -124,10 +128,32 @@ func (m *Model) refresh(again bool) {
 				}
 				for _, p := range rq.PRs {
 					if !have[p.Ident()] {
+						have[p.Ident()] = true
 						out.allPRs = append(out.allPRs, p)
 					}
 				}
 				warns = append(warns, rq.Notes...)
+				if len(openFirst) > 0 {
+					// promote's first_tier_reviews = "open": every open PR
+					// into the first tier joins, whoever opened it and
+					// whether or not a review was requested, bots aside
+					op, err := gh.ListOpenInto(ctx, openFirst, firstTier)
+					if err != nil {
+						if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
+							out.err, out.retryAt = err.Error(), e.RetryAt
+							return
+						}
+						warns = append(warns, "open "+firstTier+" PRs: "+err.Error())
+					} else {
+						for _, p := range op.PRs {
+							if !have[p.Ident()] && !bots.IsBot(p.Author.Login) {
+								have[p.Ident()] = true
+								out.allPRs = append(out.allPRs, p)
+							}
+						}
+						warns = append(warns, op.Notes...)
+					}
+				}
 			}
 		}
 		ahead.annotate(ctx, gh, out.allPRs, me)

@@ -24,6 +24,8 @@ var ShotCaptions = map[string]string{
 	"release-launch":         "When a release lands: a kaleidoscope tunnel, spiral-galaxy fireworks, Amos tumbling through every hue and RELEASED! swinging in rainbow block letters",
 	"release-launch-burst":   "The rocket bursts: rainbow ripples roll out through the tunnel and the first spiral galaxy wheels open",
 	"waiting-runs":           "The waiting approvals section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is",
+	"promote":                "The promote section: each change on its way to production, where it is (on dev, in a promotion PR, on stage with its go or hold tag) and what its tier's deploy did",
+	"promote-tag":            "p on a staging unit: tag it go for the next release cut, or hold to keep it on stage",
 	"waiting-runs-approve":   "D on a waiting run: the environments you review, confirmed before they are approved",
 	"window-card":            "A PR queued for the maintenance window, opened: its plan card, disruptive and revertible",
 	"fortress-chicago":       "Fortress mode over Chicago: Madison is today and older work lies south toward Indiana, Lake Michigan to the east",

@@ -35,6 +35,11 @@ type Call struct {
 	Names   []string       // add_labels, remove_label: the labels; add/remove_assignees: the logins
 	State   string         // set_state: "open" or "closed"
 	Reason  string         // set_state: completed, not_planned or ""
+	// create_branch, delete_ref, commit_on_branch, create_pr, create_tag:
+	// Ref is the branch, ref or tag; SHA the target or expected head;
+	// Title the headline or PR title; Body the body or tag message;
+	// Names the paths written ("+path") and deleted ("-path"); Event the
+	// PR's base.
 }
 
 // Client is the fake. Fill the maps, then hand it to the UI; every
@@ -56,6 +61,9 @@ type Client struct {
 	// Requested are ListRequested's PRs (the ones in the asked repos are
 	// served; Repo must be set).
 	Requested []*model.PR
+	// OpenInto are ListOpenInto's PRs (the ones in the asked repos whose
+	// base is the asked branch and that are not drafts are served).
+	OpenInto []*model.PR
 	// Open is ListOpen's answer per repo; a repo missing from the map
 	// gets a "repository not visible" Err.
 	Open map[model.Repo]ghapi.ListResult
@@ -102,6 +110,21 @@ type Client struct {
 	Releases map[model.Repo]ghapi.ReleaseRepo
 	// FileData is FileContents' answer, keyed "owner/name:path".
 	FileData map[string][]byte
+
+	// Promote are PromotePRs' answers per repo; Ancestors IsAncestor's,
+	// keyed "a..b" (absent: false); Changes CommitChange's per sha;
+	// BlobSHAs BlobAt's, keyed "ref:path" (absent: no such file);
+	// BlobData BlobBase64's per blob sha; Heads BranchHead's, keyed
+	// "owner/name@branch". A successful CreateBranch sets Heads, and
+	// CommitOnBranch moves it to "c0mmit<n>".
+	Promote   map[model.Repo]ghapi.PromoteSet
+	Ancestors map[string]bool
+	Changes   map[string]model.CommitChange
+	BlobSHAs  map[string]string
+	BlobData  map[string]string
+	Heads     map[string]string
+	// NextPR is the number CreatePR hands back (0: 900).
+	NextPR int
 
 	// Teams is each "org/team"'s members for TeamMember; a team that is
 	// not in the map is unreadable.
@@ -807,4 +830,189 @@ func (f *Client) FileContents(ctx context.Context, repo model.Repo, path, ref st
 	}
 	sum := sha256.Sum256(data)
 	return append([]byte(nil), data...), hex.EncodeToString(sum[:])[:40], nil
+}
+
+// ---- promotion ----
+
+// PromotePRs serves Promote[repo].
+func (f *Client) PromotePRs(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (ghapi.PromoteSet, error) {
+	if err := f.fail("promote_prs"); err != nil {
+		return ghapi.PromoteSet{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Promote[repo], nil
+}
+
+// IsAncestor serves Ancestors["a..b"]; a == b is always true.
+func (f *Client) IsAncestor(ctx context.Context, repo model.Repo, a, b string) (bool, error) {
+	if err := f.fail("is_ancestor"); err != nil {
+		return false, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return a == b || f.Ancestors[a+".."+b], nil
+}
+
+// CommitChange serves Changes[sha].
+func (f *Client) CommitChange(ctx context.Context, repo model.Repo, sha string) (model.CommitChange, error) {
+	if err := f.fail("commit_change"); err != nil {
+		return model.CommitChange{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c, ok := f.Changes[sha]
+	if !ok {
+		return c, &ghapi.Error{Status: 404, Message: "no commit " + sha}
+	}
+	return c, nil
+}
+
+// BlobAt serves BlobSHAs["ref:path"].
+func (f *Client) BlobAt(ctx context.Context, repo model.Repo, path, ref string) (string, bool, error) {
+	if err := f.fail("blob_at"); err != nil {
+		return "", false, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	sha, ok := f.BlobSHAs[ref+":"+path]
+	return sha, ok, nil
+}
+
+// BlobBase64 serves BlobData[sha].
+func (f *Client) BlobBase64(ctx context.Context, repo model.Repo, sha string) (string, error) {
+	if err := f.fail("blob"); err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, ok := f.BlobData[sha]
+	if !ok {
+		return "", &ghapi.Error{Status: 404, Message: "no blob " + sha}
+	}
+	return d, nil
+}
+
+// BranchHead serves Heads["owner/name@branch"].
+func (f *Client) BranchHead(ctx context.Context, repo model.Repo, branch string) (string, error) {
+	if err := f.fail("branch_head"); err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	h, ok := f.Heads[repo.String()+"@"+branch]
+	if !ok {
+		return "", &ghapi.Error{Status: 404, Message: "no branch " + branch}
+	}
+	return h, nil
+}
+
+// CreateBranch records the call and sets the branch's head; an existing
+// branch is a 422, as on GitHub.
+func (f *Client) CreateBranch(ctx context.Context, repo model.Repo, branch, sha string) error {
+	if err := f.fail("create_branch"); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	key := repo.String() + "@" + branch
+	if _, ok := f.Heads[key]; ok {
+		f.mu.Unlock()
+		return &ghapi.Error{Status: 422, Message: "Reference already exists"}
+	}
+	if f.Heads == nil {
+		f.Heads = map[string]string{}
+	}
+	f.Heads[key] = sha
+	f.recordLocked(Call{Op: "create_branch", Repo: repo, Ref: branch, SHA: sha})
+	f.mu.Unlock()
+	return nil
+}
+
+// DeleteRef records the call (and forgets a branch's head).
+func (f *Client) DeleteRef(ctx context.Context, repo model.Repo, ref string) error {
+	if err := f.fail("delete_ref"); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	if b, ok := strings.CutPrefix(ref, "heads/"); ok {
+		delete(f.Heads, repo.String()+"@"+b)
+	}
+	f.recordLocked(Call{Op: "delete_ref", Repo: repo, Ref: ref})
+	f.mu.Unlock()
+	return nil
+}
+
+// CommitOnBranch records the call; the branch must be at expectedHead.
+func (f *Client) CommitOnBranch(ctx context.Context, repo model.Repo, branch, expectedHead, headline, body string, adds []model.FileAdd, dels []string) (string, error) {
+	if err := f.fail("commit_on_branch"); err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	key := repo.String() + "@" + branch
+	if f.Heads[key] != expectedHead {
+		f.mu.Unlock()
+		return "", fmt.Errorf("createCommitOnBranch: expected head %s, branch is at %s", expectedHead, f.Heads[key])
+	}
+	var names []string
+	for _, a := range adds {
+		names = append(names, "+"+a.Path)
+	}
+	for _, d := range dels {
+		names = append(names, "-"+d)
+	}
+	oid := fmt.Sprintf("c0mmit%d", len(f.Calls))
+	f.Heads[key] = oid
+	f.recordLocked(Call{Op: "commit_on_branch", Repo: repo, Ref: branch, SHA: expectedHead, Title: headline, Body: body, Names: names})
+	f.mu.Unlock()
+	return oid, nil
+}
+
+// CreatePR records the call and hands back NextPR (900 when unset).
+func (f *Client) CreatePR(ctx context.Context, repo model.Repo, base, head, title, body string) (int, error) {
+	if err := f.fail("create_pr"); err != nil {
+		return 0, err
+	}
+	f.mu.Lock()
+	n := f.NextPR
+	if n == 0 {
+		n = 900
+	}
+	f.recordLocked(Call{Op: "create_pr", Repo: repo, Number: n, Ref: head, Event: base, Title: title, Body: body})
+	f.mu.Unlock()
+	return n, nil
+}
+
+// CreateTag records the call and adds the tag to Tags.
+func (f *Client) CreateTag(ctx context.Context, repo model.Repo, name, message, sha string) error {
+	if err := f.fail("create_tag"); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	if f.Tags == nil {
+		f.Tags = map[model.Repo][]string{}
+	}
+	f.Tags[repo] = append(f.Tags[repo], name)
+	f.recordLocked(Call{Op: "create_tag", Repo: repo, Ref: name, SHA: sha, Body: message})
+	f.mu.Unlock()
+	return nil
+}
+
+// ListOpenInto serves the OpenInto PRs in repos into base.
+func (f *Client) ListOpenInto(ctx context.Context, repos []model.Repo, base string) (ghapi.ListResult, error) {
+	if err := f.fail("open_into"); err != nil {
+		return ghapi.ListResult{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := map[model.Repo]bool{}
+	for _, r := range repos {
+		want[r] = true
+	}
+	var out ghapi.ListResult
+	for _, p := range f.OpenInto {
+		if want[p.Repo] && p.BaseRefName == base && !p.IsDraft {
+			out.PRs = append(out.PRs, p)
+		}
+	}
+	return out, nil
 }
