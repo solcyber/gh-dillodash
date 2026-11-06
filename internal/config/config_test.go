@@ -747,3 +747,46 @@ requested_repos = ["Acme/Infra"]
 		t.Errorf("--repo: %v %+v", err, c.Reviews)
 	}
 }
+
+// TestPromote: [workflows.promote] reads its keys, takes release_pr's tag
+// prefixes, lists the open first tier only for requested repos, and
+// checks its tiers.
+func TestPromote(t *testing.T) {
+	src := "[reviews]\nrepos = [\"acme/infra\"]\nrequested_repos = [\"acme/web\"]\n" +
+		"[workflows.release_pr]\nenabled = true\nrepos = [\"acme/web\"]\ngo_tag_prefix = \"ship/\"\nhold_tag_prefix = \"wait/\"\n" +
+		"[workflows.promote]\nenabled = true\nrepos = [\"acme/web\", \"acme/infra\", \"acme/lost\"]\ntiers = [\"dev\", \" stage \", \"main\"]\n" +
+		"first_tier_reviews = \"open\"\nlookback_days = 7\nbranch_prefix = \"up/\"\n"
+	c := mustParse(t, src)
+	p := c.Promote
+	if p == nil {
+		t.Fatal("promote off")
+	}
+	if p.First() != "dev" || p.Stage() != "stage" || p.Prod() != "main" || p.LookbackDays != 7 || p.BranchPrefix != "up/" {
+		t.Errorf("promote = %+v", p)
+	}
+	if p.GoTagPrefix != "ship/" || p.HoldTagPrefix != "wait/" {
+		t.Errorf("prefixes %q %q, want release_pr's", p.GoTagPrefix, p.HoldTagPrefix)
+	}
+	if got := c.OpenFirstTier(); len(got) != 1 || got[0].String() != "acme/web" {
+		t.Errorf("open first tier = %v, want the requested repo only", got)
+	}
+	if w := strings.Join(c.Warnings, "\n"); !strings.Contains(w, "acme/lost is in neither [reviews] repos nor requested_repos") {
+		t.Errorf("warnings %q", c.Warnings)
+	}
+	for name, bad := range map[string]string{
+		"two tiers":   "tiers = [\"dev\", \"main\"]\n",
+		"repeated":    "tiers = [\"dev\", \"dev\", \"main\"]\n",
+		"choice":      "first_tier_reviews = \"codeowner\"\n",
+		"lookback":    "lookback_days = 0\n",
+		"same tags":   "go_tag_prefix = \"x/\"\nhold_tag_prefix = \"x/\"\n",
+		"placeholder": "approval_comment = \"{sha}\"\n",
+	} {
+		if _, err := parse(t, minimal+"[workflows.promote]\nenabled = true\n"+bad); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	c = mustParse(t, minimal+"[workflows.promote]\nenabled = true\n")
+	if c.Promote.Repos[0].String() != "acme/infra" || c.Promote.FirstTierReviews != "requested" || c.OpenFirstTier() != nil {
+		t.Errorf("defaults %+v", c.Promote)
+	}
+}

@@ -38,6 +38,7 @@ type Config struct {
 	MaintenanceWindow *MaintenanceWindowConfig
 	ReleasePR         *ReleasePRConfig
 	WaitingRuns       *WaitingRunsConfig
+	Promote           *PromoteConfig
 	// Dispatches are the [[workflows.dispatch]] entries X may run; none
 	// means X is off.
 	Dispatches []DispatchConfig

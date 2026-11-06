@@ -37,7 +37,13 @@ func (r Repo) IsZero() bool { return r.Owner == "" && r.Name == "" }
 type Actor struct {
 	Login string `json:"login"`
 	Name  string `json:"name,omitempty"`
+	// Type is the GraphQL __typename where a query asks for it: "Bot" for
+	// a GitHub App (dependabot), "User" for an account.
+	Type string `json:"__typename,omitempty"`
 }
+
+// IsApp reports a GitHub App author (where the query read the type).
+func (a Actor) IsApp() bool { return a.Type == "Bot" }
 
 // Label is a label name.
 type Label struct {

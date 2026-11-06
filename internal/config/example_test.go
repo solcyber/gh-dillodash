@@ -124,6 +124,11 @@ func TestExampleCoversEveryKey(t *testing.T) {
 	if !reflect.DeepEqual(c.WaitingRuns, wr) {
 		t.Errorf("waiting_runs defaults differ:\n got %+v\nwant %+v", c.WaitingRuns, wr)
 	}
+	pm := DefaultPromote()
+	pm.Repos = c.Reviews.Repos
+	if !reflect.DeepEqual(c.Promote, pm) {
+		t.Errorf("promote defaults differ:\n got %+v\nwant %+v", c.Promote, pm)
+	}
 	if !strings.HasSuffix(rp.Cache, "release-repos-acme.json") {
 		t.Errorf("cache = %q", rp.Cache)
 	}

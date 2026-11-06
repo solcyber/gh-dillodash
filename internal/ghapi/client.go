@@ -134,6 +134,9 @@ type Client interface {
 	// reviewed, or that I opened: PRs only, de-duped. A failed search is
 	// a note; the call fails only when the request does.
 	ListRequested(ctx context.Context, repos []model.Repo) (ListResult, error)
+	// ListOpenInto reads every open, non-draft PR into base in repos
+	// (promote's first_tier_reviews = "open"): PRs only, de-duped.
+	ListOpenInto(ctx context.Context, repos []model.Repo, base string) (ListResult, error)
 	// LastRate is the GraphQL budget from the latest list-shaped query.
 	LastRate() *model.RateLimit
 
@@ -225,6 +228,26 @@ type Client interface {
 	// tips of prodBranch and stageBranch, one query per repo with at
 	// most six in flight. A rate limit fails the whole call.
 	ReleasePRs(ctx context.Context, repos []model.Repo, prodBranch, stageBranch string) (map[model.Repo]ReleaseRepo, error)
+
+	// Promotion (the promote workflow). PromotePRs reads one repo's PRs
+	// merged into first and stage since a date and open into stage.
+	// IsAncestor reports a on b's history. CommitChange is a commit's
+	// parents and files; BlobAt a path's blob sha at a ref (exists false
+	// on a 404); BlobBase64 a blob's content; BranchHead a branch's tip.
+	PromotePRs(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (PromoteSet, error)
+	IsAncestor(ctx context.Context, repo model.Repo, a, b string) (bool, error)
+	CommitChange(ctx context.Context, repo model.Repo, sha string) (model.CommitChange, error)
+	BlobAt(ctx context.Context, repo model.Repo, path, ref string) (sha string, exists bool, err error)
+	BlobBase64(ctx context.Context, repo model.Repo, sha string) (string, error)
+	BranchHead(ctx context.Context, repo model.Repo, branch string) (string, error)
+	// CreateBranch, DeleteRef (without "refs/"), CommitOnBranch (GitHub-
+	// signed, only on expectedHead), CreatePR and CreateTag (annotated)
+	// are the promotion's writes (contents and pull requests write).
+	CreateBranch(ctx context.Context, repo model.Repo, branch, sha string) error
+	DeleteRef(ctx context.Context, repo model.Repo, ref string) error
+	CommitOnBranch(ctx context.Context, repo model.Repo, branch, expectedHead, headline, body string, adds []model.FileAdd, dels []string) (string, error)
+	CreatePR(ctx context.Context, repo model.Repo, base, head, title, body string) (int, error)
+	CreateTag(ctx context.Context, repo model.Repo, name, message, sha string) error
 }
 
 // Options configure New.

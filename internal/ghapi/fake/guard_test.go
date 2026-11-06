@@ -40,6 +40,11 @@ func writes(c ghapi.Client, repo model.Repo) map[string]error {
 	out["AddAssignees"] = c.AddAssignees(ctx, repo, 1, []string{"bob"})
 	out["RemoveAssignees"] = c.RemoveAssignees(ctx, repo, 1, []string{"bob"})
 	out["SetIssueState"] = c.SetIssueState(ctx, repo, 1, "closed", "completed")
+	out["CreateBranch"] = c.CreateBranch(ctx, repo, "promote/1-stage", "abc")
+	_, out["CommitOnBranch"] = c.CommitOnBranch(ctx, repo, "promote/1-stage", "abc", "h", "", nil, nil)
+	out["DeleteRef"] = c.DeleteRef(ctx, repo, "heads/promote/1-stage")
+	_, out["CreatePR"] = c.CreatePR(ctx, repo, "stage", "promote/1-stage", "t", "")
+	out["CreateTag"] = c.CreateTag(ctx, repo, "go/1", "m", "abc")
 	return out
 }
 
@@ -82,6 +87,7 @@ func TestWithAllowedReposCoversEveryWrite(t *testing.T) {
 		"WorkflowRuns": true, "WorkflowFileRuns": true, "RunJobs": true, "PRFiles": true, "PRDiff": true,
 		"Compare": true, "TagRefs": true, "OrgRepos": true, "Rulesets": true, "FileContents": true,
 		"Fortress": true, "ReleasePRs": true, "RepoLabels": true,
+		"PromotePRs": true, "ListOpenInto": true, "IsAncestor": true, "CommitChange": true, "BlobAt": true, "BlobBase64": true, "BranchHead": true,
 	}
 	tested := writes(fake.New("alice"), okRepo)
 	typ := reflect.TypeOf((*ghapi.Client)(nil)).Elem()

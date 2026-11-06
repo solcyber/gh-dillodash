@@ -3,6 +3,7 @@ package all
 
 import (
 	_ "github.com/solcyber/gh-dillodash/internal/workflow/maintenancewindow"
+	_ "github.com/solcyber/gh-dillodash/internal/workflow/promote"
 	_ "github.com/solcyber/gh-dillodash/internal/workflow/releasepr"
 	_ "github.com/solcyber/gh-dillodash/internal/workflow/terraformapprove"
 	_ "github.com/solcyber/gh-dillodash/internal/workflow/waitingruns"

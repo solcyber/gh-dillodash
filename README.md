@@ -110,6 +110,7 @@ matching workflow on in the config and dillodash drives it:
 | `terraform_approve` | `a` posts `/approve <plan-id>` from the plan digests on the PR, with the destroy count and the maintenance-window choice; plan cards in the detail view; apply outcomes read back | [docs/workflows/terraform-approve.md](docs/workflows/terraform-approve.md) |
 | `maintenance_window` | a section of PRs queued for a nightly window, grouped by night with the countdown; `w` posts `/attend`, `/release` and `/window-cancel` on the night's manifest issue | [docs/workflows/maintenance-window.md](docs/workflows/maintenance-window.md) |
 | `release_pr` | application releases as PRs into production across many repos, with the staging branch's units by tag; `a` on the row or in the detail approves to queue or posts `/release-now` (NOW alone on a release you already approved or the window bumped), the lane's next release and the slot to cancel; `D` for the environment approvals; `M` the last resort when the dispatch can't run | [docs/workflows/release-pr.md](docs/workflows/release-pr.md) |
+| `promote` | a section of the changes on their way through a branch-per-tier repo (dev → stage → main): where each one is, its tier's deploy, and `p` to move it one tier on (open the promotion PR, merge it, tag the unit go or hold); optionally every open PR into the first tier in the review list | [docs/workflows/promote.md](docs/workflows/promote.md) |
 | `waiting_runs` | a section of Actions runs waiting on an environment approval with no listed PR behind them (a hand-dispatched deploy, an ops run from `main`); `D` approves the environments you review | [docs/workflows/waiting-runs.md](docs/workflows/waiting-runs.md) |
 
 Before any command a bot accepts only from an approver (`/approve`,
@@ -120,8 +121,8 @@ which one), and with `[github] approvers_team = "org/team"` so is a login
 outside the team.
 
 Each doc specifies the comment formats the bot must emit, so any CI can be
-taught to speak them (`waiting_runs` needs no bot: it reads GitHub's own
-Actions and deployment APIs). With no workflow configured dillodash is a plain,
+taught to speak them (`waiting_runs` and `promote` need no bot: they read GitHub's own
+APIs). With no workflow configured dillodash is a plain,
 fast reviewer.
 
 ## Keys

@@ -131,6 +131,9 @@ func Config() *config.Config {
 	wr := config.DefaultWaitingRuns()
 	wr.Repos = Repos
 	cfg.WaitingRuns = wr
+	pm := config.DefaultPromote()
+	pm.Repos = []model.Repo{Repos[1]}
+	cfg.Promote = pm
 	return cfg
 }
 
@@ -173,6 +176,46 @@ func waitingRuns(gh *fake.Client) {
 		7101: {pending("prod", true, "alice", "team:sre")},
 		7102: {pending("prod-db", false, "team:dba")},
 	}
+}
+
+// promotions is the three-tier path of the portal (the promote section):
+// staging's units #905 (go), #907 (hold) and #910 (untagged), as the
+// release fixture has them, the first-tier PRs they carry, a change on
+// dev with its deploy green, and one in an open promotion PR.
+func promotions(gh *fake.Client) {
+	portal := Repos[1]
+	mergedPR := func(n int, base, head, title, author, sha string, age time.Duration) *model.PR {
+		t := at(age)
+		return &model.PR{Repo: portal, Number: n, Title: title, State: "MERGED", BaseRefName: base, HeadRefName: head,
+			CreatedAt: t.Add(-time.Hour), MergedAt: &t, MergeCommit: &model.MergeCommit{Oid: sha}, Author: actor(author)}
+	}
+	promo := &model.PR{Repo: portal, Number: 912, Title: "Promote #886 to stage: accounts CSV export", State: "OPEN",
+		BaseRefName: "stage", HeadRefName: "promote/886-stage", HeadRefOid: "eeee0912", MergeStateStatus: "CLEAN",
+		CreatedAt: at(40 * time.Minute), Author: actor(Me)}
+	gh.Promote = map[model.Repo]ghapi.PromoteSet{portal: {
+		FirstMerged: []*model.PR{
+			mergedPR(880, "dev", "feat-search", "faster search on the accounts list", "bob", "dddd0880", 30*time.Hour),
+			mergedPR(881, "dev", "fix-referral", "the signup form keeps the referral code", "carol", "dddd0881", 26*time.Hour),
+			mergedPR(884, "dev", "billing-invoices", "billing: the new invoice table", "bob", "dddd0884", 3*time.Hour),
+			mergedPR(886, "dev", "accounts-export", "accounts: CSV export", "carol", "dddd0886", 5*time.Hour),
+		},
+		StageMerged: []*model.PR{
+			mergedPR(905, "stage", "promote/880-stage", "Promote #880 to stage: faster search", Me, "bbbb0001", 28*time.Hour),
+			mergedPR(907, "stage", "promote/881-stage", "Promote #881 to stage: referral code", Me, "bbbb0002", 20*time.Hour),
+			mergedPR(910, "stage", "deps-stage", "chore: bump deps", "dependabot", "cccc0003", 2*time.Hour),
+		},
+		StageOpen: []*model.PR{promo},
+	}}
+	gh.PRs[promo.Ident()] = promo
+	ok := func(id int64, name, sha string, age time.Duration) model.WorkflowRun {
+		return model.WorkflowRun{ID: id, Name: name, Status: "completed", Conclusion: "success", Event: "push", HeadSHA: sha, CreatedAt: at(age)}
+	}
+	gh.Runs["dddd0884"] = []model.WorkflowRun{ok(7201, "deploy", "dddd0884", 3*time.Hour)}
+	gh.Runs["bbbb0001"] = []model.WorkflowRun{ok(7202, "deploy", "bbbb0001", 28*time.Hour)}
+	gh.Runs["bbbb0002"] = []model.WorkflowRun{{ID: 7203, Name: "migrate", Status: "waiting", Event: "push", HeadSHA: "bbbb0002",
+		HeadBranch: "stage", Actor: actor(Me), CreatedAt: at(19 * time.Hour)}}
+	gh.Runs["cccc0003"] = []model.WorkflowRun{{ID: 7204, Name: "deploy", Status: "in_progress", Event: "push", HeadSHA: "cccc0003", CreatedAt: at(2 * time.Minute)}}
+	gh.Pending[7203] = []model.PendingDeployment{pending("stg", true, "team:approvers")}
 }
 
 // night is the next night of the configured window as YYYY-MM-DD, and
@@ -350,6 +393,7 @@ func Client() *fake.Client {
 	}
 	gh.Jobs = map[int64][]model.WorkflowJob{4062601: {job}}
 	waitingRuns(gh)
+	promotions(gh)
 	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel, flight}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
 	gh.Tags = map[model.Repo][]string{portal: {"go/905", "hold/907"}}
 	gh.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 3, TotalCommits: 3, Commits: []ghapi.CompareCommit{
