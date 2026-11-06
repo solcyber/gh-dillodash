@@ -110,3 +110,79 @@ func TestRoomStillWithoutMotion(t *testing.T) {
 }
 
 func rawRender(s, style string, _ text.Attr, _, _ bool) string { return style + s }
+
+// TestRoomHangsTheQuote: where the wall has room for it the framed
+// quote hangs on it, whole, clear of the glass, the window's frame and
+// the plaque; where it has none it is left off rather than cut.
+func TestRoomHangsTheQuote(t *testing.T) {
+	in := RoomInfo{Clock: time.Date(2031, 4, 16, 22, 10, 30, 0, time.UTC), Sign: "W · back to work"}
+	for _, c := range []struct {
+		h, w int
+		want bool // the wall has room for it
+	}{
+		{RoomMinH, RoomMinW, false}, {40, 120, false},
+		{48, 160, false}, {60, 200, true}, {89, 172, true}, {66, 111, true}, {70, 240, true},
+	} {
+		for _, tier := range []colorprofile.Profile{colorprofile.TrueColor, colorprofile.Ascii} {
+			cv, l, _ := roomFrame(t, tier, glyphs.Unicode, c.h, c.w, in)
+			var page quotePage
+			var ok bool
+			if pixelRoom(theme.Current()) {
+				st := staticRoom(c.h, c.w, l, RoomInfo{Tier: theme.Current(), Sign: in.Sign})
+				page, ok = st.page, st.hasPage
+			} else {
+				page, ok = quoteLinePage(layout(c.h, c.w, l), 5, false)
+			}
+			all := strings.Join(cv.Lines(), "\n")
+			if !ok {
+				if strings.Contains(all, "Signora") || strings.Contains(all, "Lucy") {
+					t.Errorf("%dx%d %v: a cut-down quote on the wall", c.w, c.h, tier)
+				}
+				if c.want && tier == colorprofile.TrueColor {
+					t.Errorf("%dx%d %v: no quote on the wall", c.w, c.h, tier)
+				}
+				continue
+			}
+			g := layout(c.h, c.w, l)
+			window := cellRect{y: g.rodY - 1, x: g.leftOut, h: g.sillY - g.rodY + 5, w: g.rightIn - g.leftOut + 1}
+			if quoteOverlaps(page.r, window) {
+				t.Errorf("%dx%d %v: the quote %+v is over the window, plaque or curtains %+v", c.w, c.h, tier, page.r, window)
+			}
+			if page.r.x < 0 || page.r.x+page.r.w > c.w || page.r.y < 1 || page.r.y+page.r.h > g.floorY {
+				t.Errorf("%dx%d %v: the quote %+v is off the wall", c.w, c.h, tier, page.r)
+			}
+			// every word of it is there, in order, inside the frame
+			var words []string
+			for y := page.r.y; y < page.r.y+page.r.h; y++ {
+				r := []rune(cv.Text(y))
+				words = append(words, strings.Fields(string(r[page.r.x+1:page.r.x+page.r.w-1]))...)
+			}
+			got := strings.Join(words, " ")
+			got = strings.Trim(got, "─│┌┐└┘ ")
+			if !strings.Contains(got, strings.Join(strings.Fields(forsterQuote), " ")) || !strings.Contains(got, forsterBy) {
+				t.Errorf("%dx%d %v: the quote reads %q", c.w, c.h, tier, got)
+			}
+		}
+	}
+}
+
+// TestRoomQuoteASCII: with the ASCII glyph set the page is plain ASCII.
+func TestRoomQuoteASCII(t *testing.T) {
+	in := RoomInfo{Clock: time.Date(2031, 4, 16, 22, 10, 30, 0, time.UTC), Sign: "W: back to work"}
+	cv, l, _ := roomFrame(t, colorprofile.TrueColor, glyphs.ASCII, 60, 200, in)
+	page, ok := quoteLinePage(layout(60, 200, l), 5, true)
+	if !ok {
+		t.Fatal("no quote at 200x60")
+	}
+	for y := page.r.y; y < page.r.y+page.r.h; y++ {
+		r := []rune(cv.Text(y))
+		for x := page.r.x; x < page.r.x+page.r.w; x++ {
+			if r[x] > '~' {
+				t.Fatalf("(%d,%d) is %q in the ASCII room", y, x, string(r[x]))
+			}
+		}
+	}
+	if s := strings.Join(cv.Lines(), "\n"); !strings.Contains(s, `"The Signora`) || !strings.Contains(s, "- E. M. Forster") {
+		t.Error("the ASCII page has lost its words")
+	}
+}
