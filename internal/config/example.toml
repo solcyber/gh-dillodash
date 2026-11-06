@@ -41,6 +41,7 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # clock_timezone = "America/New_York" # IANA zone of the clock's second time
 # clock_tz_label = ""         # label for it, e.g. "ET"; "" = the zone's own (EST/EDT)
 # room = true                 # in the release window, the dashboard is a view out of a window (W toggles)
+# fortress_epigraph = true    # Borges's "On Exactitude in Science" over the fortress map (b toggles)
 # profile = ""                # a header badge (at most 12 characters), e.g. "OPS": which config this dashboard runs
 
 # ============================================================================
