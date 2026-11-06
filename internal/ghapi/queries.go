@@ -42,7 +42,7 @@ const listPRFragment = `
 fragment ListPR on PullRequest {
   number title isDraft reviewDecision updatedAt createdAt headRefName
   headRefOid baseRefName additions deletions mergeable mergeStateStatus
-  author { login }
+  author { login __typename }
   labels(first: 10) { nodes { name } }
   latestOpinionatedReviews(first: 20) {
     nodes { databaseId author { login } state submittedAt commit { oid } }

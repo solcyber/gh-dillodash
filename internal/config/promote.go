@@ -18,7 +18,7 @@ type PromoteConfig struct {
 	// list shows for a repo in [reviews] requested_repos: "requested" (the
 	// ones that ask for your review, you reviewed or opened, as for any
 	// requested repo) or "open" (every open, non-draft PR not opened by a
-	// [bots] login).
+	// GitHub App; an agent's account counts, even in [bots]).
 	FirstTierReviews string
 	// LookbackDays bounds the merged PRs the view reads.
 	LookbackDays int

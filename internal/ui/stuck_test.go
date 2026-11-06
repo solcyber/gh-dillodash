@@ -125,15 +125,17 @@ func TestRequestedReposListOnlyMyPRs(t *testing.T) {
 
 // TestOpenFirstTierListsUnrequestedPRs: with promote's first_tier_reviews
 // = "open", every open PR into a requested repo's first tier joins the
-// list, though nobody asked for a review; a bot's does not, and a PR into
-// another branch still needs the request.
+// list, though nobody asked for a review, an agent's in [bots] too; a
+// GitHub App's does not.
 func TestOpenFirstTierListsUnrequestedPRs(t *testing.T) {
 	h := newHarness(t)
 	etl := model.Repo{Owner: "acme", Name: "etl"}
 	agent := pr(etl, 206, "opt-out flag for the digest", "agent-x", false)
+	h.m.cfg.Bots.Logins = append(h.m.cfg.Bots.Logins, "agent-x")
 	agent.BaseRefName = "dev"
 	bump := pr(etl, 207, "bump the actions group", "dependabot", false)
 	bump.BaseRefName = "dev"
+	bump.Author.Type = "Bot"
 	h.gh.OpenInto = []*model.PR{agent, bump}
 	h.m.requested = []model.Repo{etl}
 	h.m.cfg.Reviews.Requested = []model.Repo{etl}

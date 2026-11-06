@@ -25,8 +25,12 @@ type PromoteSet struct {
 	Notes []string
 }
 
-// promoteFirst is one search's page.
-const promoteFirst = 50
+// promoteFirst is one search's page; promoteMax the most PRs a search
+// reads, page after page.
+const (
+	promoteFirst = 50
+	promoteMax   = 200
+)
 
 const promotePRFields = `number title body state isDraft createdAt mergedAt
       headRefName headRefOid baseRefName mergeable mergeStateStatus
@@ -38,10 +42,25 @@ func promoteQuery() string {
 	var b strings.Builder
 	b.WriteString("query($first: String!, $stage: String!, $open: String!) {\n  " + rateLimitField)
 	for _, a := range []string{"first", "stage", "open"} {
-		fmt.Fprintf(&b, "\n  %s: search(query: $%s, type: ISSUE, first: %d) {\n    issueCount\n    nodes { ... on PullRequest { %s } }\n  }", a, a, promoteFirst, promotePRFields)
+		fmt.Fprintf(&b, "\n  %s: search(query: $%s, type: ISSUE, first: %d) {\n    issueCount pageInfo { hasNextPage endCursor }\n    nodes { ... on PullRequest { %s } }\n  }", a, a, promoteFirst, promotePRFields)
 	}
 	b.WriteString("\n}\n")
 	return b.String()
+}
+
+// promoteMoreQuery is one search's next page.
+func promoteMoreQuery() string {
+	return "query($q: String!, $after: String!) {\n  " + rateLimitField +
+		fmt.Sprintf("\n  s: search(query: $q, type: ISSUE, first: %d, after: $after) {\n    issueCount pageInfo { hasNextPage endCursor }\n    nodes { ... on PullRequest { %s } }\n  }\n}\n", promoteFirst, promotePRFields)
+}
+
+type promoteSearch struct {
+	IssueCount int `json:"issueCount"`
+	PageInfo   struct {
+		HasNextPage bool   `json:"hasNextPage"`
+		EndCursor   string `json:"endCursor"`
+	} `json:"pageInfo"`
+	Nodes []json.RawMessage `json:"nodes"`
 }
 
 // PromoteSearches is the search text PromotePRs sends, by alias (tests
@@ -68,10 +87,7 @@ func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage s
 		return out, err
 	}
 	for _, alias := range []string{"first", "stage", "open"} {
-		var s struct {
-			IssueCount int               `json:"issueCount"`
-			Nodes      []json.RawMessage `json:"nodes"`
-		}
+		var s promoteSearch
 		ok, err := data.get(alias, &s)
 		if err != nil || !ok {
 			msg := "no answer"
@@ -85,8 +101,21 @@ func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage s
 			}
 			return out, fmt.Errorf("searching %s: %s", q[alias], msg)
 		}
+		nodes := s.Nodes
+		for page := s.PageInfo; page.HasNextPage && page.EndCursor != "" && len(nodes) < promoteMax; {
+			more, _, err := c.graphql(ctx, promoteMoreQuery(), map[string]any{"q": q[alias], "after": page.EndCursor})
+			if err != nil {
+				return out, err
+			}
+			var next promoteSearch
+			if ok, err := more.get("s", &next); err != nil || !ok {
+				break
+			}
+			nodes = append(nodes, next.Nodes...)
+			page = next.PageInfo
+		}
 		var prs []*model.PR
-		for _, raw := range s.Nodes {
+		for _, raw := range nodes {
 			var pr model.PR
 			if json.Unmarshal(raw, &pr) != nil || pr.Number == 0 {
 				continue
@@ -95,8 +124,8 @@ func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage s
 			p := pr
 			prs = append(prs, &p)
 		}
-		if s.IssueCount > len(s.Nodes) {
-			out.Notes = append(out.Notes, fmt.Sprintf("promote: %s: showing %d of %d PRs for %q", repo.Name, len(s.Nodes), s.IssueCount, q[alias]))
+		if s.IssueCount > len(nodes) {
+			out.Notes = append(out.Notes, fmt.Sprintf("promote: %s: showing %d of %d PRs for %q", repo.Name, len(nodes), s.IssueCount, q[alias]))
 		}
 		switch alias {
 		case "first":
