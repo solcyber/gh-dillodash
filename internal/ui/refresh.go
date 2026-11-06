@@ -69,7 +69,7 @@ func (m *Model) refresh(again bool) {
 	m.refreshing = true
 	m.lastRefresh = started
 	m.nextRefreshAt = started + float64(m.cfg.Display.RefreshSecs)
-	gh, repos, wf, ctx := m.gh, m.repos, m.wf, m.ctx
+	gh, repos, requested, wf, ctx := m.gh, m.repos, m.requested, m.wf, m.ctx
 	ci, ahead, me := m.ci, m.ahead, m.me
 	go func() {
 		out := &refreshResult{started: started}
@@ -105,6 +105,29 @@ func (m *Model) refresh(again bool) {
 					n = repo.Name + ": " + n
 				}
 				warns = append(warns, n)
+			}
+		}
+		if len(requested) > 0 {
+			// the repos listed for my review requests only: their PRs
+			// join the list (a PR the repo list already read is skipped)
+			rq, err := gh.ListRequested(ctx, requested)
+			if err != nil {
+				if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
+					out.err, out.retryAt = err.Error(), e.RetryAt
+					return
+				}
+				warns = append(warns, "requested repos: "+err.Error())
+			} else {
+				have := make(map[model.Ident]bool, len(out.allPRs))
+				for _, p := range out.allPRs {
+					have[p.Ident()] = true
+				}
+				for _, p := range rq.PRs {
+					if !have[p.Ident()] {
+						out.allPRs = append(out.allPRs, p)
+					}
+				}
+				warns = append(warns, rq.Notes...)
 			}
 		}
 		ahead.annotate(ctx, gh, out.allPRs, me)

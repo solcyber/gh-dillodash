@@ -25,6 +25,7 @@
 # ============================================================================
 [reviews]
 repos = ["acme/infra"]        # required: one or more "owner/name" (--repo replaces the list)
+# requested_repos = ["acme/web"] # busy repos listed only for the open PRs that ask for your review, that you reviewed, or that you opened (no issues); never one of repos
 # ci_recheck_secs = 900       # Actions-route CI: a settled, passing head is re-read after this long
 
 # ============================================================================

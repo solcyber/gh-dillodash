@@ -93,3 +93,31 @@ func TestCleanApprovalByOthersStaysHidden(t *testing.T) {
 		t.Errorf("a clean approved PR should be hidden until A:\n%s", s)
 	}
 }
+
+// TestRequestedReposListOnlyMyPRs: a requested repo's PRs come from the
+// review-request search alone; its issues and other PRs never list.
+func TestRequestedReposListOnlyMyPRs(t *testing.T) {
+	h := newHarness(t)
+	etl := model.Repo{Owner: "acme", Name: "etl"}
+	asked := pr(etl, 1012, "retry the nightly load", "infra-bot", false)
+	asked.BaseRefName = "dev"
+	h.gh.Requested = []*model.PR{asked}
+	h.m.requested = []model.Repo{etl}
+	h.m.multi = true
+	h.load()
+	s := h.screen()
+	for _, want := range []string{"etl#1012", "retry the nightly load", "+1 requested"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("screen lacks %q:\n%s", want, s)
+		}
+	}
+	if n := h.gh.Reads["requested"]; n != 1 {
+		t.Errorf("requested reads %d", n)
+	}
+	// a search that fails warns; the list still lands
+	h.gh.Fail = map[string]error{"requested": &ghapi.Error{Message: "boom"}}
+	h.key('r')
+	if s := h.screen(); !strings.Contains(s, "#101") {
+		t.Errorf("the review repo's list must survive a failed search:\n%s", s)
+	}
+}

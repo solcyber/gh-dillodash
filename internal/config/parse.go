@@ -500,13 +500,24 @@ func (p *parser) parseAgent(top *table, cfg *Config) {
 func (p *parser) parseReviews(top *table, cfg *Config, ov Overrides) {
 	t, _ := top.sub("reviews")
 	repos, present := t.repos("repos")
+	requested, _ := t.repos("requested_repos")
 	cfg.Reviews.CIRecheckSecs = t.int("ci_recheck_secs", cfg.Reviews.CIRecheckSecs)
 	t.done()
 
 	if len(ov.Repos) > 0 {
+		// --repo replaces the whole list: just those repos, every PR
 		repos = p.parseRepos("--repo", ov.Repos)
 		present = true
+		requested = nil
 	}
+	for _, r := range requested {
+		for _, full := range repos {
+			if strings.EqualFold(r.String(), full.String()) {
+				t.errf("requested_repos", "%s is also in repos (every open PR and issue); list it in one of the two", r)
+			}
+		}
+	}
+	cfg.Reviews.Requested = requested
 	if !present {
 		if !hasErrorAt(p.errs, t.where("repos")) {
 			t.errf("repos", "required: at least one \"owner/name\" (or pass --repo)")

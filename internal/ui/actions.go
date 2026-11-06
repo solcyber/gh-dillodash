@@ -584,7 +584,7 @@ func (m *Model) doGoto(app *lockedApp) {
 	}
 	if mm[1] != "" {
 		found := false
-		for _, r := range append(append([]model.Repo(nil), m.repos...), m.wf.ExtraRepos()...) {
+		for _, r := range append(append(append([]model.Repo(nil), m.repos...), m.requested...), m.wf.ExtraRepos()...) {
 			if strings.EqualFold(r.Name, mm[1]) || strings.EqualFold(r.String(), mm[1]) {
 				repo, found = r, true
 				break

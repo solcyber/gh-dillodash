@@ -1061,3 +1061,66 @@ func TestTriageOperations(t *testing.T) {
 		t.Errorf("reopen body: %s", body)
 	}
 }
+
+func TestListRequested(t *testing.T) {
+	s := newServer(t)
+	var got gqlReq
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		got = req
+		w.Header().Set("Content-Type", "application/json")
+		withRepo := func(n int, repo string) string {
+			p := listPR(n, "a change")
+			return p[:len(p)-1] + `,"repository":{"nameWithOwner":"` + repo + `"}}`
+		}
+		io.WriteString(w, `{"data":{`+rateLimitJSON()+`,
+			"s0":{"issueCount":2,"nodes":[`+withRepo(7, "acme/web-portal")+`,`+withRepo(8, "Acme/Infra")+`]},
+			"s1":{"issueCount":60,"nodes":[`+withRepo(7, "acme/web-portal")+`]},
+			"s2":null},
+			"errors":[{"type":"SERVICE_UNAVAILABLE","path":["s2"],"message":"search timed out"}]}`)
+	})
+	out, err := s.client(t).ListRequested(context.Background(), []model.Repo{infra, portal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.PRs) != 2 || out.PRs[0].Repo != portal || out.PRs[1].Repo != infra || out.PRs[0].Number != 7 {
+		t.Fatalf("PRs (de-duped, repo from nameWithOwner): %+v", out.PRs)
+	}
+	if len(out.Issues) != 0 {
+		t.Error("requested repos list no issues")
+	}
+	notes := strings.Join(out.Notes, "; ")
+	if !strings.Contains(notes, "search timed out") || !strings.Contains(notes, `showing 1 of 60 PRs for "reviewed-by:@me"`) {
+		t.Errorf("notes: %q", notes)
+	}
+	for i, whose := range []string{"review-requested:@me", "reviewed-by:@me", "author:@me"} {
+		q, _ := got.Variables[fmt.Sprintf("q%d", i)].(string)
+		if !strings.Contains(q, whose) || !strings.Contains(q, "repo:acme/infra repo:acme/web-portal") || !strings.Contains(q, "is:pr is:open") {
+			t.Errorf("q%d = %q", i, q)
+		}
+	}
+	if !strings.Contains(got.Query, "...ListPR repository { nameWithOwner }") || !strings.Contains(got.Query, "fragment ListPR on PullRequest") {
+		t.Errorf("query: %s", got.Query)
+	}
+}
+
+// Many repos split into several searches, each under GitHub's limit.
+func TestRequestedSearchesStayShort(t *testing.T) {
+	var repos []model.Repo
+	for i := 0; i < 12; i++ {
+		repos = append(repos, model.Repo{Owner: "an-organisation", Name: fmt.Sprintf("a-rather-long-repository-%02d", i)})
+	}
+	qs := requestedSearches(repos)
+	if len(qs)%3 != 0 || len(qs) < 6 {
+		t.Fatalf("%d searches", len(qs))
+	}
+	seen := 0
+	for _, q := range qs {
+		if len(q) > 256 {
+			t.Errorf("%d chars: %q", len(q), q)
+		}
+		seen += strings.Count(q, "repo:")
+	}
+	if seen != 3*len(repos) {
+		t.Errorf("every repo in each of the three searches: %d", seen)
+	}
+}

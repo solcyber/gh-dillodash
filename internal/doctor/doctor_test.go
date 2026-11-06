@@ -51,6 +51,23 @@ func TestReportHuman(t *testing.T) {
 	}
 }
 
+func TestReportRequestedRepos(t *testing.T) {
+	web := model.Repo{Owner: "acme", Name: "web"}
+	cfg := cfgWith(infra)
+	cfg.Reviews.Requested = []model.Repo{web}
+	gh := fake.New("alice")
+	gh.Open = map[model.Repo]ghapi.ListResult{infra: {Permission: "ADMIN"}}
+	gh.Requested = []*model.PR{{Repo: web, Number: 9}}
+	out, err := reportWith(t, gh, cfg)
+	if err != nil || !strings.Contains(out, "requested repos: 1 open PR(s) ask for your review") {
+		t.Errorf("err %v\n%s", err, out)
+	}
+	gh.Fail = map[string]error{"requested": &ghapi.Error{Message: "boom"}}
+	if out, err := reportWith(t, gh, cfg); !errors.Is(err, ErrFailed) || !strings.Contains(out, "requested repos: FAILED: boom") {
+		t.Errorf("a failed search fails the check: %v\n%s", err, out)
+	}
+}
+
 func TestReportRefusesBotLogin(t *testing.T) {
 	out, err := report(t, "dependabot[bot]", "keyring", cfgWith(infra))
 	if !errors.Is(err, ErrFailed) {

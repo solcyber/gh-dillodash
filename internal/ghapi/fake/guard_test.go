@@ -76,7 +76,7 @@ func TestWithAllowedReposRefusesEveryWrite(t *testing.T) {
 // write added to the interface fails this test until it is guarded.
 func TestWithAllowedReposCoversEveryWrite(t *testing.T) {
 	reads := map[string]bool{
-		"Whoami": true, "TeamMember": true, "ListOpen": true, "LastRate": true, "PRDetail": true,
+		"Whoami": true, "TeamMember": true, "ListOpen": true, "ListRequested": true, "LastRate": true, "PRDetail": true,
 		"IssueDetail": true, "AssignableUsers": true, "PRComments": true, "IssuesWithLabel": true,
 		"WaitingRuns": true, "RepoWaitingRuns": true, "PendingDeployments": true, "JobLogs": true,
 		"WorkflowRuns": true, "WorkflowFileRuns": true, "RunJobs": true, "PRFiles": true, "PRDiff": true,

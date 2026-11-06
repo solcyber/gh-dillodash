@@ -53,6 +53,9 @@ type Client struct {
 	// Rate is LastRate's answer.
 	Rate *model.RateLimit
 
+	// Requested are ListRequested's PRs (the ones in the asked repos are
+	// served; Repo must be set).
+	Requested []*model.PR
 	// Open is ListOpen's answer per repo; a repo missing from the map
 	// gets a "repository not visible" Err.
 	Open map[model.Repo]ghapi.ListResult
@@ -267,6 +270,25 @@ func (f *Client) LastRate() *model.RateLimit {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.Rate
+}
+
+// ListRequested serves the Requested PRs in repos.
+func (f *Client) ListRequested(ctx context.Context, repos []model.Repo) (ghapi.ListResult, error) {
+	if err := f.fail("requested"); err != nil {
+		return ghapi.ListResult{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out ghapi.ListResult
+	for _, p := range f.Requested {
+		for _, r := range repos {
+			if p.Repo == r {
+				out.PRs = append(out.PRs, p)
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 // ListOpen serves Open; every PR and issue is tagged with its repo, so a

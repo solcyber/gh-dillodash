@@ -7,6 +7,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -88,7 +89,9 @@ type Model struct {
 	wf    *workflow.Set
 	me    string
 	repos []model.Repo
-	multi bool
+	// requested are the repos listed for my review requests only
+	requested []model.Repo
+	multi     bool
 	// multiOwner: the review repos span owners, so refs carry the owner
 	multiOwner bool
 	host       string
@@ -259,14 +262,16 @@ type Options struct {
 // New makes the model; Run starts it.
 func New(ctx context.Context, o Options) *Model {
 	repos := o.Config.Reviews.Repos
+	all := o.Config.Reviews.All()
 	m := &Model{
 		cfg:             o.Config,
 		gh:              o.GH,
 		wf:              o.Workflows,
 		me:              o.Me,
 		repos:           repos,
-		multi:           len(repos) > 1,
-		multiOwner:      spansOwners(repos),
+		requested:       o.Config.Reviews.Requested,
+		multi:           len(all) > 1,
+		multiOwner:      spansOwners(all),
 		host:            o.Host,
 		ctx:             ctx,
 		ver:             o.Version,
@@ -391,6 +396,15 @@ func (m *Model) repoOf(item any) model.Repo {
 // reposText is "owner/name", or "owner/a, b, c" for several in one org,
 // or "owner/a, other/b" across orgs.
 func (m *Model) reposText() string {
+	out := m.reviewReposText()
+	if n := len(m.requested); n > 0 {
+		out += fmt.Sprintf(" +%d requested", n)
+	}
+	return out
+}
+
+// reviewReposText is reposText for the review repos alone.
+func (m *Model) reviewReposText() string {
 	if len(m.repos) == 0 {
 		return ""
 	}

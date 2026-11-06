@@ -33,6 +33,7 @@ of `host`, the way every `gh` extension does; `GH_TOKEN` and
 | Key | Default | Meaning |
 |---|---|---|
 | `repos` | — | The repositories whose open pull requests and issues are listed, as `"owner/name"`. One or many; several owners are fine. `--repo OWNER/NAME` (repeatable) replaces the list for one run. With more than one repo every reference reads `repo#N`. |
+| `requested_repos` | `[]` | Busy repositories listed only for the open pull requests that ask for your review (directly or through a team), that you reviewed, or that you opened: no issues and none of their other PRs. A PR you approved stays listed after the request is gone, so an approval that goes stale comes back as `re-review`. Read through GitHub search (three searches per request); a repo may not also be in `repos`, and `--repo` drops the list for that run. |
 | `ci_recheck_secs` | `900` | When CI is read through the Actions API (a fine-grained token cannot read the check rollup), a settled, passing head commit is re-checked after this long; a failing or running one on every refresh; everything on `r`. |
 
 ## `[update]`
