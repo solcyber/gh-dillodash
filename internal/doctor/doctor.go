@@ -47,6 +47,9 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string, b
 		fmt.Fprintf(w, "  warning: %s\n", warn)
 	}
 	fmt.Fprintf(w, "reviews: %s\n", joinRepos(cfg.Reviews.Repos))
+	if len(cfg.Reviews.Requested) > 0 {
+		fmt.Fprintf(w, "requested: %s (only PRs that ask for your review, that you reviewed or opened)\n", joinRepos(cfg.Reviews.Requested))
+	}
 	gh, err := ghapi.New(ghapi.Options{Host: cfg.GitHub.Host, Version: version, Timeout: 15 * time.Second})
 	if err != nil {
 		fmt.Fprintf(w, "auth: FAILED: %s\n", err)
@@ -169,6 +172,18 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 			fmt.Fprintf(w, "  actions: not readable (%s) — the CI column falls back to '?' when the check rollup is hidden too\n", verbose(err))
 		} else {
 			fmt.Fprintln(w, "  actions: readable")
+		}
+	}
+	if len(cfg.Reviews.Requested) > 0 {
+		res, err := gh.ListRequested(ctx, cfg.Reviews.Requested)
+		if err != nil {
+			fmt.Fprintf(w, "requested repos: FAILED: %s\n", err)
+			failed = true
+		} else {
+			fmt.Fprintf(w, "requested repos: %d open PR(s) ask for your review, have your review, or are yours\n", len(res.PRs))
+			for _, n := range res.Notes {
+				fmt.Fprintf(w, "  note: %s\n", n)
+			}
 		}
 	}
 	if rate := gh.LastRate(); rate != nil && rate.Limit > 0 {

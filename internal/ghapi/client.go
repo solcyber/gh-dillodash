@@ -129,6 +129,11 @@ type Client interface {
 	// ListResult.Err; the call itself fails only on a rate limit or
 	// when every chunk failed.
 	ListOpen(ctx context.Context, repos []model.Repo) (map[model.Repo]ListResult, error)
+	// ListRequested reads the open PRs of repos (`[reviews]
+	// requested_repos`) whose review is requested from me, that I
+	// reviewed, or that I opened: PRs only, de-duped. A failed search is
+	// a note; the call fails only when the request does.
+	ListRequested(ctx context.Context, repos []model.Repo) (ListResult, error)
 	// LastRate is the GraphQL budget from the latest list-shaped query.
 	LastRate() *model.RateLimit
 

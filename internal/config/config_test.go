@@ -701,3 +701,32 @@ func TestIsLoginIsExact(t *testing.T) {
 		}
 	}
 }
+
+func TestRequestedRepos(t *testing.T) {
+	c := mustParse(t, `[reviews]
+repos = ["acme/infra"]
+requested_repos = ["acme/web", "acme/etl", "ACME/web"]
+`)
+	if want := []model.Repo{repo("acme/web"), repo("acme/etl")}; !reflect.DeepEqual(c.Reviews.Requested, want) {
+		t.Errorf("requested = %v", c.Reviews.Requested)
+	}
+	if !c.Reviews.Multi() || len(c.Reviews.All()) != 3 {
+		t.Errorf("multi %v all %v", c.Reviews.Multi(), c.Reviews.All())
+	}
+	if len(c.Warnings) != 0 {
+		t.Errorf("warnings: %v", c.Warnings)
+	}
+	// a repo in both lists is a mistake: which rule would apply?
+	if _, err := parse(t, `[reviews]
+repos = ["acme/infra"]
+requested_repos = ["Acme/Infra"]
+`); err == nil || !strings.Contains(err.Error(), "also in repos") {
+		t.Errorf("overlap: %v", err)
+	}
+	// --repo replaces the list: just that repo, nothing requested
+	c, err := parseEnv([]byte("[reviews]\nrepos = [\"acme/infra\"]\nrequested_repos = [\"acme/web\"]\n"), "cfg.toml",
+		Overrides{Repos: []string{"acme/other"}}, fakeEnv(map[string]string{"HOME": "/home/alice"}))
+	if err != nil || len(c.Reviews.Requested) != 0 || c.Reviews.Repos[0] != repo("acme/other") {
+		t.Errorf("--repo: %v %+v", err, c.Reviews)
+	}
+}

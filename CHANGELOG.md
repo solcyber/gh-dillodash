@@ -16,6 +16,11 @@
 - **`u` opens the changes since a stale approval**: the compare view from
   the approved commit to the head, so a re-approve is a look at the
   delta. The bar shows it while the selected PR's approval is stale.
+- **`[reviews] requested_repos`**: busy repos listed only for the open
+  PRs that ask for your review (directly or through a team), that you
+  reviewed, or that you opened, with none of their issues or other
+  traffic. A PR you approved stays listed, so a stale approval there
+  comes back as `re-review`. `config check` counts them.
 - Release rows: my stale approval reads `needs approval` again, and
   someone else's reads `approved by <login> · stale`.
 

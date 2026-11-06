@@ -89,13 +89,23 @@ type AgentConfig struct {
 
 // ReviewsConfig is [reviews].
 type ReviewsConfig struct {
-	Repos         []model.Repo // >= 1, deduped, in config order
+	Repos []model.Repo // >= 1, deduped, in config order
+	// Requested are repos listed only for the open PRs whose review is
+	// requested from me, that I reviewed, or that I opened (no issues):
+	// a busy repo's review requests without the rest of its traffic.
+	// Never one of Repos.
+	Requested     []model.Repo
 	CIRecheckSecs int
 }
 
-// Multi reports whether more than one repo is reviewed (refs then carry
+// Multi reports whether more than one repo is listed (refs then carry
 // the repo name).
-func (r ReviewsConfig) Multi() bool { return len(r.Repos) > 1 }
+func (r ReviewsConfig) Multi() bool { return len(r.Repos)+len(r.Requested) > 1 }
+
+// All is Repos then Requested.
+func (r ReviewsConfig) All() []model.Repo {
+	return append(append([]model.Repo(nil), r.Repos...), r.Requested...)
+}
 
 // DisplayConfig is [display].
 type DisplayConfig struct {
