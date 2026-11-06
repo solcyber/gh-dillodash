@@ -155,7 +155,11 @@ cream mullions runs over it, and the night sky shows wherever the glass is
 blank. Around it is the room: a lamp-lit wall, teal curtains tied back on a
 brass rod, a monstera in the corner and a pothos hanging over Amos's
 portrait, a little landscape and a wall clock with the real time, a cactus
-and a mug of coffee on the sill, a rug on the floor. With motion on the
+and a mug of coffee on the sill, a rug on the floor. A framed page on the
+wall quotes E. M. Forster's *A Room with a View*: Miss Bartlett, promised
+south rooms with a view, given north rooms over a courtyard. It hangs
+under the clock, below the plaque or over the plant, wherever the wall
+holds the whole page; on a terminal too small for that it is left off. With motion on the
 plants sway, the steam rises and the second hand sweeps; after five minutes
 without a key they rest with everything else.
 

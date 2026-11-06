@@ -88,10 +88,11 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   the GraphQL budget and when the next refresh lands.
 - **Fortress mode** (`d`): everything open as a Dwarf Fortress map over
   Manhattan, Chicago or the Kowloon Walled City. Row is age, lane is repo,
-  shape is what it is.
+  shape is what it is. Borges's "On Exactitude in Science" lies over the
+  map where it covers least (`b` hides it).
 - **The room.** While the release window is open, the dashboard is the view
   out of a window from a lamp-lit room at night: curtains, plants, a wall
-  clock, a mug on the sill. `W` steps out to the plain dashboard and back
+  clock, a mug on the sill, a framed page of Forster. `W` steps out to the plain dashboard and back
   in; the next window opens in the room again
   ([docs/display.md](docs/display.md#the-room)).
 

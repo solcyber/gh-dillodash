@@ -47,6 +47,15 @@ follows the cursor; `-` fits it again. Anything crowded out of the fit view
 is counted in the legend. The top left logs what each refresh changed, DF
 style ("Migrants have arrived: infra#40").
 
+**The epigraph.** Borges's "On Exactitude in Science", the Empire's map
+the size of the Empire, lies over the map in a box. It goes where it
+covers the fewest things and the least of the city, and never over the
+look panel, the legend, the log, the edge counters or the cursor. It
+stays put until the map, the screen or the scroll changes, or the cursor
+comes near it. `b` hides it and shows it again; `fortress_epigraph = false`
+in `[display]` starts it hidden. On a screen with no room for it, it is
+not drawn.
+
 **What it costs.** The map draws only what the last refresh fetched. PRs
 and issues come from the list's queries; branches and commits come from one
 aliased query per refresh that joins the refresh only after someone pressed

@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.13.0]
+
+Two epigraphs, and waiting runs you can tell apart.
+
+### Added
+
+- **A quote on the room's wall.** A framed page from E. M. Forster's *A
+  Room with a View* hangs in the room ("The Signora had no business to do
+  it…"). It goes under the clock, below the plaque, or over the plant,
+  wherever the wall holds the whole page. When nothing does, the page is
+  left off rather than cut. The line-art room gets it as a ruled box, in
+  plain ASCII with `icons = "ascii"`.
+- **An epigraph over the fortress map.** Borges's "On Exactitude in
+  Science" is laid over the map. It goes where it covers the fewest things
+  and the least of the city. It never covers the look panel, the legend,
+  the log, the edge counters or the cursor, and it moves away when the
+  cursor comes near it. `b` toggles it, and `[display] fortress_epigraph`
+  sets whether it starts on (default on). It is not drawn when the screen
+  has no room for it.
+
+### Changed
+
+- **Waiting runs are identified on their rows.** The number column shows
+  the run number (`#412`). The branch column shows what triggered the run:
+  branch, short SHA, and the PR when the run came from one
+  (`stage @9b1e4a7 (#230)`). `enter` shows the run's URL, and `:` matches
+  the run number and id. Two runs of one workflow no longer look the same.
+
 ## [1.12.0]
 
 A change can be followed and moved through every tier of a
