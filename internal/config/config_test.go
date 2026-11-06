@@ -163,6 +163,7 @@ deploy_approval_comment = "merged {repo}#{number} {sha}"
 enabled = true
 repos = ["acme/ops", "acme/infra"]
 approval_comment = "ok {workflow} #{run} ({repo})"
+poll_secs = 0
 `
 	c := mustParse(t, src)
 	if len(c.Warnings) != 0 {
@@ -276,7 +277,7 @@ enabled = true
 	if c.TerraformApprove.CeremonyWindow != nil {
 		t.Error("ceremony window should be nil when absent")
 	}
-	if !reflect.DeepEqual(c.WaitingRuns, &WaitingRunsConfig{Repos: c.Reviews.Repos, ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}"}) {
+	if !reflect.DeepEqual(c.WaitingRuns, &WaitingRunsConfig{Repos: c.Reviews.Repos, ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}", PollSecs: DefaultWaitingPollSecs}) {
 		t.Errorf("waiting_runs defaults = %+v", c.WaitingRuns)
 	}
 	if got := c.WaitingRuns.Comment(repo("acme/app"), "deploy", 4242); got != "dillodash: approved deploy run 4242 in acme/app" {
@@ -519,6 +520,22 @@ func TestWarnings(t *testing.T) {
 				t.Fatalf("warnings\n got %q\nwant %q", cfg.Warnings, c.want)
 			}
 		})
+	}
+}
+
+// TestWaitingPollFloor: poll_secs below the floor is raised to it with a
+// warning; 0 stays off.
+func TestWaitingPollFloor(t *testing.T) {
+	c := mustParse(t, minimal+"[workflows.waiting_runs]\nenabled = true\npoll_secs = 3\n")
+	if c.WaitingRuns.PollSecs != MinWaitingPollSecs {
+		t.Fatalf("poll = %d", c.WaitingRuns.PollSecs)
+	}
+	if !strings.Contains(strings.Join(c.Warnings, "\n"), "poll_secs: 3 is below the floor of 10") {
+		t.Errorf("warnings = %q", c.Warnings)
+	}
+	c = mustParse(t, minimal+"[workflows.waiting_runs]\nenabled = true\npoll_secs = 0\n")
+	if c.WaitingRuns.PollSecs != 0 {
+		t.Fatalf("poll off = %d", c.WaitingRuns.PollSecs)
 	}
 }
 

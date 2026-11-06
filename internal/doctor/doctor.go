@@ -214,7 +214,11 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		on("release_pr", false, "")
 	}
 	if wr := cfg.WaitingRuns; wr != nil {
-		on("waiting_runs", true, "  repos: "+joinRepos(wr.Repos))
+		poll := "with the refresh"
+		if wr.PollSecs > 0 {
+			poll = fmt.Sprintf("every %ds", wr.PollSecs)
+		}
+		on("waiting_runs", true, "  repos: "+joinRepos(wr.Repos)+"; read "+poll)
 	} else {
 		on("waiting_runs", false, "")
 	}

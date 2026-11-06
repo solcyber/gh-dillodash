@@ -152,6 +152,13 @@ const MinRefreshSecs = 5
 // when it is on: each poll lists Actions runs and reads a run's jobs.
 const MinProgressPollSecs = 10
 
+// DefaultWaitingPollSecs and MinWaitingPollSecs are waiting_runs.poll_secs'
+// default and floor: each poll lists one page of waiting runs per repo.
+const (
+	DefaultWaitingPollSecs = 30
+	MinWaitingPollSecs     = 10
+)
+
 // BotsConfig is [bots].
 type BotsConfig struct {
 	Logins []string // lower-cased, deduped
@@ -385,6 +392,11 @@ func (r *ReleasePRConfig) DeployComment(repo model.Repo, number int, sha string)
 type WaitingRunsConfig struct {
 	Repos           []model.Repo // the review repos when unset
 	ApprovalComment string       // placeholders {repo} {workflow} {run}
+	// PollSecs is how often the waiting runs are read between refreshes
+	// (0 = only with the refresh; else >= MinWaitingPollSecs). A run that
+	// waits on an environment is usually approved within minutes, so the
+	// refresh cadence alone can miss it.
+	PollSecs int
 }
 
 // Comment renders approval_comment for a run: the repo as owner/name,
@@ -397,7 +409,7 @@ func (w *WaitingRunsConfig) Comment(repo model.Repo, workflow string, run int64)
 // DefaultWaitingRuns is [workflows.waiting_runs] with every default;
 // Repos stays nil (= the review repos).
 func DefaultWaitingRuns() *WaitingRunsConfig {
-	return &WaitingRunsConfig{ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}"}
+	return &WaitingRunsConfig{ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}", PollSecs: DefaultWaitingPollSecs}
 }
 
 // Default is a Config with every default and no repos. Workflows are off

@@ -900,6 +900,11 @@ func (p *parser) parseWaitingRuns(wt *table, cfg *Config) {
 		w.Repos = repos
 	}
 	w.ApprovalComment = t.nonEmpty("approval_comment", w.ApprovalComment)
+	w.PollSecs = t.int("poll_secs", w.PollSecs)
+	if w.PollSecs > 0 && w.PollSecs < MinWaitingPollSecs {
+		t.warnf("poll_secs", "%d is below the floor of %d, using %d", w.PollSecs, MinWaitingPollSecs, MinWaitingPollSecs)
+		w.PollSecs = MinWaitingPollSecs
+	}
 	for _, ph := range placeholderRE.FindAllString(w.ApprovalComment, -1) {
 		switch ph {
 		case "{repo}", "{workflow}", "{run}":
