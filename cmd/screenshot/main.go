@@ -204,9 +204,14 @@ func paint(img *image.RGBA, c *canvas.Canvas, left, top, cw, ch, ascent int, reg
 		isBold, underline, reverse := false, false, false
 		if cell.Raw != "" {
 			for _, m := range sgrRGB.FindAllStringSubmatch(cell.Raw, -1) {
-				r, _ := strconv.Atoi(m[2])
-				g, _ := strconv.Atoi(m[3])
-				b, _ := strconv.Atoi(m[4])
+				// ParseUint with bitSize 8 bounds each channel: a value
+				// over 255 fails to parse and the cell keeps its default.
+				r, er := strconv.ParseUint(m[2], 10, 8)
+				g, eg := strconv.ParseUint(m[3], 10, 8)
+				b, eb := strconv.ParseUint(m[4], 10, 8)
+				if er != nil || eg != nil || eb != nil {
+					continue
+				}
 				col := color.RGBA{uint8(r), uint8(g), uint8(b), 255}
 				if m[1] == "38" {
 					fg = col
