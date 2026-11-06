@@ -141,7 +141,7 @@ var bindings = []binding{
 	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('+'), R('-'), R('=')}, Bar: "+/-", Label: "zoom", Group: "fortress", Prio: 30,
 		Help: "+/-  zoom", Doc: "zoom to a street a day / fit the city (`=` is `+`)", Do: doFortressKey},
 	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('c')}, Bar: "c", Label: "city", Group: "fortress", Prio: 30,
-		Help: "c  the other city", Doc: "the other city", Do: doFortressKey},
+		Help: "c  the next city", Doc: "the next city: Manhattan, Chicago, the Kowloon Walled City, round again", Do: doFortressKey},
 	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('d'), R('q'), K("esc")}, Bar: "d", Label: "back", Group: "fortress", Prio: 0,
 		Help: "d  back to the list", Doc: "back to the list (`q` and Esc too)", Do: doFortressKey},
 	// utilities, everywhere they make sense

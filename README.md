@@ -87,7 +87,8 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   line explains every refusal in words; the header shows a UTC + local clock,
   the GraphQL budget and when the next refresh lands.
 - **Fortress mode** (`d`): everything open as a Dwarf Fortress map over
-  Manhattan or Chicago. Row is age, lane is repo, shape is what it is.
+  Manhattan, Chicago or the Kowloon Walled City. Row is age, lane is repo,
+  shape is what it is.
 - **The room.** While the release window is open, the dashboard is the view
   out of a window from a lamp-lit room at night: curtains, plants, a wall
   clock, a mug on the sill. `W` steps out to the plain dashboard and back

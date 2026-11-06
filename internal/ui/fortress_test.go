@@ -175,8 +175,12 @@ func TestFortressZoomCityAndNothingToOpen(t *testing.T) {
 		t.Errorf("c did not swap:\n%s", h.screen())
 	}
 	h.key('c')
+	if !strings.Contains(h.screen(), "Fortress of Kowloon Walled City") {
+		t.Errorf("c did not walk on to the walled city:\n%s", h.screen())
+	}
+	h.key('c')
 	if !strings.Contains(h.screen(), "Fortress of Manhattan") {
-		t.Error("c did not swap back")
+		t.Error("c did not come round to the first city")
 	}
 	// a ruin opens nothing (o would); empty ground says so too
 	v := h.m.fortress.view

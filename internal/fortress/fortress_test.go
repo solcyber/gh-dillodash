@@ -561,8 +561,8 @@ func TestViewCursorAndKeys(t *testing.T) {
 	if u := v.Under(); v.Zoom != ZoomFit || len(u) == 0 || u[0].ID != PRID(infra, 4002) {
 		t.Errorf("after fit the cursor is on %+v", u)
 	}
-	// the other city, and the log remembers the arrivals
-	v.Open(OtherCity(v.City))
+	// the next city, and the log remembers the arrivals
+	v.Open(NextCity(v.City))
 	v.Prepare(30, 120, "g1", true)
 	if v.City != "chicago" || v.Map.Key != "chicago" {
 		t.Errorf("city = %s", v.City)
@@ -683,3 +683,38 @@ func TestViewLookAtTerrain(t *testing.T) {
 		t.Errorf("look at terrain:\n%s", screen)
 	}
 }
+
+func TestKowloonGeography(t *testing.T) {
+	for _, zoom := range []string{ZoomFit, ZoomStreet} {
+		kw := NewMap("kowloon", 160, 40, zoom, 3, 0)
+		r, c := kw.CellOf(KowloonXY(22.33251, 114.19025)) // the Yamen
+		if kw.What(r, c) != "the Yamen" || !kw.Main[r][c] {
+			t.Errorf("%s: the Yamen is %q (main %v)", zoom, kw.What(r, c), kw.Main[r][c])
+		}
+		if y := kw.RowY(r); y < 30 || y > 90 {
+			t.Errorf("%s: the Yamen at %v m, want the middle of the city", zoom, y)
+		}
+		r, c = kw.CellOf(KowloonXY(22.3080, 114.1990)) // out in the bay
+		if kw.T[r][c] != 'w' || kw.Main[r][c] {
+			t.Errorf("%s: Kowloon Bay: code %q main %v", zoom, kw.T[r][c], kw.Main[r][c])
+		}
+		for _, z := range []string{"barracks", "depot", "far", ZoneBeyond} {
+			if len(kw.ZoneCells(z)) == 0 {
+				t.Errorf("%s: no cells in the %s", zoom, z)
+			}
+		}
+		// today's row is the south wall alone: no town beside it
+		row := kw.AgeRow(0)
+		if sp := kw.Span[row]; !sp.OK || kw.What(row, sp.A) != "the city wall" || kw.What(row, sp.B-1) != "the city wall" {
+			t.Errorf("%s: today's row runs %v from %q to %q", zoom, sp, kw.What(row, sp.A), kw.What(row, sp.B-1))
+		}
+	}
+	if y := KowloonXY2y(22.33305); math.Abs(y-107) > 2 {
+		t.Errorf("the north wall is %v m from the south one, want about 107", y)
+	}
+	if NextCity("chicago") != "kowloon" || NextCity("kowloon") != "manhattan" || NextCity("nowhere") != "manhattan" {
+		t.Error("c walks the cities in order and comes round")
+	}
+}
+
+func KowloonXY2y(lat float64) float64 { _, y := KowloonXY(lat, 114.1903); return y }

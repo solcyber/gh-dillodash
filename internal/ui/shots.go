@@ -27,6 +27,7 @@ var ShotCaptions = map[string]string{
 	"waiting-runs-approve":   "D on a waiting run: the environments you review, confirmed before they are approved",
 	"window-card":            "A PR queued for the maintenance window, opened: its plan card, disruptive and revertible",
 	"fortress-chicago":       "Fortress mode over Chicago: Madison is today and older work lies south toward Indiana, Lake Michigan to the east",
+	"fortress-kowloon":       "Fortress mode over the Kowloon Walled City: the south wall is today, older work lies north toward Lion Rock, releases wait at Kai Tak",
 	"fortress":               "Fortress mode over Manhattan: every repo as a lane of branches and pull requests, the oldest work furthest north",
 	"splash":                 "The splash while the first refresh runs: the logotype cascades in and Amos walks",
 	"amos":                   "Nothing to show: Amos walks the empty list under the stars",

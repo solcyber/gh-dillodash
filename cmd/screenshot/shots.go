@@ -54,6 +54,7 @@ var shots = []shot{
 	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},
 	{Name: "fortress-chicago", Steps: []string{"d"}, Opts: ui.SnapshotOptions{City: "chicago"}, Expect: []string{"Chicago"}},
+	{Name: "fortress-kowloon", Steps: []string{"d"}, Opts: ui.SnapshotOptions{City: "kowloon"}, Expect: []string{"Kowloon Walled City"}},
 	{Name: "splash", Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 0.9, KeepSplash: true}},
 	{Name: "amos", Steps: []string{"/", "nothing-here"}, Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 2.0}},
 	// a manual release night (--demo-night), each shot one step further:

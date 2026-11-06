@@ -1,11 +1,13 @@
 // Package fortress is the dashboard's Dwarf Fortress map (the d key): an
 // easter egg you can read. Every open PR, issue, branch and recent
-// default-branch commit is drawn on an ASCII map of Manhattan or Chicago
-// (a coin flip each time). The encoding is fixed:
+// default-branch commit is drawn on an ASCII map of Manhattan, Chicago or
+// the Kowloon Walled City (picked at random each time; c walks them). The
+// encoding is fixed:
 //
 //	row   = age: the numbered street is the age in days since it was
 //	        opened (Manhattan: 14th St = 14 days, older is north; Chicago:
-//	        35th St = 35 days, older is south of Madison)
+//	        35th St = 35 days, older is south of Madison; the walled city:
+//	        30 m north of the south wall = 30 days)
 //	lane  = repo: the land at each row is cut into one lane per repo
 //	shape = what it is; color + motion = its state (Legend)
 //
@@ -21,7 +23,8 @@
 // Geography is hand-traced (lat, lon) projected at load: Manhattan onto
 // its street grid (rotated 29 degrees; one unit = one 264 ft block),
 // Chicago onto its address grid (hundreds from State and Madison; one
-// unit = one street).
+// unit = one street), the Kowloon Walled City onto metres inside its walls
+// (squeezed outside them).
 package fortress
 
 import (
@@ -80,6 +83,49 @@ func ChicagoXY(lat, lon float64) (x, y float64) {
 	return x, y
 }
 
+// interp is piecewise-linear interpolation through pts (sorted by [0]),
+// extended past either end along the end segment.
+func interp(pts [][2]float64, v float64) float64 {
+	var a, b [2]float64
+	switch {
+	case v <= pts[0][0]:
+		a, b = pts[0], pts[1]
+	case v >= pts[len(pts)-1][0]:
+		a, b = pts[len(pts)-2], pts[len(pts)-1]
+	default:
+		for i := 1; i < len(pts); i++ {
+			if pts[i][0] >= v {
+				a, b = pts[i-1], pts[i]
+				break
+			}
+		}
+	}
+	return a[1] + (v-a[0])/(b[0]-a[0])*(b[1]-a[1])
+}
+
+// The Kowloon Walled City is metres inside its walls (one row = one
+// metre = one day, the south wall today, the north wall about 105 m on),
+// and squeezed outside them: Kai Tak's runway and Lion Rock are a few
+// kilometres off, so the land beyond the walls is drawn not to scale.
+var (
+	// latitude -> metres north of the south wall
+	kwLat = [][2]float64{
+		{22.3000, -60}, {22.3240, -36}, {22.3300, -12}, {22.33208, 0},
+		{22.33317, 120.7}, {22.3345, 134}, {22.3500, 150},
+	}
+	// longitude -> metres east of the city's middle
+	kwLon = [][2]float64{
+		{114.1700, -200}, {114.1880, -130}, {114.1893, -103},
+		{114.1913, 103}, {114.1935, 135}, {114.2300, 220},
+	}
+)
+
+// KowloonXY projects a (lat, lon) into the walled city's metres: (east of
+// its middle, north of its south wall).
+func KowloonXY(lat, lon float64) (x, y float64) {
+	return interp(kwLon, lon), interp(kwLat, lat)
+}
+
 // LL is a hand-traced (lat, lon).
 type LL struct{ Lat, Lon float64 }
 
@@ -110,7 +156,7 @@ type Label struct {
 // Zone is a box in grid units (x0, x1, y0, y1) items can stand in.
 type Zone struct{ X0, X1, Y0, Y1 float64 }
 
-// City is one of the two maps.
+// City is one of the maps.
 type City struct {
 	Key, Name string
 	Proj      func(lat, lon float64) (x, y float64)
@@ -126,11 +172,23 @@ type City struct {
 	Beyond string // where the too-old go
 	// Barracks (queued), Depot (releases) and Far (merged releases).
 	Barracks, Depot, Far string
-	Shapes               []Shape
-	Lines                []Shape
-	Streets              []Street
-	Labels               []Label
-	Zones                map[string]Zone
+	// AgeNote replaces the legend's "street = days open" line when the
+	// rows are not streets; LimitName names the last row ("" = "<n>th St").
+	AgeNote, LimitName string
+	// BaseName is what the base terrain is called ("" = the harbor for
+	// water, the suburbs for land).
+	BaseName string
+	// DepotOnPier: the depot stands on '=' (a pier, a runway), not on
+	// the city proper.
+	DepotOnPier bool
+	// XReach, when set, is how far either side of the city's middle the
+	// map must reach (grid units): its depot lies well off the city.
+	XReach  float64
+	Shapes  []Shape
+	Lines   []Shape
+	Streets []Street
+	Labels  []Label
+	Zones   map[string]Zone
 
 	once sync.Once
 	proj *Projected
@@ -214,10 +272,11 @@ func scanSpans(pts []XY, y float64) [][2]float64 {
 	return out
 }
 
-// CityKeys lists the cities, in coin-flip order.
-var CityKeys = []string{"manhattan", "chicago"}
+// CityKeys lists the cities, in coin-flip order; c walks them in this
+// order.
+var CityKeys = []string{"manhattan", "chicago", "kowloon"}
 
-// Cities holds the two maps by key.
+// Cities holds the maps by key.
 var Cities = map[string]*City{
 	"manhattan": {
 		Key: "manhattan", Name: "Manhattan", Proj: ManhattanXY, Dir: 1, Limit: 220,
@@ -437,12 +496,63 @@ var Cities = map[string]*City{
 			"far":    {8, 14, 5, 7},
 			"beyond": {-99, 99, -150, -141}},
 	},
+	// The Kowloon Walled City as it stood until its clearance in 1993:
+	// the enclave's outline (about 210 m by 120 m) where Kowloon Walled
+	// City Park is now, drawn as its wall (the stones went in 1943; the
+	// line held), the Yamen near its middle, Kowloon City to the south, Kai Tak's runway out in Kowloon Bay to
+	// the south-east (its approach passed low over the roofs), and Lion
+	// Rock to the north. Inside the walls one row is one metre; outside
+	// them the map is squeezed (KowloonXY). Hand-traced and approximate.
+	"kowloon": {
+		Key: "kowloon", Name: "Kowloon Walled City", Proj: KowloonXY, Dir: 1, Limit: 105,
+		Base: 'o', Y0: -60, Y1: 150, Zero: "the south wall",
+		Older: "north", Beyond: "Lion Rock",
+		Barracks: "Kowloon City", Depot: "Kai Tak", Far: "the runway",
+		AgeNote:   "1 m north of the south wall = 1 day open",
+		LimitName: "the north wall", BaseName: "Kowloon", DepotOnPier: true, XReach: 205,
+		Shapes: []Shape{
+			{'L', "Kowloon Walled City", []LL{{22.33200, 114.18935}, {22.33196, 114.19020},
+				{22.33194, 114.19128}, {22.33250, 114.19130},
+				{22.33302, 114.19112}, {22.33308, 114.19020},
+				{22.33305, 114.18930}, {22.33255, 114.18932}}},
+			{'L', "the Yamen", []LL{{22.33240, 114.19010}, {22.33240, 114.19040},
+				{22.33262, 114.19040}, {22.33262, 114.19010}}},
+			{'L', "Kowloon City", []LL{{22.33050, 114.18800}, {22.33050, 114.19350},
+				{22.32900, 114.19350}, {22.32900, 114.18800}}},
+			{'o', "Kai Tak", []LL{{22.33000, 114.19350}, {22.33000, 114.21000},
+				{22.32680, 114.21000}, {22.32680, 114.19350}}},
+			{'w', "Kowloon Bay", []LL{{22.32680, 114.19350}, {22.32680, 114.23000},
+				{22.30000, 114.23000}, {22.30000, 114.19350}}},
+			{'o', "Lion Rock", []LL{{22.33450, 114.17000}, {22.33450, 114.23000},
+				{22.35000, 114.23000}, {22.35000, 114.17000}}},
+		},
+		Lines: []Shape{
+			{'#', "the city wall", []LL{{22.33200, 114.18935}, {22.33196, 114.19020},
+				{22.33194, 114.19128}, {22.33250, 114.19130},
+				{22.33302, 114.19112}, {22.33308, 114.19020},
+				{22.33305, 114.18930}, {22.33255, 114.18932},
+				{22.33200, 114.18935}}},
+			{'=', "the Kai Tak runway", []LL{{22.32750, 114.19600}, {22.30200, 114.21600}}},
+		},
+		Streets: []Street{{0, "S wall"}, {30, "30 m"}, {60, "60 m"},
+			{90, "90 m"}, {105, "N wall"}},
+		Labels: []Label{{LL{22.30800, 114.22500}, "KOWLOON BAY"},
+			{LL{22.34200, 114.19000}, "LION ROCK"},
+			{LL{22.32850, 114.20100}, "KAI TAK"},
+			{LL{22.33000, 114.17800}, "KOWLOON"}},
+		Zones: map[string]Zone{"barracks": {-130, -10, -16, -10},
+			"depot":  {138, 165, -40, -20},
+			"far":    {160, 200, -60, -38},
+			"beyond": {-200, 220, 124, 148}},
+	},
 }
 
-// OtherCity is the city the c key switches to.
-func OtherCity(key string) string {
-	if key == "manhattan" {
-		return "chicago"
+// NextCity is the city the c key switches to: the next in CityKeys.
+func NextCity(key string) string {
+	for i, k := range CityKeys {
+		if k == key {
+			return CityKeys[(i+1)%len(CityKeys)]
+		}
 	}
-	return "manhattan"
+	return CityKeys[0]
 }
