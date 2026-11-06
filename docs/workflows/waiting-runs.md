@@ -31,8 +31,10 @@ deployment APIs.
 
 - **The `waiting approvals` section** sits between the pull requests and
   the releases, one row per waiting run, the one waiting longest first:
-  `run`, the repo (when more than one repo is configured or reviewed), a
-  chip per environment, the workflow's name, the branch it ran on, who
+  the run number (`#412`, as the Actions page numbers it), the repo (when
+  more than one repo is configured or reviewed), a chip per environment,
+  the workflow's name, what triggered it (the branch, the short SHA, and
+  the PR when the run came from one: `stage @9b1e4a7 (#230)`), who
   started it (the run's `actor`: the dispatcher of a `workflow_dispatch`,
   kept across re-runs), its age, and its title.
 - **The chips.** `approve: prod` (gold, the title gold too) is an
@@ -42,8 +44,9 @@ deployment APIs.
 - **The summary row** counts `N runs waiting`, gold with `, M on you (D)`
   when some wait on you. Nothing shows when nothing waits.
 - `/` matches the repo, the workflow, the title, the branch, who started
-  it, the environments and the run id. `o` opens the run on GitHub, `y`
-  copies its URL; Enter only says so (a run has no detail view).
+  it, the environments, the run number and the run id. `o` opens the run
+  on GitHub, `y` copies its URL; Enter shows the URL (a run has no detail
+  view).
 
 The title is the run's `display_title`: the workflow's `run-name:`, else
 the commit headline. The Actions runs API does not return a dispatch's
