@@ -123,6 +123,9 @@ type DisplayConfig struct {
 	// Room draws the dashboard as seen through a window from a room
 	// while the release window is open (W steps out of it and back).
 	Room bool
+	// FortressEpigraph lays Borges's "On Exactitude in Science" over the
+	// fortress map (b toggles it there).
+	FortressEpigraph bool
 	// Profile is a short badge drawn in the header ("" = none): which
 	// config this dashboard runs, when one person runs more than one.
 	Profile string
@@ -420,7 +423,7 @@ func Default() *Config {
 	return &Config{
 		GitHub:  GitHubConfig{}, // Host "": $GH_HOST, then gh's default host, then github.com
 		Reviews: ReviewsConfig{CIRecheckSecs: 900},
-		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true},
+		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true, FortressEpigraph: true},
 		Bots:    BotsConfig{Logins: []string{"github-actions", "dependabot"}},
 		Update:  UpdateConfig{Auto: true, Channel: "stable"},
 	}

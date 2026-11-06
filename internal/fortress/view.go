@@ -74,7 +74,11 @@ type View struct {
 	Lanes  []Lane
 	Cells  map[Cell][]*Item
 	Hidden int
+	// Epigraph lays Borges's story of the map the size of the empire over
+	// the map, where it covers the least (epigraph.go).
+	Epigraph bool
 
+	epi    *epiPlace
 	hasCur bool
 	key    *stateKey
 	sig    map[string]sigEntry
@@ -405,6 +409,12 @@ func (v *View) Draw(c *canvas.Canvas, h, w int, f Frame) {
 		}
 		c.PutRaw(top+mr-vt, x0+mc-vl+dc, g, SGR(it.Color, it.Urgency <= 2, false, f.Tier))
 	}
+	// the epigraph, over the map but under everything that must be seen
+	if v.Epigraph {
+		if p := v.placeEpigraph(h, w, top, mh, x0, mw, vt, vl); p.ok {
+			drawEpigraph(c, p, glyphs.Active() == glyphs.ASCII)
+		}
+	}
 	// edge counters when zoomed in
 	if v.Zoom != ZoomFit {
 		above, below := 0, 0
@@ -440,12 +450,17 @@ func (v *View) Draw(c *canvas.Canvas, h, w int, f Frame) {
 	v.drawPanels(c, h, w, f)
 }
 
-// drawPanels is the look panel and, under it, the legend: lower right.
-func (v *View) drawPanels(c *canvas.Canvas, h, w int, f Frame) {
+// panelsLeft is the panels' width and left column on a w-wide screen.
+func panelsLeft(w int) (bw, left int) {
+	bw = min(LegendW, w-Margin-2)
+	return bw, w - bw - 1
+}
+
+// legendNotes is the legend's notes under its glyph rows, for a box bw
+// wide.
+func (v *View) legendNotes(bw int) []string {
 	m := v.Map
 	city := m.City
-	bw := min(LegendW, w-Margin-2)
-	left := w - bw - 1
 	var laneNames []string
 	for i, l := range v.Lanes {
 		name := l.Label
@@ -478,6 +493,34 @@ func (v *View) drawPanels(c *canvas.Canvas, h, w int, f Frame) {
 	if v.Hidden > 0 {
 		notes = append(notes, fmt.Sprintf("%d not drawn for room: zoom in (+)", v.Hidden))
 	}
+	return notes
+}
+
+// panelMaxLook is the tallest look panel drawPanels draws (a stack, the
+// item, a title, its age, and the box).
+const panelMaxLook = 6
+
+// panelsBox is the panels' left column and their top row at their
+// tallest (the look panel's height follows the cursor), on an h x w
+// screen: what the epigraph keeps clear of.
+func (v *View) panelsBox(h, w int) (left, top int) {
+	bw, left := panelsLeft(w)
+	notes := v.legendNotes(bw)
+	legendH := len(Legend) + len(notes) + 3
+	avail := h - 4
+	if legendH+panelMaxLook > avail {
+		keep := max(0, avail-panelMaxLook-len(Legend)-3)
+		legendH = len(Legend) + min(keep, len(notes)) + 3
+	}
+	return left, max(2, h-2-legendH-panelMaxLook)
+}
+
+// drawPanels is the look panel and, under it, the legend: lower right.
+func (v *View) drawPanels(c *canvas.Canvas, h, w int, f Frame) {
+	m := v.Map
+	city := m.City
+	bw, left := panelsLeft(w)
+	notes := v.legendNotes(bw)
 	// look panel
 	under := v.Under()
 	r, cc := v.Cur.R, v.Cur.C
