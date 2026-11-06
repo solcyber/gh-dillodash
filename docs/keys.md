@@ -47,7 +47,7 @@
 | fortress | tab / shift+tab | jump to the next / previous thing |
 | fortress | enter | open the PR or issue under the cursor |
 | fortress | `+` / `-` / `=` | zoom to a street a day / fit the city (`=` is `+`) |
-| fortress | `c` | the other city |
+| fortress | `c` | the next city: Manhattan, Chicago, the Kowloon Walled City, round again |
 | fortress | `d` / `q` / esc | back to the list (`q` and Esc too) |
 | list | `y` | copy the URL (tmux buffer, the system clipboard, or OSC 52); the status line says which |
 | detail, files, diff, fortress | `y` | copy the open PR's, issue's or file's URL, as in the list |

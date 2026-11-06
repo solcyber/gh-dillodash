@@ -79,6 +79,9 @@ func NewMap(key string, w, h int, zoom string, lanes int, cx float64) *Map {
 	}
 	m.cpu = cpu
 	cols := max(w, int((mx1-mx0)*cpu)+24)
+	if city.XReach > 0 {
+		cols = max(cols, int(2*city.XReach*cpu)+4)
+	}
 	m.Rows, m.Cols = rows, cols
 	m.ytop = y1
 	center := float64(cols) / 2.0
@@ -98,6 +101,8 @@ func NewMap(key string, w, h int, zoom string, lanes int, cx float64) *Map {
 		m.Main[r] = make([]bool, cols)
 	}
 	switch {
+	case city.BaseName != "":
+		m.Names = []string{city.BaseName}
 	case city.Base == 'w' && city.Key == "chicago":
 		m.Names = []string{"Lake Michigan"}
 	case city.Base == 'w':
@@ -143,8 +148,11 @@ func NewMap(key string, w, h int, zoom string, lanes int, cx float64) *Map {
 				}
 				m.T[r][c] = l.Code
 				m.name[r][c] = idx
-				if l.Code == 'w' {
+				switch l.Code {
+				case 'w':
 					m.Main[r][c] = false
+				case '#':
+					m.Main[r][c] = true // an elevated line or a city wall is the city's own
 				}
 			}
 		}
@@ -236,6 +244,8 @@ func (m *Map) ZoneCells(zone string) []Cell {
 				ok = t == 'o' || t == '='
 			case zone == "beyond":
 				ok = t == 'o' && !m.Main[r][c]
+			case zone == "depot" && m.City.DepotOnPier:
+				ok = t == '='
 			case zone == "depot" && m.Key == "chicago":
 				ok = t == '=' || (m.Main[r][c] && in(t, "Lp-B"))
 			default:

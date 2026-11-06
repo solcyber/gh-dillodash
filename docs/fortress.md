@@ -4,15 +4,22 @@
 
 ![Fortress mode over Chicago: Madison is today and older work lies south toward Indiana, Lake Michigan to the east](shots/fortress-chicago.png)
 
+![Fortress mode over the Kowloon Walled City: the south wall is today, older work lies north toward Lion Rock, releases wait at Kai Tak](shots/fortress-kowloon.png)
+
 `d` in the list draws everything open as a Dwarf Fortress map over
-**Manhattan** or **Chicago** (a coin flip on each `d`; `c` swaps). It is a
-joke with a fixed encoding, so you can read it:
+**Manhattan**, **Chicago** or the **Kowloon Walled City** (picked at random
+on each `d`; `c` walks to the next). It is a joke with a fixed encoding, so
+you can read it:
 
 - **Row = age.** The numbered street is the age in days since the thing was
   opened (branches and commits: since their last commit). In Manhattan 14th
   St is 14 days old, Houston St is today and older is north; past 220th St
   is "the Bronx". In Chicago 35th St is 35 days old, Madison is today and
-  older is south; past 138th St is "Indiana".
+  older is south; past 138th St is "Indiana". In the Kowloon Walled City a
+  row is a metre: 30 m north of the south wall is 30 days old, the south
+  wall is today and older is north; past the north wall (105 days) is
+  "Lion Rock". Outside the walls the map is squeezed: Kai Tak's runway and
+  Lion Rock are kilometres off.
 - **Lane = repo.** The city's land at each row is cut west to east into one
   lane per repo, in config order. The legend lists the order.
 - **Shape = what it is; color and motion = its state:**
@@ -24,9 +31,9 @@ joke with a fixed encoding, so you can read it:
   | `g` goblin, `T` troll | issue, epic issue | yellow: assigned to you · red: a bug, incident or security label |
   | `░▒▓` · `.:#` ruins | branches with no open PR | denser shade = more branches in that cell (a stale-branch heatmap) |
   | `Ω` · `^` statue | commits on the default branch (newest 30 per repo) | white and glinting: under 24 hours old |
-  | `$` merchant | release PR into production, at the **depot** (the Seaport / Navy Pier) | yellow: needs approval · cyan: approved · blue, across the bridge or out on the pier: merged in the last 12 hours (`release_pr`) |
+  | `$` merchant | release PR into production, at the **depot** (the Seaport / Navy Pier / Kai Tak) | yellow: needs approval · cyan: approved · blue, across the bridge, out on the pier or down the runway: merged in the last 12 hours (`release_pr`) |
   | `■` / `□` · `W` / `w` wagon | staging units ahead of production, at the depot | yellow `■`: go · gray `□`: hold or untagged (`release_pr`) |
-  | `z` sleeper | queued for the maintenance window, in the **barracks** (Battery Park / River North) | yellow: attended night needed · gray: rolled (`maintenance_window`) |
+  | `z` sleeper | queued for the maintenance window, in the **barracks** (Battery Park / River North / Kowloon City) | yellow: attended night needed · gray: rolled (`maintenance_window`) |
 
 The **look cursor** names whatever is under it in the look panel: the repo
 and number, state, title, age. `hjkl`/arrows move it (`HJKL` by 8),

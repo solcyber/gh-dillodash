@@ -131,7 +131,7 @@ func (m *Model) fortressKey(k widgets.Key) bool {
 	case k.Rune == '-':
 		v.SetZoom(fortress.ZoomFit)
 	case k.Rune == 'c':
-		m.openFortressCity(fortress.OtherCity(v.City))
+		m.openFortressCity(fortress.NextCity(v.City))
 	case isEnter(k):
 		under := v.Under()
 		switch {

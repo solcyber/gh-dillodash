@@ -21,6 +21,13 @@
   reviewed, or that you opened, with none of their issues or other
   traffic. A PR you approved stays listed, so a stale approval there
   comes back as `re-review`. `config check` counts them.
+- **A third city for fortress mode: the Kowloon Walled City**, as it
+  stood until 1993. Inside the walls a row is a metre and a day: the
+  south wall is today, older work climbs north, and past the north wall
+  (105 days) lies Lion Rock. Queued work sleeps in Kowloon City along
+  Carpenter Road, releases wait at Kai Tak and leave down its runway into
+  Kowloon Bay, and the look cursor finds the Yamen in the middle. `d`
+  picks one of the three at random; `c` walks to the next.
 - Release rows: my stale approval reads `needs approval` again, and
   someone else's reads `approved by <login> · stale`.
 

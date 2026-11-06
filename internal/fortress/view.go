@@ -458,9 +458,17 @@ func (v *View) drawPanels(c *canvas.Canvas, h, w int, f Frame) {
 	if v.Zoom != ZoomFit {
 		scale = "1 row = 1 day (- fits the city)"
 	}
+	ageNote := fmt.Sprintf("street = days open; %s = today", city.Zero)
+	if city.AgeNote != "" {
+		ageNote = city.AgeNote
+	}
+	limit := fmt.Sprintf("%dth St", city.Limit)
+	if city.LimitName != "" {
+		limit = city.LimitName
+	}
 	notes := []string{
-		fmt.Sprintf("street = days open; %s = today", city.Zero),
-		fmt.Sprintf("older: %s; past %dth St: %s", city.Older, city.Limit, city.Beyond),
+		ageNote,
+		fmt.Sprintf("older: %s; past %s: %s", city.Older, limit, city.Beyond),
 		scale,
 	}
 	notes = append(notes, widgets.Wrap("lanes W to E: "+strings.Join(laneNames, " "), max(10, bw-4))...)
