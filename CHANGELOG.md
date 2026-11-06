@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.11.0]
+
+An approval that will not merge by itself stays in view, a busy repo can
+be listed for its review requests alone, and fortress mode gains the
+Kowloon Walled City.
 
 ### Added
 
