@@ -202,7 +202,6 @@ func Render(src string, width int, raw bool, hooks *Hooks) []text.Line {
 	return out
 }
 
-
 // closesFence reports whether line closes a fence opened by mark: the
 // same character repeated at least len(mark) times and nothing after.
 func closesFence(line, mark string) bool {
