@@ -71,7 +71,7 @@ the day after it is enrolled, or at once after the cache file is deleted.
 
 ## `a` on a release
 
-![a on a release: queue it for tonight's window, or release NOW with a reason](../shots/approve-menu.png)
+![A on a release: queue it for tonight's window, or release NOW with a reason](../shots/approve-menu.png)
 
 ![The release-now prompt: the reason, its length meter, and the exact comment that will be posted](../shots/release-now-prompt.png)
 
@@ -187,7 +187,7 @@ replays one offline; these shots are its steps.
   open it first. A release the freeze bumped keeps its approval, so `a`
   offers release NOW alone.
 
-![a on the bumped release: the approval stands, so release NOW is the one choice](../shots/night-2-now.png)
+![A on the bumped release: the approval stands, so release NOW is the one choice](../shots/night-2-now.png)
 
 - **Identity before posting.** With `[github] approvers_team =
   "org/team"`, dillodash checks that the login it posts as is an active

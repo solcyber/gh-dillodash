@@ -195,6 +195,7 @@ type Model struct {
 	// its map when it changes)
 	refreshStamp string
 	refreshGen   int
+	agentPRs     []*model.PR // the agent section's PRs (they still need you)
 	// canvas is the frame buffer View reuses between frames
 	canvas *canvas.Canvas
 	// the room (room.go): roomIn is whether the release window was open

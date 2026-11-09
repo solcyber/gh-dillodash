@@ -17,6 +17,7 @@ type shot struct {
 	Expect     []string // text the frame must show: the script landed where it meant to
 	Opts       ui.SnapshotOptions
 	Night      bool   // on the release-night fixture (--demo-night) instead of the demo's
+	Agent      bool   // on the agent fixture (--demo-agent)
 	Tier       string // "" = truecolor | "256" | "16" | "mono": the color depth it is drawn at
 }
 
@@ -73,6 +74,13 @@ var shots = []shot{
 	{Name: "room", Night: true, Cols: 160, Rows: 48, Steps: nightSteps(1), Expect: []string{"back to work", "#212"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 1.3}},
 	{Name: "room-off", Night: true, Cols: 160, Rows: 48, Steps: append(nightSteps(1), "w"), Expect: []string{"#212", "steps back into the room"}},
+	// the agent fixture: ops#12, then the agent's section (ops#8 plan-set,
+	// ops#9 ceremony, legacy-tf#197, ops#2), then ops#14, ops#6, legacy-tf#5
+	{Name: "agent-list", Agent: true, Steps: []string{"j"}, Expect: []string{"with Ada", "ops#8", "awaiting review"}},
+	{Name: "agent-plan-set", Agent: true, Steps: []string{"j", "enter"}, Expect: []string{"plan-set (2 stacks)", "apply on approval", "A  /approve plan-set"}},
+	{Name: "agent-approve", Agent: true, Steps: []string{"j", "enter", "A"}, Expect: []string{"/approve", "Post that on ops#8 as dana?"}},
+	{Name: "agent-handoff", Agent: true, Steps: []string{"G", "k", "k", "enter", "H"}, Expect: []string{"hand ops#14 to Ada"}},
+	{Name: "agent-merge-applies", Agent: true, Steps: []string{"j", "j", "j", "enter", "M"}, Expect: []string{"MERGING APPLIES", "legacy-tf#197"}},
 	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
 	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
 	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},

@@ -56,7 +56,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		"release_now_min_reason", "release_now_dispatch", "release_now_dispatch_event", "apply_workflow", "apply_run_match",
 		"progress_poll_secs", "progress_timeout_secs", "approval_queues_for_window", "merge_method", "merged_keep_secs",
 		"deploy_stuck_secs", "deploy_refresh_secs", "deploy_approval_comment", "lane_order", "apply_budget_mins", "approval_comment",
-		"methods", "reserved_from", "reserved_to", "reserved_stacks",
+		"methods", "reserved_from", "reserved_to", "reserved_stacks", "merge_applies", "name", "login", "section",
 	}
 	for _, k := range want {
 		if !seen[k] {

@@ -422,7 +422,7 @@ func fitSummary(segs []text.Seg, room int) []text.Seg {
 func (m *Model) summarySegs() []text.Seg {
 	me := strings.ToLower(m.me)
 	need := 0
-	for _, p := range m.prs {
+	for _, p := range append(append([]*model.PR(nil), m.prs...), m.agentPRs...) {
 		if p.IsDraft {
 			continue
 		}

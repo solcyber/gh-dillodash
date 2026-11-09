@@ -313,14 +313,14 @@ func (m *Model) doHandoff(app *lockedApp) {
 		app.Notice("no agent to hand to: set [agent] handoff_label in the config")
 		return
 	}
-	if m.writeRefused(app, t.repo, "handing "+where+" to the agent") {
+	if m.writeRefused(app, t.repo, "handing "+where+" to "+m.agentName()) {
 		return
 	}
 	if hasFold(t.labels, label) {
-		app.Notice(fmt.Sprintf("%s already carries %q — the agent has it", where, label))
+		app.Notice(fmt.Sprintf("%s already carries %q — %s has it", where, label, m.agentName()))
 		return
 	}
-	q := fmt.Sprintf("hand %s to the agent: add the label %q", where, label)
+	q := fmt.Sprintf("hand %s to %s: add the label %q", where, m.agentName(), label)
 	if comment != "" {
 		q += " and post the handoff comment"
 	}
@@ -340,7 +340,7 @@ func (m *Model) doHandoff(app *lockedApp) {
 			return
 		}
 	}
-	app.OK(fmt.Sprintf("handed %s to the agent (%q)", where, label))
+	app.OK(fmt.Sprintf("handed %s to %s (%q)", where, m.agentName(), label))
 	app.Celebrate(false)
 	app.Refresh(true)
 }

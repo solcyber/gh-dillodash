@@ -89,6 +89,19 @@ type AgentConfig struct {
 	// Name is what the dashboard calls the agent ("hand #6 to <name>?");
 	// "" = "the agent".
 	Name string
+	// Login is the agent's GitHub login (an App's bot login, with or
+	// without "[bot]"): its PRs, comments and reviews show Name, and are
+	// the agent's, not a bot's noise.
+	Login string
+	// Section adds a list section, "with <name>": the open items carrying
+	// HandoffLabel and the agent's own open PRs, moved there from the PR
+	// and issue sections, so its queue is one place.
+	Section bool
+}
+
+// IsAgent reports whether login is the agent's.
+func (a AgentConfig) IsAgent(login string) bool {
+	return a.Login != "" && IsLogin(login, strings.TrimSuffix(strings.ToLower(a.Login), "[bot]"))
 }
 
 // ReviewsConfig is [reviews].
@@ -100,6 +113,20 @@ type ReviewsConfig struct {
 	// Never one of Repos.
 	Requested     []model.Repo
 	CIRecheckSecs int
+	// MergeApplies are repos where a merge deploys or applies (a pipeline
+	// on push to the base): M says so in its question, and the detail's
+	// header carries a chip.
+	MergeApplies []model.Repo
+}
+
+// MergeApplies reports whether a merge in repo deploys or applies.
+func (r ReviewsConfig) Applies(repo model.Repo) bool {
+	for _, x := range r.MergeApplies {
+		if strings.EqualFold(x.String(), repo.String()) {
+			return true
+		}
+	}
+	return false
 }
 
 // Multi reports whether more than one repo is listed (refs then carry

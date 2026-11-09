@@ -129,6 +129,26 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 			fmt.Fprintf(w, "  writes: only to %s (allowed_repos)\n", joinRepos(cfg.GitHub.AllowedRepos))
 		}
 	}
+	if len(cfg.Reviews.MergeApplies) > 0 {
+		fmt.Fprintf(w, "merges apply in: %s (merge_applies: M says so first)\n", joinRepos(cfg.Reviews.MergeApplies))
+	}
+	if a := cfg.Agent; a.HandoffLabel != "" || a.Login != "" {
+		name := a.Name
+		if name == "" {
+			name = "the agent"
+		}
+		fmt.Fprintf(w, "agent: %s", name)
+		if a.Login != "" {
+			fmt.Fprintf(w, " (%s)", a.Login)
+		}
+		if a.HandoffLabel != "" {
+			fmt.Fprintf(w, "; H adds %q", a.HandoffLabel)
+		}
+		if a.Section {
+			fmt.Fprint(w, "; its section is on")
+		}
+		fmt.Fprintln(w)
+	}
 	if pulled {
 		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {
 			fmt.Fprintf(w, "  source: could not check %s: %s\n", src.Spec(), err)

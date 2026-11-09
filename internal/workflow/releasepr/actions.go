@@ -408,7 +408,7 @@ func (w *Workflow) MergeBlock(pr *model.PR, me string) string {
 	}
 	switch w.Label(pr, me, false) {
 	case LabelNeeds, model.LabelChanges, model.LabelDraft:
-		return "needs an approving review first (a)"
+		return "needs an approving review first (A)"
 	}
 	mss := pr.MergeStateStatus
 	if mss == "" {

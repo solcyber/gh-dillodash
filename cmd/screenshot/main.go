@@ -147,11 +147,16 @@ func options(s shot, version string) (ui.Options, error) {
 		clock.Now = func() time.Time { return demo.NightEpoch }
 		cfg, gh = demo.NightConfig(), demo.NightClient(demo.NightStart).GH
 	}
+	me := demo.Me
+	if s.Agent {
+		cfg, gh, me = demo.AgentConfig(), demo.AgentClient(), demo.AgentMe
+		gh = ghapi.WithAllowedRepos(gh, cfg.GitHub.AllowedRepos)
+	}
 	wf, err := workflow.Load(cfg, cfg.Reviews.Repos)
 	if err != nil {
 		return ui.Options{}, err
 	}
-	return ui.Options{Config: cfg, GH: gh, Workflows: wf, Me: demo.Me, Host: "github.com", Version: version}, nil
+	return ui.Options{Config: cfg, GH: gh, Workflows: wf, Me: me, Host: "github.com", Version: version}, nil
 }
 
 // write paints the frames, stacked with a rule between them, into a PNG.
