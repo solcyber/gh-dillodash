@@ -220,15 +220,17 @@ func renderTable(rows []string, width int, hooks *Hooks) []text.Line {
 	}
 	grid := make([][][]text.Seg, 0, len(rows)-1)
 	hrow := make([][]text.Seg, n)
+	// cells are measured as drawn: an escape in a cell is drawn as
+	// visible text by the canvas (text.Clean), not as zero cells
 	for j, c := range head {
-		hrow[j] = Inline(c, "md.bold", hooks)
+		hrow[j] = Inline(text.Clean(c), "md.bold", hooks)
 	}
 	grid = append(grid, hrow)
 	for _, r := range rows[2:] {
 		cells := padCells(tableCells(r), n)
 		row := make([][]text.Seg, n)
 		for j, c := range cells {
-			row[j] = Inline(c, "text", hooks)
+			row[j] = Inline(text.Clean(c), "text", hooks)
 		}
 		grid = append(grid, row)
 	}

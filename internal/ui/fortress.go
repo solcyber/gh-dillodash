@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math/rand/v2"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/clock"
@@ -94,8 +95,24 @@ func (m *Model) fortressBuild() ([]*fortress.Item, []fortress.Lane) {
 // fortressPrepare brings the view up to date with the last refresh.
 func (m *Model) fortressPrepare() *fortress.View {
 	v := m.fortress.view
+	if v.Clock == nil {
+		v.Clock = m.wallNow // the announcements' times, in the dashboard's zone
+	}
 	v.Prepare(m.layoutH(), m.layoutW(), m.refreshStamp, m.fortress.data != nil)
 	return v
+}
+
+// wallNow is now in the zone the dashboard shows times in (the header
+// clock's, [display] clock_timezone), not the host's: a host on UTC and
+// a laptop on EDT draw the same wall clock.
+func (m *Model) wallNow() time.Time {
+	now := clock.Now()
+	if m.cfg != nil {
+		if loc := m.cfg.Display.ClockLocal(); loc != nil && loc.Loc != nil {
+			return now.In(loc.Loc)
+		}
+	}
+	return now.Local()
 }
 
 // fortressKey handles a key in fortress mode; false leaves for the list.
@@ -210,6 +227,6 @@ func (m *Model) drawFortress(c *canvas.Canvas, h, w int) {
 		Still:  still,
 		T:      fx.Now(),
 		Tier:   theme.Current(),
-		Season: fortress.Season(clock.Now().Local()),
+		Season: fortress.Season(m.wallNow()),
 	})
 }

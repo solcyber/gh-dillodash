@@ -160,7 +160,7 @@ func NewMap(key string, w, h int, zoom string, lanes int, cx float64) *Map {
 	// a row per labelled street, across the city proper
 	m.StreetRows = map[int]string{}
 	for _, st := range city.Streets {
-		r, _ := m.CellOf(0, float64(st.Y))
+		r, _ := m.CellOf(0, bandMid(float64(st.Y), city.Dir)) // the row its day's items stand on
 		if r < 0 || r >= rows {
 			continue
 		}
@@ -213,10 +213,23 @@ func (m *Map) CellOf(x, y float64) (int, int) {
 	return int((m.ytop - y) / m.spr), int((x - m.xleft) * m.cpu)
 }
 
-// AgeRow is the row of an item age days old (street = days).
+// AgeRow is the row of an item age days old (street = days): the row
+// at the middle of its whole day's band, so 0.3 days stands on the same
+// street as 0 and 13.5 on 13th, in a city that grows north or south
+// alike (truncation toward the top edge put a whole day one row off in
+// the north-growing ones).
 func (m *Map) AgeRow(age float64) int {
-	r, _ := m.CellOf(0, age*float64(m.City.Dir))
+	r, _ := m.CellOf(0, bandMid(age*float64(m.City.Dir), m.City.Dir))
 	return r
+}
+
+// bandMid is the middle of the whole day's band y falls in: [N, N+1) in
+// a city that grows north (dir +1), (-(N+1), -N] in one that grows south.
+func bandMid(y float64, dir int) float64 {
+	if dir < 0 {
+		return math.Ceil(y) - 0.5
+	}
+	return math.Floor(y) + 0.5
 }
 
 // ZoneCells lists the cells of a zone's box that items can stand on,

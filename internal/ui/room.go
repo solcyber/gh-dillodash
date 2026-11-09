@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/solcyber/gh-dillodash/internal/fortress"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -43,7 +44,14 @@ func (m *Model) roomAt(h, w int) (scenes.RoomLayout, bool) {
 	if !m.roomWanted() {
 		return scenes.RoomLayout{}, false
 	}
-	return scenes.RoomFit(h, w)
+	l, ok := scenes.RoomFit(h, w)
+	if ok && m.view == ViewFortress && (l.H < fortress.MinH || l.W < fortress.MinW) {
+		// the glass is too small for the map on this screen (100x32 makes
+		// it 17 rows): the fortress takes the whole terminal instead of
+		// saying the terminal is too small
+		return scenes.RoomLayout{}, false
+	}
+	return l, ok
 }
 
 // layoutW and layoutH are the size the dashboard is laid out in: the

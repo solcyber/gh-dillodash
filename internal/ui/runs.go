@@ -269,7 +269,7 @@ func (m *Model) runLogs(app *lockedApp, t workflow.RunTarget) {
 	}
 	path := f.Name()
 	defer os.Remove(path)
-	_, werr := f.WriteString(strings.ToValidUTF8(log, "�"))
+	_, werr := f.WriteString(text.ForPager(log)) // a job's output is anyone's text
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}

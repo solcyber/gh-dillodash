@@ -101,8 +101,11 @@ func Render(src string, width int, raw bool, hooks *Hooks) []text.Line {
 			out = append(out, renderTable(table, width, hooks)...)
 			table = nil
 		}
+		// CommonMark: a fence closes only on a run of the same character
+		// at least as long as the one that opened it, with no info string
+		// (a ```go inside a ````md block is content)
 		if m := fenceRE.FindStringSubmatch(stripped); m != nil &&
-			(!inFence || strings.HasPrefix(stripped, prefixRunes(fenceMark, 3))) {
+			(!inFence || closesFence(stripped, fenceMark)) {
 			if !inFence {
 				inFence, fenceMark, lang = true, m[1], strings.ToLower(m[2])
 				name := lang
@@ -199,14 +202,16 @@ func Render(src string, width int, raw bool, hooks *Hooks) []text.Line {
 	return out
 }
 
-// prefixRunes is the first n characters of s.
-func prefixRunes(s string, n int) string {
-	i := 0
-	for pos := range s {
-		if i == n {
-			return s[:pos]
-		}
-		i++
+// closesFence reports whether line closes a fence opened by mark: the
+// same character repeated at least len(mark) times and nothing after.
+func closesFence(line, mark string) bool {
+	if mark == "" {
+		return false
 	}
-	return s
+	ch := mark[0]
+	n := 0
+	for n < len(line) && line[n] == ch {
+		n++
+	}
+	return n >= len(mark) && strings.TrimSpace(line[n:]) == ""
 }

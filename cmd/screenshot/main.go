@@ -45,7 +45,17 @@ import (
 	_ "github.com/solcyber/gh-dillodash/internal/workflow/all"
 )
 
+// pinHost makes a shot independent of the machine drawing it: the
+// gallery is colour whatever NO_COLOR says (theme.Setup honours it), and
+// the host zone is UTC, so nothing that reads time.Local differs between
+// a CI runner and a laptop.
+func pinHost() {
+	os.Unsetenv("NO_COLOR")
+	time.Local = time.UTC
+}
+
 func main() {
+	pinHost()
 	out := flag.String("out", "docs/screenshot.png", "where to write the hero PNG (the list over a pull request's detail)")
 	outDir := flag.String("out-dir", "docs/shots", "where the gallery's PNGs go, one per shot")
 	only := flag.String("only", "", "render only these shots (comma-separated names); \"hero\" is the README picture")
@@ -125,6 +135,7 @@ func render(s shot, scripts [][]string) ([]*canvas.Canvas, error) {
 // options are the dashboard's options for a shot: a fresh fixture (the
 // demo's, or the release night's) and its workflows.
 func options(s shot, version string) (ui.Options, error) {
+	pinHost()
 	// the day is drawn at its own instant too: the header clock, every
 	// "3h ago" and which night is tonight all read the clock
 	clock.Now = func() time.Time { return demo.DayEpoch }

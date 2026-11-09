@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/solcyber/gh-dillodash/internal/text"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -210,7 +211,8 @@ func WriteTempDiff(number int, diff string) (path string, cleanup func(), err er
 	}
 	path = f.Name()
 	cleanup = func() { os.Remove(path) }
-	if _, err := f.WriteString(strings.ToValidUTF8(diff, "�")); err != nil {
+	// the diff is the PR author's text: no escape but colour reaches the pager
+	if _, err := f.WriteString(text.ForPager(diff)); err != nil {
 		f.Close()
 		cleanup()
 		return "", nil, err
