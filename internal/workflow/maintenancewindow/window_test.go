@@ -482,7 +482,7 @@ func TestNightSegs(t *testing.T) {
 	InfoOf(held).Night = night
 	app.PRs = []*model.PR{held}
 	segs := segsText(w.NightSegs(app, night, at("2026-10-21T19:00:00Z")))
-	check(t, "header: a held item with nobody attending asks for /attend", strings.Contains(segs, "needs /attend (w) by 21:00 ET") && strings.Contains(segs, "#3600"))
+	check(t, "header: a held item with nobody attending asks for /attend", strings.Contains(segs, "needs /attend (W) by 21:00 ET") && strings.Contains(segs, "#3600"))
 	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:20:00Z")))
 	check(t, "header: past the cutoff with nobody, it says items roll", strings.Contains(segs, "nobody attending"))
 	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:30:00Z")))
@@ -493,7 +493,7 @@ func TestNightSegs(t *testing.T) {
 		[]string{"alice"})}, "alice", mw)[night]
 	app.SetState(Name, &State{Nights: map[string]*Night{night: frozen}, Manifests: map[string]*Manifest{}})
 	segs = segsText(w.NightSegs(app, night, at("2026-10-22T03:00:00Z")))
-	check(t, "header: at 23:00 asks for the /release with the deadline", strings.Contains(segs, "/release now (w) by 23:05 ET") && strings.Contains(segs, "attending: @alice"))
+	check(t, "header: at 23:00 asks for the /release with the deadline", strings.Contains(segs, "/release now (W) by 23:05 ET") && strings.Contains(segs, "attending: @alice"))
 	done := WindowNights([]*model.Issue{manifestFor(3600, night, "running", nil, []string{"alice"},
 		human("alice", "/release", "2026-10-22T03:00:10Z"), botC("Checked in: @alice.", "2026-10-22T03:00:40Z"))}, "alice", mw)[night]
 	app.SetState(Name, &State{Nights: map[string]*Night{night: done}, Manifests: map[string]*Manifest{}})

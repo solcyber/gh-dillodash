@@ -53,9 +53,9 @@ assume the example window.
   (`starts in 2h03m`: blue, gold in the last quarter hour, `live now` once
   the window opens; a narrow screen clips the attendance before it), and
   shows who attends and who checked in. When a
-  held item needs someone, it says so in gold: `needs /attend (w) by
+  held item needs someone, it says so in gold: `needs /attend (W) by
   12:00 UTC` before the cutoff, `nobody attending: not-revertible items
-  roll` after it, `/release now (w) by 16:10 UTC` from `release_from`.
+  roll` after it, `/release now (W) by 16:10 UTC` from `release_from`.
   With `closer` set, a night past its `end` that is not closed yet says
   `closes at <closer>`, then `closer late`.
 - **A missed freeze.** When the freeze never ran, the conductor fires

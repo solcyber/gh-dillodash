@@ -543,7 +543,7 @@ func (w *Workflow) NightSegs(app workflow.App, night string, now time.Time) []te
 	case len(info.Attendees) > 0:
 		if needs && live && !now.Before(start) {
 			// the action first: a narrow screen clips from the right
-			s := "  " + w.cfg.ReleaseCommand + " now (w)"
+			s := "  " + w.cfg.ReleaseCommand + " now (W)"
 			if !until.IsZero() {
 				s += " by " + local.TAt(until)
 			}
@@ -553,7 +553,7 @@ func (w *Workflow) NightSegs(app workflow.App, night string, now time.Time) []te
 	case needs && live:
 		cutoff, _ := WallToUTC(night, w.cfg.Cutoff, w.cfg)
 		if now.Before(cutoff) {
-			segs = append(segs, text.S(fmt.Sprintf("  needs %s (w) by %s", w.cfg.AttendCommand, local.T(w.cfg.Cutoff)), "sum.attn"))
+			segs = append(segs, text.S(fmt.Sprintf("  needs %s (W) by %s", w.cfg.AttendCommand, local.T(w.cfg.Cutoff)), "sum.attn"))
 		} else {
 			segs = append(segs, text.S("  nobody attending: not-revertible items roll", "sum.attn"))
 		}
