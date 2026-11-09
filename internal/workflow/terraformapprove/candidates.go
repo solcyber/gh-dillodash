@@ -138,6 +138,10 @@ func ExtractPlanCandidates(pr *model.PR, cfg *config.TerraformApproveConfig) []C
 			lastApprove = m[1]
 			continue
 		}
+		if !fromBot(c, digestBot(cfg)) {
+			// everything below is the bot's: outcomes, refusals, digests
+			continue
+		}
 		outcome := ""
 		for _, o := range ApplyOutcomes {
 			if o.Re.MatchString(body) {
@@ -289,11 +293,14 @@ func ExtractPlanCandidates(pr *model.PR, cfg *config.TerraformApproveConfig) []C
 			latestRun = p.RunID
 		}
 	}
+	// headKnown: EnrichDetail read the head's plan runs. Known and empty
+	// means the plan workflow has not run for this head (yet, or a path
+	// filter skipped it), so every bot digest is an older head's plan,
+	// and the validator would refuse its id.
 	headRuns := map[int64]bool{}
-	if runs, ok := pr.Get(HeadPlanRuns).([]int64); ok {
-		for _, r := range runs {
-			headRuns[r] = true
-		}
+	runs, headKnown := pr.Get(HeadPlanRuns).([]int64)
+	for _, r := range runs {
+		headRuns[r] = true
 	}
 	out := make([]Candidate, 0, len(plans)+1)
 	for _, p := range plans {
@@ -304,7 +311,7 @@ func ExtractPlanCandidates(pr *model.PR, cfg *config.TerraformApproveConfig) []C
 	for i := range out {
 		cand := &out[i]
 		if cand.State == StateLive && ((cand.RunID < latestRun && !cand.Hand) ||
-			(len(headRuns) > 0 && cand.RunID != 0 && !cand.Hand && !headRuns[cand.RunID]) ||
+			(headKnown && cand.RunID != 0 && !cand.Hand && !headRuns[cand.RunID]) ||
 			(!headCommitted.IsZero() && cand.Created.Before(headCommitted)) ||
 			(cand.Ceremony && headOid != "" && cand.Head != "" && cand.Head != headOid)) {
 			cand.State = StateSuperseded
@@ -322,7 +329,7 @@ func ExtractPlanCandidates(pr *model.PR, cfg *config.TerraformApproveConfig) []C
 	}
 	// Multi-stack PRs: with more than one change-bearing stack the set id
 	// is the only approvable id; its members stop being candidates.
-	if pset := ExtractPlanSet(pr); pset != nil && len(pset.Members) > 1 {
+	if pset := ExtractPlanSet(pr, digestBot(cfg)); pset != nil && len(pset.Members) > 1 {
 		memberIDs := map[string]bool{}
 		for _, m := range pset.Members {
 			memberIDs[m.PlanID] = true
@@ -397,14 +404,17 @@ func ExtractPlanCandidates(pr *model.PR, cfg *config.TerraformApproveConfig) []C
 	return out
 }
 
-// ExtractPlanSet is the newest plan-set the plan bot posted for the PR's
+// ExtractPlanSet is the newest plan-set the plan bot (bot) posted for the PR's
 // CURRENT head, or nil. A set posted for an older head is dead: the bot
 // re-plans every push. When the PR carries no HeadRefOid (partial
 // payloads), the newest set wins.
-func ExtractPlanSet(pr *model.PR) *PlanSet {
+func ExtractPlanSet(pr *model.PR, bot string) *PlanSet {
 	head := pr.HeadRefOid
 	var best *PlanSet
 	for _, c := range pr.Comments.Nodes {
+		if !fromBot(c, bot) {
+			continue
+		}
 		m := PlanSetMetaRE.FindStringSubmatch(c.Body)
 		if m == nil {
 			continue
@@ -464,6 +474,21 @@ func ApproveRefusals(pr *model.PR, cfg *config.TerraformApproveConfig) map[strin
 // never a longer login that starts with it.
 func isBot(login, bot string) bool { return config.IsLogin(login, bot) }
 
+// fromBot reports whether c was posted by the digest bot. Digests,
+// plan-set trailers and window verdicts are the bot's word only: a
+// reviewer quoting an older digest, or anyone pasting a trailer, must
+// not become the plan the dashboard offers. bot "" (no config) trusts
+// every author, as before.
+func fromBot(c model.Comment, bot string) bool { return bot == "" || isBot(c.Author.Login, bot) }
+
+// digestBot is cfg's digest bot, "" without a config.
+func digestBot(cfg *config.TerraformApproveConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.DigestBot
+}
+
 // PlanStateLabel is a candidate's one-line state for the card and the
 // pick menu; refused says the validator turned its last /approve down.
 func PlanStateLabel(c Candidate, refused bool, cfg *config.TerraformApproveConfig) string {
@@ -515,9 +540,12 @@ func PlanStateLabel(c Candidate, refused bool, cfg *config.TerraformApproveConfi
 // A plan-set is disruptive if any member is: it borrows the first
 // disruptive member's verdict, else any member's; with more than one
 // member it is never revertible (it queues for an attended night).
-func PlanVerdicts(pr *model.PR) map[string]Verdict {
+func PlanVerdicts(pr *model.PR, bot string) map[string]Verdict {
 	out := map[string]Verdict{}
 	for _, c := range pr.Comments.Nodes {
+		if !fromBot(c, bot) {
+			continue
+		}
 		body := c.Body
 		mID := PlanIDRE.FindStringSubmatch(body)
 		mV := WindowVerdictRE.FindStringSubmatch(body)
@@ -536,7 +564,7 @@ func PlanVerdicts(pr *model.PR) map[string]Verdict {
 			}
 		}
 	}
-	if pset := ExtractPlanSet(pr); pset != nil {
+	if pset := ExtractPlanSet(pr, bot); pset != nil {
 		var member []Verdict
 		for _, m := range pset.Members {
 			if v, ok := out[m.PlanID]; ok {

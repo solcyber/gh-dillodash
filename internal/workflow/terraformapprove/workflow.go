@@ -139,7 +139,7 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 		return nil
 	}
 	refused := ApproveRefusals(pr, w.cfg)
-	verdicts := PlanVerdicts(pr)
+	verdicts := PlanVerdicts(pr, digestBot(w.cfg))
 	inner := max(20, width-4)
 	stackW := 0
 	for _, c := range cands {
@@ -305,7 +305,10 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			app.Notice("approve cancelled")
 			return true
 		}
-		if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, ""); err != nil {
+		if !workflow.HeadStill(app, pr, "approval") {
+			return true
+		}
+		if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, "", pr.HeadRefOid); err != nil {
 			app.Fail("review approval failed: " + err.Error())
 			return true
 		}
@@ -364,7 +367,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	// queue nothing, so they get neither. Ceremonies never queue: outside
 	// the ceremony window a plain approve is refused.
 	outside := ""
-	verdict, hasVerdict := PlanVerdicts(pr)[cand.PlanID]
+	verdict, hasVerdict := PlanVerdicts(pr, digestBot(w.cfg))[cand.PlanID]
 	disruptive := hasVerdict && IsDisruptive(verdict)
 	reasonPrompt := func(extra string) (string, bool) {
 		return app.Prompt(fmt.Sprintf("Why can't this wait for the window? The reason goes on the PR%s "+
@@ -495,8 +498,11 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		app.Fail(fmt.Sprintf("%s NOT posted: %q does not match the validator's grammar", cmd, body))
 		return true
 	}
-	if err := app.GH().Comment(app.Context(), pr.Repo, pr.Number, body); err != nil {
-		app.Fail(fmt.Sprintf("%s NOT posted: %s", cmd, err))
+	if !workflow.HeadStill(app, pr, cmd) {
+		return true
+	}
+	if _, unsure, err := workflow.Post(app, pr.Repo, pr.Number, body); err != nil {
+		workflow.PostFailed(app, "", cmd, unsure, err)
 		return true
 	}
 	// the approve comment is the operative approval: mark the row now,
@@ -508,7 +514,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	reviewNote := " + review approved"
 	if reviewed {
 		reviewNote = " (your review approval stands)"
-	} else if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, ""); err != nil {
+	} else if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, "", pr.HeadRefOid); err != nil {
 		reviewNote = fmt.Sprintf(" (review approval failed: %s)", err)
 	}
 	flagNote := ""

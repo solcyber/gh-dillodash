@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -107,4 +108,69 @@ func WriteRefused(app App, repo model.Repo, what string) bool {
 	}
 	app.Notice(fmt.Sprintf("%s refused: %s is not in [github] allowed_repos — this dashboard is read-only there", what, repo))
 	return true
+}
+
+// HeadStill re-reads pr's head just before an approval posts and
+// refuses (a gold notice, false) when it moved since the reviewer read
+// it: the confirm can sit open while someone pushes, and an approval
+// belongs to the code that was on screen. The review itself is pinned
+// to the head shown (commit_id), so when the re-read fails it allows.
+func HeadStill(app App, pr *model.PR, what string) bool {
+	if pr == nil || pr.HeadRefOid == "" {
+		return true
+	}
+	now, err := app.GH().PRDetail(app.Context(), pr.Repo, pr.Number)
+	if err != nil || now == nil {
+		return true
+	}
+	if model.ShaMoved(pr.HeadRefOid, now.HeadRefOid) {
+		app.Notice(fmt.Sprintf("%s not posted: %s#%d moved from %s to %s since you read it — r reloads it, then look again",
+			what, pr.Repo.Name, pr.Number, model.ShortSHA(pr.HeadRefOid), model.ShortSHA(now.HeadRefOid)))
+		app.Refresh(true)
+		return false
+	}
+	return true
+}
+
+// Post posts body on repo#number as a comment and returns its id. When
+// the post fails ambiguously (ghapi.Ambiguous: it may have landed), it
+// re-reads the thread for a comment by this login with exactly body,
+// posted in the last ten minutes: found, the post counts as done (err
+// nil). unsure is true when the re-read itself failed, so the caller
+// says "may have posted" and refreshes instead of "NOT posted", which
+// would invite a second post of the same command.
+func Post(app App, repo model.Repo, number int, body string) (id int64, unsure bool, err error) {
+	id, err = app.GH().PostComment(app.Context(), repo, number, body)
+	if err == nil || !ghapi.Ambiguous(err) {
+		return id, false, err
+	}
+	comments, rerr := app.GH().PRComments(app.Context(), repo, number)
+	if rerr != nil {
+		is, ierr := app.GH().IssueDetail(app.Context(), repo, number)
+		if ierr != nil || is == nil {
+			return 0, true, err
+		}
+		comments = is.Comments.Nodes
+	}
+	since := app.Now().Add(-10 * time.Minute)
+	want := strings.TrimSpace(body)
+	for i := len(comments) - 1; i >= 0; i-- {
+		c := comments[i]
+		if strings.EqualFold(c.Author.Login, app.Me()) && strings.TrimSpace(c.Body) == want && !c.CreatedAt.Before(since) {
+			return c.ID, false, nil
+		}
+	}
+	return 0, false, err
+}
+
+// PostFailed is the status line for a failed Post of what: "NOT posted"
+// when it surely did not land, "may have posted" (and a refresh, so the
+// thread shows which) when the re-read could not tell.
+func PostFailed(app App, lead, what string, unsure bool, err error) {
+	if unsure {
+		app.Fail(fmt.Sprintf("%s%s may have posted (%s) — refreshing; check the thread before posting it again", lead, what, err))
+		app.Refresh(true)
+		return
+	}
+	app.Fail(fmt.Sprintf("%s%s NOT posted: %s", lead, what, err))
 }

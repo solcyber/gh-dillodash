@@ -66,11 +66,11 @@ func (g *repoGuard) Host() string {
 	return ""
 }
 
-func (g *repoGuard) Approve(ctx context.Context, repo model.Repo, number int, body string) error {
+func (g *repoGuard) Approve(ctx context.Context, repo model.Repo, number int, body, headSHA string) error {
 	if err := g.check(repo, "review approval"); err != nil {
 		return err
 	}
-	return g.Client.Approve(ctx, repo, number, body)
+	return g.Client.Approve(ctx, repo, number, body, headSHA)
 }
 
 func (g *repoGuard) Comment(ctx context.Context, repo model.Repo, number int, body string) error {

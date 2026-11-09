@@ -148,7 +148,11 @@ type Client interface {
 	// at most first), each with its last 100 comments.
 	IssuesWithLabel(ctx context.Context, repo model.Repo, label string, first int) ([]*model.Issue, error)
 
-	Approve(ctx context.Context, repo model.Repo, number int, body string) error
+	// Approve posts an APPROVE review pinned to headSHA, the commit the
+	// reviewer saw: GitHub attaches the review to that commit, so a push
+	// that lands while the confirm is up is not approved unseen ("" =
+	// GitHub's current head, for callers that hold no head).
+	Approve(ctx context.Context, repo model.Repo, number int, body, headSHA string) error
 	Comment(ctx context.Context, repo model.Repo, number int, body string) error
 	// PostComment is Comment that also returns the new comment's id, for
 	// a follow-up that must name it (the release-now dispatch).

@@ -177,10 +177,14 @@ func (c *GitHub) IssuesWithLabel(ctx context.Context, repo model.Repo, label str
 
 // ---- REST writes -------------------------------------------------------
 
-// Approve posts an APPROVE review.
-func (c *GitHub) Approve(ctx context.Context, repo model.Repo, number int, body string) error {
-	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("pulls/%d/reviews", number)),
-		map[string]any{"event": "APPROVE", "body": body}, nil)
+// Approve posts an APPROVE review on headSHA (commit_id), the commit
+// the reviewer read; "" leaves it to GitHub's current head.
+func (c *GitHub) Approve(ctx context.Context, repo model.Repo, number int, body, headSHA string) error {
+	req := map[string]any{"event": "APPROVE", "body": body}
+	if headSHA != "" {
+		req["commit_id"] = headSHA
+	}
+	return c.restJSON(ctx, http.MethodPost, repoPath(repo, fmt.Sprintf("pulls/%d/reviews", number)), req, nil)
 }
 
 // Comment posts an issue/PR comment.

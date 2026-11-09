@@ -145,7 +145,10 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			return true
 		}
 	}
-	if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, ""); err != nil {
+	if !workflow.HeadStill(app, pr, "approval") {
+		return true
+	}
+	if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, "", pr.HeadRefOid); err != nil {
 		app.Fail(fmt.Sprintf("review approval of %s failed: %s", wh, err))
 		return true
 	}
@@ -266,9 +269,9 @@ func (w *Workflow) nowBody(app workflow.App, question string) (string, bool) {
 // also approved the release.
 func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldLead, okLead string) {
 	cmd, me := w.cfg.ReleaseNowCommand, app.Me()
-	id, err := app.GH().PostComment(app.Context(), pr.Repo, pr.Number, body)
+	id, unsure, err := workflow.Post(app, pr.Repo, pr.Number, body)
 	if err != nil {
-		app.Fail(fmt.Sprintf("%s %s NOT posted: %s", failLead, cmd, err))
+		workflow.PostFailed(app, failLead+" ", cmd, unsure, err)
 		return
 	}
 	w.noteComment(pr, app.Now(), id)
@@ -279,6 +282,15 @@ func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldL
 	if target := w.manifestRepo(app); w.cfg.ReleaseNowDispatch && !target.IsZero() {
 		payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
 		if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
+			if ghapi.Ambiguous(err) {
+				// GitHub may have taken the dispatch: a merge by hand on
+				// top of a release the conductor started is the worse error
+				w.notePosted(pr, app.Now(), true)
+				app.Fail(fmt.Sprintf("%s posted %s; telling %s may have failed (%s) — watch the row: press M only if the release has not started in two minutes",
+					toldLead, cmd, target, err))
+				app.RefreshSoon(45 * time.Second)
+				return
+			}
 			w.notePosted(pr, app.Now(), false)
 			app.Fail(fmt.Sprintf("%s posted %s, but %s was not told (%s): press M to merge by hand",
 				toldLead, cmd, target, err))
@@ -331,8 +343,8 @@ func (w *Workflow) offerSlotCancel(app workflow.App, pr *model.PR) {
 	if !workflow.PostGuard(app, text) {
 		return
 	}
-	if err := app.GH().Comment(app.Context(), repo, it.Issue, text); err != nil {
-		app.Fail(fmt.Sprintf("%s NOT posted on #%d: %s", text, it.Issue, err))
+	if _, unsure, err := workflow.Post(app, repo, it.Issue, text); err != nil {
+		workflow.PostFailed(app, "", fmt.Sprintf("%s on #%d", text, it.Issue), unsure, err)
 		return
 	}
 	app.OK(fmt.Sprintf("posted %s on #%d; the conductor replies there within a minute", text, it.Issue))

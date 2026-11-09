@@ -200,7 +200,7 @@ func TestHTTPErrorsAndRateLimitHeaders(t *testing.T) {
 	c := s.client(t)
 	ctx := context.Background()
 
-	err := c.Approve(ctx, infra, 3543, "lgtm")
+	err := c.Approve(ctx, infra, 3543, "lgtm", "")
 	e, ok := AsError(err)
 	if !ok || e.Status != 500 || e.Message != "boom" || e.IsRateLimit() {
 		t.Fatalf("500: %#v", err)
@@ -817,7 +817,7 @@ func TestRESTOperations(t *testing.T) {
 
 	cl := s.client(t)
 	ctx := context.Background()
-	if err := cl.Approve(ctx, infra, 3543, "lgtm"); err != nil {
+	if err := cl.Approve(ctx, infra, 3543, "lgtm", ""); err != nil {
 		t.Fatal(err)
 	}
 	_, body := s.last()

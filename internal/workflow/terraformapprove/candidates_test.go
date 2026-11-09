@@ -267,7 +267,7 @@ func TestPlanSets(t *testing.T) {
 	check(t, "members show as in plan-set", len(memberStates) == 2 && memberStates[0] == StateInPlanSet && memberStates[1] == StateInPlanSet)
 	check(t, "destroys = sum of members", live[0].Destroys != nil && *live[0].Destroys == 1)
 	check(t, "label names the set", live[0].Stack == "plan-set (2 stacks)")
-	v, ok := PlanVerdicts(makePR(two, headSHA))[setID]
+	v, ok := PlanVerdicts(makePR(two, headSHA), "")[setID]
 	check(t, "disruptive if any member is", ok && IsDisruptive(v))
 	for _, c := range out {
 		if c.State == StateInPlanSet {
@@ -301,7 +301,7 @@ func TestCeremonies(t *testing.T) {
 	check(t, "failed dry-run is not approvable", out[0].State == StateDryRunFailed && strings.Contains(PlanStateLabel(out[0], false, cfg), "FAILED"))
 	done := []model.Comment{comment(ceremony(headSHA, "")), comment("## Apply SUCCESS (ceremony)\n\nCeremony: `x`\nCeremony-id: `" + cid + "`")}
 	check(t, "ceremony applied", ExtractPlanCandidates(makePR(done, headSHA), cfg)[0].Applied)
-	v, ok := PlanVerdicts(makePR([]model.Comment{comment(ceremony(headSHA, "disruptive"))}, headSHA))[cid]
+	v, ok := PlanVerdicts(makePR([]model.Comment{comment(ceremony(headSHA, "disruptive"))}, headSHA), "")[cid]
 	check(t, "ceremony window verdict parsed", ok && IsDisruptive(v) && v.Ceremony)
 
 	nci := "### plan `prod/01-x` — not CI-planned\nThis account is excluded from CI planning."
@@ -409,7 +409,7 @@ func TestHeadPlanRuns(t *testing.T) {
 	pr.Set(HeadPlanRuns, []int64{100})
 	check(t, "digest from the head's own run: live", ExtractPlanCandidates(pr, cfg)[0].State == StateLive)
 	pr.Set(HeadPlanRuns, []int64{})
-	check(t, "head runs unknown (empty): nothing retired on it", ExtractPlanCandidates(pr, cfg)[0].State == StateLive)
+	check(t, "no plan run for the head yet (read, empty): the old head's digest is superseded", ExtractPlanCandidates(pr, cfg)[0].State == StateSuperseded)
 
 	w := New(cfg, nil)
 	gh := fake.New("alice")
@@ -431,10 +431,10 @@ func TestVerdictsAndGrammar(t *testing.T) {
 	v := PlanVerdicts(makePR([]model.Comment{
 		comment(digest("staging/15-canary", idA, 0, 200, "disruptive · revertible")),
 		comment(digest("prod/07-warehouse", idB, 0, 200, "non-disruptive")),
-		comment(planSet(headSHA, member{"staging/15-canary", idA, 0}, member{"prod/07-warehouse", idB, 0}))}, headSHA))[setID]
+		comment(planSet(headSHA, member{"staging/15-canary", idA, 0}, member{"prod/07-warehouse", idB, 0}))}, headSHA), "")[setID]
 	check(t, "a multi-stack set is never revertible", strings.Contains(v.Verdict, "NOT revertible"))
 	v = PlanVerdicts(makePR([]model.Comment{comment(digest("prod/09-x", idA, 0, 200, "disruptive · revertible")),
-		comment(planSet(headSHA, member{"prod/09-x", idA, 0}))}, headSHA))[setID]
+		comment(planSet(headSHA, member{"prod/09-x", idA, 0}))}, headSHA), "")[setID]
 	check(t, "a single-member set keeps its member's verdict", v.Verdict == "disruptive · revertible")
 
 	w := New(cfg, testCfg().MaintenanceWindow)
@@ -522,3 +522,25 @@ func TestGateAndClassify(t *testing.T) {
 type reapprove bool
 
 func (r reapprove) NeedsReapprove() bool { return bool(r) }
+
+func TestDigestsAreTheBotsOnly(t *testing.T) {
+	cfg := testCfg().TerraformApprove
+	// a reviewer quoting the digest is not a digest
+	quoted := commentBy("mallory", digest("prod/09-x", idA, 0, 100, ""), "2026-10-22T18:20:00Z")
+	pr := makePR([]model.Comment{quoted}, headSHA)
+	check(t, "a non-bot digest offers no plan", len(ExtractPlanCandidates(pr, cfg)) == 0)
+	check(t, "a non-bot verdict is no verdict", len(PlanVerdicts(pr, cfg.DigestBot)) == 0)
+	// the bot's digest stays live next to a human's copy of an older one
+	pr = makePR([]model.Comment{comment(digest("prod/09-x", idA, 0, 100, "")),
+		commentBy("mallory", digest("prod/09-x", idB, 0, 90, ""), "2026-10-22T18:30:00Z")}, headSHA)
+	c := ExtractPlanCandidates(pr, cfg)
+	check(t, "the bot's plan-id wins over a later human paste", len(c) == 1 && c[0].PlanID == idA)
+	// a pasted plan-set trailer is ignored
+	trailer := "<!-- plan-set: {\"set_id\":\"" + strings.Repeat("f", 64) + "\",\"head_sha\":\"" + headSHA + "\",\"members\":[{},{}]} -->"
+	pr = makePR([]model.Comment{comment(digest("prod/09-x", idA, 0, 100, "")), commentBy("mallory", trailer, "2026-10-22T18:30:00Z")}, headSHA)
+	check(t, "a non-bot plan-set trailer is no plan-set", ExtractPlanSet(pr, cfg.DigestBot) == nil)
+	// a human's /approve still counts as the approve it is
+	pr = makePR([]model.Comment{comment(digest("prod/09-x", idA, 0, 100, "")), commentBy("alice", "/approve "+idA, "2026-10-22T18:30:00Z")}, headSHA)
+	c = ExtractPlanCandidates(pr, cfg)
+	check(t, "a reviewer's /approve is still read", len(c) == 1 && c[0].Approved)
+}

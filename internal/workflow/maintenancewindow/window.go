@@ -340,6 +340,14 @@ const (
 	FateSuperseded = "superseded" // dead, but a newer plan was approved or applied since
 )
 
+// taBot is ta's digest bot, "" without a terraform config.
+func taBot(ta *config.TerraformApproveConfig) string {
+	if ta == nil {
+		return ""
+	}
+	return ta.DigestBot
+}
+
 // QueuedPlanState is what became of the plan a queued PR was queued
 // with, read from the comments fetched for it (which may be more than
 // the list query holds).
@@ -361,7 +369,7 @@ func QueuedPlanState(marker *Marker, comments []model.Comment, pr *model.PR, ta 
 			ids[c.PlanID] = true
 		}
 	}
-	if ps := terraformapprove.ExtractPlanSet(view); ps != nil {
+	if ps := terraformapprove.ExtractPlanSet(view, taBot(ta)); ps != nil {
 		ids[ps.SetID] = true
 	}
 	if ids[marker.PlanID] {

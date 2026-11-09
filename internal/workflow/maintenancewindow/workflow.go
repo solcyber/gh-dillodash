@@ -727,8 +727,8 @@ func (w *Workflow) DoWindow(app workflow.App) {
 		app.Notice(c.text + " not posted")
 		return
 	}
-	if err := app.GH().Comment(app.Context(), repo, info.Issue, c.text); err != nil {
-		app.Fail(fmt.Sprintf("%s NOT posted: %s", c.text, err))
+	if _, unsure, err := workflow.Post(app, repo, info.Issue, c.text); err != nil {
+		workflow.PostFailed(app, "", c.text, unsure, err)
 		return
 	}
 	if c.name != CmdCancel {
