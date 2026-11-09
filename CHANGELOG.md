@@ -1,5 +1,153 @@
 # Changelog
 
+## [2.0.0]
+
+**Shift acts, lowercase looks.** Every key that changes something is now a
+capital and asks first; the key bar leads with what you can do to the
+selected row. Plus a polish pass: approvals pinned to the commit you read,
+plans trusted only from the plan bot, a pager that can't be hijacked, a
+dozen crashes and wrong labels fixed, and support for working beside an AI
+agent.
+
+### Changed: the keys
+
+The rule: a key that changes something (on GitHub, your install or your
+config) is a capital and asks first; a lowercase key only moves, opens or
+shows. The vim motions `G`, `N` and the fortress's `HJKL` are the only
+capitals that just move.
+
+| 1.x | 2.0 |
+|---|---|
+| `a` approve (list and detail) | `A` |
+| `A` show PRs others approved | `s` |
+| `c` / `C` comment | `C` (Enter on an empty line opens `$EDITOR`) |
+| `t` tag someone | `T` |
+| `s` assign (issues) | `S` |
+| `p` promote | `P` |
+| `P` pull config, `R` restart into an update | `U` |
+| `w` the window's `/attend`, `/release`, `/window-cancel` | `W` |
+| `W` the room | `w` |
+| `x` runs: re-run, cancel, reject, read a log | `x` reads a log; `X` re-runs, cancels, rejects, or runs a listed workflow |
+| `M` `D` `L` `Z` `H` | unchanged |
+
+- **Moved keys tell you where they went.** An old key now does nothing
+  but say where it went ("`a` is now `A`…"). It never does something else.
+- **A one-time card.** The first start of 2.x on a machine shows the table
+  above once.
+
+### Added
+
+- **A key bar that guides.**
+  - The keys that act on the selected row or the open item come first, in
+    gold, labelled with what they will do there: `A release NOW`,
+    `A /approve plan-set`, `P open the promotion PR`, `D approve deploys`,
+    `U restart into v2.0.0`.
+  - A key that does not apply to the row is not offered. The looking keys
+    follow after a rule.
+  - When nothing is being reported, the status line says what the row is
+    waiting on and which key moves it on:
+    `→ ops#8 awaiting review — A /approve plan-set · H to Ada · C comment`.
+  - The help states the rule and shows acting keys in gold.
+- **Working with an AI agent** ([docs](docs/agents.md)).
+  - `[agent] name` names the agent in `H`'s question, the bar and its rows.
+  - `[agent] login` draws its PRs, comments and reviews as the agent's
+    work, by name, not as a bot's noise.
+  - `[agent] section` gathers its open PRs, and the items handed to it,
+    under its name. Its PRs still count toward "need you".
+  - `--demo-agent` replays it offline: a repo that applies on approval,
+    with a plan-set and a ceremony; a legacy repo whose merges apply;
+    strict approvers.
+- **`[reviews] merge_applies`.** In a repo whose merges deploy, `M` opens
+  its question with "MERGING APPLIES", and the PR's header carries a chip.
+
+### Fixed: what gets posted
+
+- **An approval lands on the commit you read.** The review is pinned to
+  the head that was on screen (`commit_id`). Every approve path re-reads
+  the head before posting and refuses when it moved while the question
+  was up.
+- **Plans come from the plan bot only.** Plan digests, plan-set trailers
+  and window verdicts are read only from `digest_bot`. A quoted digest or
+  a pasted trailer can no longer become the plan-id `A` offers.
+- **A head with no plan run has no live plan.** When the head's runs were
+  read and none is the plan workflow, every digest on the PR planned an
+  older head.
+- **"NOT posted" is only said when it is true.** A command post that
+  times out or gets a 5xx re-reads the thread. When the comment is there,
+  it counts as posted. When the thread can't be read, the status line
+  says "may have posted" and refreshes, instead of inviting a second
+  `/approve` or `/release-now`.
+- **The confirms are explicit.** `Z` asks y/N after its close-reason
+  pick. Comments and merges name who they post as.
+
+### Fixed: what the rows say
+
+- **Deploys.**
+  - A deploy that waited a night for its approval reads running, not
+    "stuck? 9h": stuck now means no change for the threshold.
+  - A failed lint or code-scanning run on the merge commit no longer
+    turns a running release into a failed one.
+- **The window.**
+  - A manifest still open after midnight is last night's, not tonight's.
+  - Each night is labelled with the zone in force on its date (EST/EDT).
+- **Releases.** The release query reads 50 open PRs into production per
+  repo and says how many it did not list.
+- **Promote.** A first-tier change that reached production as a
+  cherry-picked hotfix (a production PR naming it) counts as released. It
+  no longer stays listed on the first tier until the lookback runs out.
+
+### Fixed: crashes, hangs and lost work
+
+- A file name ending in a wide character no longer crashes the files view
+  on a narrow terminal.
+- A pick menu no longer hangs on a pane one column wide.
+- A panic in an action is an error on the status line. It no longer kills
+  the process with the terminal left in raw mode.
+- `D` during a refresh, and a posted window command, no longer write state
+  the screen is drawing (a possible crash).
+
+### Fixed: the screen and the pager
+
+- **The pager is safe.** A PR's diff and a CI job's log reach `$PAGER`
+  with colour kept and every other escape removed (clipboard writes,
+  hyperlinks, screen clears, resets). A bare carriage return becomes a
+  newline, so a line can't be overwritten.
+- **Text and markdown.** An escape in a title is measured as it is drawn.
+  A code fence closes only on a fence at least as long as the one that
+  opened it.
+- **Fortress mode.**
+  - On 16 colours, dark gray is visible.
+  - An item 0.3 days old stands on today's street in every city.
+  - Times use the dashboard's zone.
+  - The map rebuilds on every refresh.
+  - Inside the release window's room on a mid-size terminal, the map
+    takes the whole screen.
+- **Smaller fixes.** The small Amos keeps his feet. The plans card's name
+  column grows with the width.
+
+### Fixed: updates and config
+
+- **Rollback.**
+  - A second dashboard no longer overwrites the `.prev` a rollback needs.
+  - `update --rollback` exits 1 when it rolled nothing back.
+  - A rollback sticks: auto-update skips that release until a newer one
+    is out.
+- **Installs.**
+  - `U` (formerly `R`) is offered only when the binary this process runs
+    was replaced.
+  - An install uses the release its check read.
+  - The build attestation must come from the release workflow
+    (`--signer-workflow`).
+- **Config files.**
+  - A pulled config you edited by hand is backed up before a pull
+    replaces it.
+  - A second backup never overwrites the first.
+  - `config init`, `pull` and `migrate` write the file the dashboard
+    loads.
+  - The "config outdated" banner follows the config this process loaded.
+  - Equal `reserved_from` and `reserved_to` is an error, not a whole-day
+    reservation.
+
 ## [1.13.0]
 
 Two epigraphs, and waiting runs you can tell apart.

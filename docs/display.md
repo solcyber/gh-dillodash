@@ -50,8 +50,8 @@ narrow screen clips the attendance before the countdown.
 a small chip per tag that has any: `go` blue, `hold` gold, `untagged`
 gray.
 
-PRs approved only by others are hidden by default; `A` shows them.
-Approvals made with `a` mark the row instantly, for the head they
+PRs approved only by others are hidden by default; `s` shows them.
+Approvals made with `A` mark the row instantly, for the head they
 approved: a later push clears the mark.
 
 **CI glyphs.** One glyph per check on the head commit:
@@ -170,16 +170,16 @@ the mullions themselves.
 
 ![w steps out of the room: the plain dashboard, the same night, for getting work done](shots/room-off.png)
 
-`W` steps out to the plain dashboard (the brass plaque under the window
+`w` steps out to the plain dashboard (the brass plaque under the window
 says so) and back in; while you are out the key bar shows `W room`. The
 choice lasts until the window closes, so every night's window opens in the
-room again. Outside the window `W` shows the room anyway.
+room again. Outside the window `w` shows the room anyway.
 
 The room needs a terminal of at least 100×30; smaller, the window is the
-plain dashboard and `W` says why. With 256 colors or more it is drawn in
+plain dashboard and `w` says why. With 256 colors or more it is drawn in
 half-block pixels and Amos sits for his portrait; a 16-color terminal gets
 the nearest colors; with no color or `icons = "ascii"` the room is line
-art. `room = false` in `[display]` keeps the window plain (`W` still shows
+art. `room = false` in `[display]` keeps the window plain (`w` still shows
 the room).
 
 ## Motion

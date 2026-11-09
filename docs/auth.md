@@ -31,26 +31,26 @@ with one), create it with:
 | Resource owner | your organization (not your personal account, or the repos 404) |
 | Repository access | every repo in `[reviews] repos` and, for `release_pr`, every release repo; for `waiting_runs`, every repo in its `repos` |
 | Pull requests | **Read and write**: the dashboard, reviews, approval comments |
-| Issues | **Read and write**: the issues section, issue comments, tagging, labels (`L`), assignees (`s`), close and reopen (`Z`), the hand-off to an agent (`H`), and the window and release commands, which are comments. Without it the dashboard shows PRs only and says so on the warn line |
+| Issues | **Read and write**: the issues section, issue comments, tagging, labels (`L`), assignees (`S`), close and reopen (`Z`), the hand-off to an agent (`H`), and the window and release commands, which are comments. Without it the dashboard shows PRs only and says so on the warn line |
 | Actions | **Read**: the CI column, see below; the deploy state of merged releases; the waiting runs |
 | Contents | **Read**: commit data and the diff viewers |
 | Metadata | Read (added automatically); `release_pr` discovery reads the org's repos and rulesets with it |
 | Commit statuses | Read, only if some CI posts classic statuses; harmless to include |
 
 Merging, approving deployments and acting on runs need more, on the repos
-where you use `M`, `D`, `x` and `X`:
+where you use `M`, `D`, `X` and `X`:
 
 | Setting | Value |
 |---|---|
 | Contents | **Read and write**: `M` merges through GitHub's merge endpoint; the release-now dispatch on the window's manifest repo is a contents write there too |
-| Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge or on a waiting run; `x` rejects one |
-| Actions | **Read and write**: `x` re-runs and cancels a run (reading its log is Actions read); `X` runs a listed workflow with `workflow_dispatch` |
+| Deployments | **Read and write**: `D` approves the environment deployments waiting on a merge or on a waiting run; `X` rejects one |
+| Actions | **Read and write**: `X` re-runs and cancels a run (reading its log is Actions read); `X` runs a listed workflow with `workflow_dispatch` |
 | Contents | **Read and write** on a repo `X` fires a `repository_dispatch` event on |
 | Pull requests | **Read and write** (as above): request changes and dismissing your own approval are review writes too |
 | Members (organization) | **Read**, only with `[github] approvers_team`: dillodash checks the posting login is in the team before it posts a release, window or plan command; without it dillodash warns and posts unchecked, and with `approvers_team_strict = true` it refuses to post |
 
 Without them GitHub answers `403 Resource not accessible by personal access
-token`, and `M`, `D`, `x` and `X` name the permission to add.
+token`, and `M`, `D`, `X` and `X` name the permission to add.
 
 Updates read `solcyber/gh-dillodash`'s releases on github.com with the
 `gh` login for github.com (any token, or none: the repository is public)
@@ -61,7 +61,7 @@ same repository's attestations.
 (`write: yes (ADMIN)`, `write: NO (READ)`), which GitHub reports with the
 list query at no extra cost, and fails when every review repo is
 read-only: a wrong `gh` account or a read-only collaborator shows up
-there instead of as a 403 on your first `a`. It cannot see further than
+there instead of as a 403 on your first `A`. It cannot see further than
 the role: a fine-grained token reports no role at all (`write: not
 reported`), a token with push but without Pull requests: write still
 403s on approve, deployment approval needs Deployments write, and branch

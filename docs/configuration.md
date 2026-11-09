@@ -41,7 +41,7 @@ of `host`, the way every `gh` extension does; `GH_TOKEN` and
 
 | Key | Default | Meaning |
 |---|---|---|
-| `auto` | `true` | Keep this install on the latest release. A running dashboard checks at startup and every 30 minutes (a conditional request: free when nothing changed); a newer release is downloaded in the background, verified (its digest and its build attestation, [SECURITY.md](../SECURITY.md)), and installed over every gh extension or standalone binary it may replace, the old one kept as `<name>.prev`. The status line then says `dillodash vX.Y.Z installed — R: restart now (keeps your place)`, and `a`, `M`, `D` and `w` offer that restart first. `false` keeps the check and the banner and installs nothing (a pinned host). `DILLODASH_AUTO_UPDATE=0` turns it off on one host whatever a pulled config says. |
+| `auto` | `true` | Keep this install on the latest release. A running dashboard checks at startup and every 30 minutes (a conditional request: free when nothing changed); a newer release is downloaded in the background, verified (its digest and its build attestation, [SECURITY.md](../SECURITY.md)), and installed over every gh extension or standalone binary it may replace, the old one kept as `<name>.prev`. The status line then says `dillodash vX.Y.Z installed — U: restart now (keeps your place)`, and `A`, `M`, `D` and `W` offer that restart first. `false` keeps the check and the banner and installs nothing (a pinned host). `DILLODASH_AUTO_UPDATE=0` turns it off on one host whatever a pulled config says. |
 | `channel` | `stable` | Which releases count: `stable`, the published releases. A draft or a prerelease is never installed. |
 
 `gh dillodash update` installs the latest release now (whatever `auto`
@@ -62,7 +62,7 @@ it runs whatever it wraps.
 | `clock` | `true` | | The header clock: the UTC date and time, then the same instant in `clock_timezone`, `2026-11-03 04:12:33.45 UTC  23:12:33.45 EST`. Hundredths with `motion = "full"`, whole seconds with `off`. `false` hides it. |
 | `clock_timezone` | `America/New_York` | | IANA zone of the clock's second time, e.g. `Europe/London`, `Asia/Tokyo`, `UTC`. |
 | `clock_tz_label` | `""` | | Label for the second time, e.g. `ET`. Empty uses the zone's own abbreviation for the instant, so New York reads `EST` in winter and `EDT` in summer. |
-| `room` | `true` | | While the release window is open, the dashboard is the view out of a window: it shrinks to the glass in the middle of the screen, behind a cross of mullions, and the room around it has curtains, plants, pictures, a wall clock and a mug of something hot. `W` steps out to the plain dashboard (and back in); the next window opens in the room again. Needs a terminal of at least 100×30. `false` keeps the plain dashboard, and `W` still shows the room. |
+| `room` | `true` | | While the release window is open, the dashboard is the view out of a window: it shrinks to the glass in the middle of the screen, behind a cross of mullions, and the room around it has curtains, plants, pictures, a wall clock and a mug of something hot. `w` steps out to the plain dashboard (and back in); the next window opens in the room again. Needs a terminal of at least 100×30. `false` keeps the plain dashboard, and `w` still shows the room. |
 | `profile` | unset | | A short badge in the header (at most 12 characters), e.g. `OPS`: which config this dashboard runs, for someone who runs more than one (`--config` or `$DILLODASH_CONFIG` switches between them). |
 
 ## `[agent]`
@@ -166,7 +166,7 @@ would match every release of a repo; `release_now_dispatch`,
 A pulled config stays current by itself in the dashboard too: about once
 an hour it compares the installed file's blob sha with its source's. When
 the repo has a newer file, the status line says `config outdated: <repo>
-has a newer <path> (P pulls it and restarts)`, and `P` in the list pulls
+has a newer <path> (U pulls it and restarts)`, and `U` in the list pulls
 it (refusing one that does not validate, as `config pull` does) and
 restarts into it, keeping your place. A config somebody edited on the
 dashboard host is never compared or replaced.

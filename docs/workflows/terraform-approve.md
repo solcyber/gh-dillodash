@@ -3,7 +3,7 @@
 For repositories where applying infrastructure is gated on a comment: CI
 plans every stack a pull request touches, posts a **plan digest** with a
 plan id, and an apply pipeline runs only when an approver posts
-`/approve <plan-id>`. dillodash's `a` key automates the approver's side,
+`/approve <plan-id>`. dillodash's `A` key automates the approver's side,
 and the detail view shows every plan's state.
 
 Turn it on with:
@@ -17,7 +17,7 @@ Every name below has a key in `config.example.toml`: the bot login, the
 plan workflow's filename, the gate status context, the command and its
 flags, the minimum reason length, the ceremony window.
 
-## What `a` does
+## What `A` does
 
 ![A terraform PR's detail with its plan cards: the plan id, what changes, the destroy count and the window verdict](../shots/terraform-approve.png)
 
@@ -31,7 +31,7 @@ flags, the minimum reason length, the ceremony window.
    intent check the validator enforces.
 3. If the digest's verdict says the plan is **disruptive** and the
    `maintenance_window` workflow is enabled, a plain `/approve` queues it
-   for the next window instead of applying it. `a` says so and offers the
+   for the next window instead of applying it. `A` says so and offers the
    deliberate alternative, `--outside-window="<reason>"`, with a reason of
    at least `outside_window_min_reason` characters and no double quotes.
    The prompt counts down and refuses enter until the reason is long
@@ -40,18 +40,18 @@ flags, the minimum reason length, the ceremony window.
    reserves (`maintenance_window` `reserved_from`, `reserved_to` and
    `reserved_stacks`), while the reserved span is on, gets the same
    choice: the dispatcher refuses a plain `/approve` there until the span
-   ends, so `a` offers to wait (the first entry) or to apply now with the
+   ends, so `A` offers to wait (the first entry) or to apply now with the
    flag and a reason.
 4. Posts the `/approve` comment, then a GitHub approving review (a ruleset
    usually requires one for the eventual merge), best effort. When your
    review already stands on the PR (a plan you queued that the window
-   bumped, now approved with `--outside-window`), `a` still offers the
+   bumped, now approved with `--outside-window`), `A` still offers the
    command and skips the review: since 1.5.3 the core's "already approved"
    refusal no longer stops it.
 5. With no live plan it falls back to a plain review approval after a
    confirmation that says what it found. An **applied** plan is not live:
    an applied PR that is still open is waiting for the review that lets it
-   merge, so `a` submits only that review, or, when you already reviewed
+   merge, so `A` submits only that review, or, when you already reviewed
    it, says so and posts nothing.
 
 Drafts are refused, and so is approving your own PR.
@@ -77,14 +77,14 @@ https://github.com/<owner>/<repo>/actions/runs/<run id>
 - `Plan-id:` carries the sha256 the validator will check. `**Plan-id:**`
   (bold) is accepted too.
 - The destroy count comes from the **last** `Plan: … N to destroy.` line
-  in the comment. With none, `a` asks you to type it.
+  in the comment. With none, `A` asks you to type it.
 - The window verdict line is optional: `Window (<note>): **<verdict>**`
   where the verdict is `non-disruptive`, `disruptive · revertible` or
   `disruptive · NOT revertible`. A note containing `shadow` marks it
   advisory.
 - A repo that applies on approval, with no maintenance window, writes
   `Window: **n/a (apply on approval)**` (or `**n/a**`), or leaves the line
-  out. Either way the plan is never disruptive: `a` posts a plain
+  out. Either way the plan is never disruptive: `A` posts a plain
   `/approve`, with no queue question and no `--outside-window` offer, even
   when the same config runs the window workflow for another repo.
 - A link to the Actions run identifies which run posted it; a digest from
@@ -107,7 +107,7 @@ validator then accepts only the set id, and a per-stack plan id is refused:
 <!-- plan-set: {"set_id": "<64 hex>", "head_sha": "<40 hex>", "members": [{"stack": "env/stack", "plan_id": "<64 hex>", "destroys": 0}], "skipped": []} -->
 ```
 
-`a` offers `plan-set (N stacks)`; the destroy count you confirm is the sum
+`A` offers `plan-set (N stacks)`; the destroy count you confirm is the sum
 across members; the set is disruptive if any member is; a set posted for
 an older head is ignored; a single-member set keeps the bare plan id.
 
@@ -121,10 +121,10 @@ Head: `<40 hex>`
 Window: **disruptive**: …
 ```
 
-`a` offers `/approve <ceremony-id>` and never adds `--confirm-destroys`.
+`A` offers `/approve <ceremony-id>` and never adds `--confirm-destroys`.
 A `### ceremony … : dry-run FAILED` digest is shown but never offered. A
 disruptive ceremony is not queued: inside `ceremony_window` a plain
-`/approve` runs it; outside it `a` offers only cancel or run now with
+`/approve` runs it; outside it `A` offers only cancel or run now with
 `--outside-window`.
 
 **The command** dillodash posts (`approve_command`, default `/approve`):
@@ -159,7 +159,7 @@ A newer `/approve` or success clears an older failure.
 of `gate_done_prefixes` (`applied:`, `ceremony executed:`) means every plan
 on the PR is applied. Such an open PR shows the gold chip
 `applied, needs review`: the production branch is missing live config until
-it merges, and `a` submits the review it is waiting for.
+it merges, and `A` submits the review it is waiting for.
 
 ## When a digest is live
 
