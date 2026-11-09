@@ -202,17 +202,6 @@ func Render(src string, width int, raw bool, hooks *Hooks) []text.Line {
 	return out
 }
 
-// prefixRunes is the first n characters of s.
-func prefixRunes(s string, n int) string {
-	i := 0
-	for pos := range s {
-		if i == n {
-			return s[:pos]
-		}
-		i++
-	}
-	return s
-}
 
 // closesFence reports whether line closes a fence opened by mark: the
 // same character repeated at least len(mark) times and nothing after.
