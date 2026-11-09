@@ -145,7 +145,9 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	for _, c := range cands {
 		stackW = max(stackW, text.Width(c.Stack))
 	}
-	stackW = min(36, stackW)
+	// the name column takes what the id, destroys and state chip leave
+	// (about 60 cells), at least 36: a ceremony's path is long
+	stackW = min(max(36, inner-60), stackW)
 	out := []text.Line{scenes.CardTop(glyphs.Ico("shield")+"plans", width)}
 	for _, c := range cands {
 		isRefused := c.PlanID != "" && refused[c.PlanID] != ""

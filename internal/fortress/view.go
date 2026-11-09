@@ -583,7 +583,7 @@ func (v *View) drawPanels(c *canvas.Canvas, h, w int, f Frame) {
 			if i > 0 {
 				st = "text"
 			}
-			c.PutSegs(itTop+i, itLeft, []text.Seg{text.S(text.Ellip(s, iw), st)}, itLeft+iw, false, false)
+			c.PutSegs(itTop+i, itLeft, []text.Seg{text.S(text.Ellip(text.Clean(s), iw), st)}, itLeft+iw, false, false)
 		}
 	}
 }

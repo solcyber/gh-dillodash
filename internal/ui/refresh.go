@@ -307,8 +307,11 @@ func (m *Model) applyRefresh(out *refreshResult) {
 			m.errText = fmt.Sprintf("couldn't refresh %s: %s", m.detailRef(), out.detailErr)
 		}
 		m.warn = out.warn
-		m.lastRefreshWall = clock.Now().Local().Format("15:04:05")
-		m.refreshStamp = fmt.Sprintf("%s|%d|%d", m.lastRefreshWall, len(m.allPRs), len(m.issues))
+		m.lastRefreshWall = m.wallNow().Format("15:04:05")
+		// a generation, not the wall second: two refreshes in one second
+		// with the same counts must still rebuild the fortress
+		m.refreshGen++
+		m.refreshStamp = fmt.Sprintf("%d|%d|%d", m.refreshGen, len(m.allPRs), len(m.issues))
 		m.noteDeltas()
 		if m.manualPending && m.errText == "" && !spoke {
 			m.ok("refreshed at " + m.lastRefreshWall)

@@ -66,10 +66,14 @@ func SGR(name string, bold, reverse bool, tier theme.Tier) string {
 	case theme.Color256:
 		parts = append(parts, fmt.Sprintf("38;5;%d", col.X256), fmt.Sprintf("48;5;%d", theme.K))
 	case theme.Color16:
-		parts = append(parts, fmt.Sprint(30+col.ANSI), "40")
+		// the light half is the bright codes (90-97), as the theme
+		// draws it: bold-as-bright is off by default in most terminals,
+		// where "dgray" as bold black is black on black
+		fg := 30 + col.ANSI
 		if col.Light {
-			bold = true
+			fg = 90 + col.ANSI
 		}
+		parts = append(parts, fmt.Sprint(fg), "40")
 	default:
 		switch monoAttr[name] {
 		case "bold":

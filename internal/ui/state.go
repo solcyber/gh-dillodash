@@ -193,6 +193,7 @@ type Model struct {
 	// refreshStamp names the last landed refresh (the fortress rebuilds
 	// its map when it changes)
 	refreshStamp string
+	refreshGen   int
 	// canvas is the frame buffer View reuses between frames
 	canvas *canvas.Canvas
 	// the room (room.go): roomIn is whether the release window was open

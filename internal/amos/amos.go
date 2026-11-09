@@ -76,7 +76,10 @@ func grid(o Options) [][]uint8 {
 	}
 	step := o.Frame%2 == 1
 	dy := 0
-	if step {
+	if step && a.h%2 == 1 {
+		// the bob needs the spare pixel row an odd height leaves in the
+		// last cell; an even-height sprite (the mini) would push its feet
+		// out of the drawn rows, so it steps without bobbing
 		dy = 1
 	}
 	for r := 0; r < a.h; r++ {

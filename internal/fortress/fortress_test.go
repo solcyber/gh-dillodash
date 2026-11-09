@@ -462,8 +462,11 @@ func TestSGR(t *testing.T) {
 	if s := SGR("yellow", false, false, theme.Color256); !strings.Contains(s, "38;5;226") || !strings.Contains(s, "48;5;16") {
 		t.Errorf("256 yellow = %q", s)
 	}
-	if s := SGR("yellow", false, false, theme.Color16); !strings.Contains(s, "33") || !strings.HasSuffix(s, ";1m") {
-		t.Errorf("16 yellow = %q", s)
+	if s := SGR("yellow", false, false, theme.Color16); !strings.Contains(s, "93;40") || strings.HasSuffix(s, ";1m") {
+		t.Errorf("16 yellow = %q, want bright yellow (93), not bold-as-bright", s)
+	}
+	if s := SGR("dgray", false, false, theme.Color16); !strings.Contains(s, "90;40") {
+		t.Errorf("16 dgray = %q, want bright black (90), visible on black", s)
 	}
 	if s := SGR("blue", false, false, theme.Color16); strings.Contains(s, ";1") {
 		t.Errorf("16 blue is not bold: %q", s)
@@ -812,5 +815,22 @@ func TestEpigraphFollowsTheCursorAndToggles(t *testing.T) {
 	v.Draw(c, 20, 60, Frame{Still: true, Tier: theme.Mono})
 	if strings.Contains(strings.Join(c.Lines(), "\n"), EpigraphTitle) || v.EpigraphShown() {
 		t.Error("a 60x20 screen drew the epigraph")
+	}
+}
+
+// TestFractionalAgesShareTheirDay: in every city an item 0.3 days old
+// stands on today's street, 13.5 on 13th, and the look panel names the
+// same day as the row.
+func TestFractionalAgesShareTheirDay(t *testing.T) {
+	for _, city := range []string{"manhattan", "chicago", "kowloon"} {
+		m := NewMap(city, 160, 50, ZoomStreet, 5, 0)
+		for _, c := range []struct{ a, day float64 }{{0, 0}, {0.3, 0}, {0.99, 0}, {1, 1}, {13.5, 13}, {14, 14}} {
+			if m.AgeRow(c.a) != m.AgeRow(c.day) {
+				t.Errorf("%s: %.2f days on row %d, day %v on %d", city, c.a, m.AgeRow(c.a), c.day, m.AgeRow(c.day))
+			}
+			if got := int(abs(m.RowY(m.AgeRow(c.a)))); got != int(c.day) {
+				t.Errorf("%s: %.2f days: the look panel says %d", city, c.a, got)
+			}
+		}
 	}
 }

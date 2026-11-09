@@ -116,3 +116,22 @@ func TestFramesDiffer(t *testing.T) {
 		}
 	}
 }
+
+// TestBobKeepsTheFeet: on the step frame no pixel of the art falls
+// outside the rows that are drawn (the even-height mini sprite lost its
+// feet on every other frame).
+func TestBobKeepsTheFeet(t *testing.T) {
+	for _, o := range []Options{{}, {Mini: true}} {
+		o.Frame = 1
+		g := grid(o)
+		_, h := Size(o)
+		for r := h * 2; r < len(g); r++ {
+			for _, v := range g[r] {
+				if v != 0 {
+					t.Errorf("mini=%v: pixel row %d is drawn by no cell (Size %d rows)", o.Mini, r, h)
+					break
+				}
+			}
+		}
+	}
+}
