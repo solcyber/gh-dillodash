@@ -228,6 +228,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg.done <- msg.err
 	case actionDoneMsg:
 		m.action = false
+		if msg.panic != "" {
+			m.modal = nil // a modal the action left open has nobody to answer it
+			m.fail(msg.panic)
+		}
 	case tea.KeyPressMsg:
 		return m, tea.Batch(m.handleKey(toKey(msg)), m.retick())
 	case tea.PasteMsg:

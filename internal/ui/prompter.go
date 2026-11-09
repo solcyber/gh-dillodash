@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os/exec"
 
 	tea "charm.land/bubbletea/v2"
@@ -31,7 +32,8 @@ type execDoneMsg struct {
 	err  error
 }
 
-type actionDoneMsg struct{}
+// actionDoneMsg ends an action; panic is set when it panicked.
+type actionDoneMsg struct{ panic string }
 
 // runAction starts fn on the action goroutine; one at a time.
 func (m *Model) runAction(fn func()) {
@@ -40,7 +42,16 @@ func (m *Model) runAction(fn func()) {
 	}
 	m.action = true
 	go func() {
-		defer m.send(actionDoneMsg{})
+		// a panic in an action (any workflow's key handler runs here)
+		// must not kill the process outside Bubble Tea: that leaves the
+		// terminal in raw mode on the alt screen
+		msg := actionDoneMsg{}
+		defer func() {
+			if r := recover(); r != nil {
+				msg.panic = fmt.Sprintf("that action failed inside dillodash (%v) — nothing after the failure was sent; please report it", r)
+			}
+			m.send(msg)
+		}()
 		fn()
 	}()
 }

@@ -113,3 +113,17 @@ func TestEllipSegs(t *testing.T) {
 		t.Errorf("one cell: %+v", got)
 	}
 }
+
+// TestEllipLeftWideTail: a last grapheme wider than the room is dropped,
+// not indexed past the end (it panicked in the files view).
+func TestEllipLeftWideTail(t *testing.T) {
+	for _, cols := range []int{0, 1, 2, 3, 4} {
+		got := EllipLeft("docs/ja/はじめに", cols)
+		if Width(got) > cols {
+			t.Errorf("EllipLeft(_, %d) = %q, %d cells", cols, got, Width(got))
+		}
+	}
+	if got := EllipLeft("テスト", 2); Width(got) > 2 {
+		t.Errorf("EllipLeft(テスト, 2) = %q", got)
+	}
+}

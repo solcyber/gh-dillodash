@@ -197,6 +197,11 @@ func (p *parser) parseReserved(t *table, w *MaintenanceWindowConfig) {
 		t.errf("reserved_from, reserved_to", "expected HH:MM, got %q and %q", from, to)
 		return
 	}
+	if f == e {
+		// equal ends would reserve the whole day (Covers wraps midnight)
+		t.errf("reserved_from, reserved_to", "%q to %q is an empty window: give two different times (it may cross midnight)", from, to)
+		return
+	}
 	for _, s := range stacks {
 		if _, err := path.Match(s, ""); err != nil {
 			t.errf("reserved_stacks", "%q is not a valid pattern", s)

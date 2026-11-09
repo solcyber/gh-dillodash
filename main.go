@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -477,7 +478,7 @@ func updateCmd(args []string, w io.Writer) error {
 		if res.Err != nil {
 			return exitError{1, res.Err}
 		}
-		fmt.Fprintln(w, "restart dillodash to run it")
+		fmt.Fprintln(w, "restart dillodash to run it; DILLODASH_AUTO_UPDATE=0 pins this host until you update by hand")
 		return nil
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -503,6 +504,7 @@ func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 		fmt.Fprintln(w, "already current")
 		return nil
 	}
+	u.Installer.ClearSkip() // an explicit update wants the release, rolled back from or not
 	res := u.Install(ctx, st)
 	for _, p := range res.Updated {
 		fmt.Fprintf(w, "installed %s over %s (the old one is %s.prev)\n", res.Version, p, p)
@@ -579,9 +581,19 @@ var newChecker = func(gh client) *selfupdate.Updater {
 	home, _ := os.UserHomeDir()
 	find := findOptions()
 	return &selfupdate.Updater{
-		Checker:   &selfupdate.Checker{Src: src, Path: selfupdate.CachePath(os.Getenv, home), Find: find},
-		Installer: &selfupdate.Installer{DL: dl, Run: runProgram, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Find: find},
+		Checker: &selfupdate.Checker{Src: src, Path: selfupdate.CachePath(os.Getenv, home), Find: find},
+		Installer: &selfupdate.Installer{DL: dl, Run: runProgram, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Find: find,
+			SkipPath: skipPath(home)},
 	}
+}
+
+// skipPath is where a rollback records the release it left, beside the
+// release cache ("" when there is no cache directory).
+func skipPath(home string) string {
+	if p := selfupdate.CachePath(os.Getenv, home); p != "" {
+		return filepath.Join(filepath.Dir(p), "rolled-back-from")
+	}
+	return ""
 }
 
 // runProgram runs argv (gh attestation verify) and returns its combined
@@ -771,7 +783,7 @@ func configCmd(args []string) error {
 		if _, err := os.Stat(dst); err == nil && !force {
 			return exitError{2, fmt.Errorf("%s already exists; pass --force to overwrite", dst)}
 		}
-		if err := backup(dst); err != nil {
+		if err := backup(dst, os.Stdout); err != nil {
 			return err
 		}
 		if err := config.WriteFileAtomic(dst, []byte(out), 0o600); err != nil {
@@ -788,15 +800,12 @@ func configCmd(args []string) error {
 
 // backup keeps a copy of path as path.bak before an overwrite, when the
 // file exists.
-func backup(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+func backup(path string, w io.Writer) error {
+	dst, err := config.Backup(path, clock.Now())
+	if err == nil && dst != "" {
+		fmt.Fprintf(w, "kept the old %s as %s\n", filepath.Base(path), dst)
 	}
-	return config.WriteFileAtomic(path+".bak", data, 0o600)
+	return err
 }
 
 func fontCmd(args []string) error {
@@ -901,13 +910,15 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 	for _, warn := range cfg.Warnings {
 		fmt.Fprintln(w, "warning:", warn)
 	}
-	if stamped && !force && old.Spec() == src.Spec() && old.SHA == sha {
+	if stamped && !force && old.Spec() == src.Spec() && old.SHA == sha && !config.Edited(installed) {
 		fmt.Fprintf(w, "%s is current: %s @ %s (pulled %s)\n", path, src.Spec(), model.ShortSHA(sha), old.At.Local().Format("2006-01-02 15:04"))
 		return nil
 	}
 	src.SHA, src.At = sha, clock.Now()
-	if len(installed) > 0 && (!stamped || old.Spec() != src.Spec()) {
-		if err := backup(path); err != nil {
+	// a pulled file edited by hand since is kept too: a refresh must not
+	// throw away a local change without a copy
+	if len(installed) > 0 && (!stamped || old.Spec() != src.Spec() || config.Edited(installed)) {
+		if err := backup(path, w); err != nil {
 			return err
 		}
 	}

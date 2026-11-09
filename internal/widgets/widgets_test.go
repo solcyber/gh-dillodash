@@ -3,6 +3,7 @@ package widgets
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/canvas"
 	"github.com/solcyber/gh-dillodash/internal/fx"
@@ -806,5 +807,20 @@ func TestPickCancelsOnCtrlC(t *testing.T) {
 		if !p.Handle(k) || p.Result() != -1 {
 			t.Errorf("%v cancels the menu: done=%v result=%d", k, p.Done(), p.Result())
 		}
+	}
+}
+
+// TestWrapWideAtWidthOne: a 2-cell grapheme at width 1 still makes
+// progress (it hung the pick menu on a squeezed pane).
+func TestWrapWideAtWidthOne(t *testing.T) {
+	done := make(chan []string, 1)
+	go func() { done <- Wrap("🚀 deploy テスト", 1) }()
+	select {
+	case lines := <-done:
+		if len(lines) == 0 || len(lines) > 40 {
+			t.Errorf("Wrap at width 1: %d lines", len(lines))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wrap at width 1 did not return")
 	}
 }
