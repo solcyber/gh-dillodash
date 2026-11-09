@@ -92,6 +92,9 @@ capitals that just move.
   - Each night is labelled with the zone in force on its date (EST/EDT).
 - **Releases.** The release query reads 50 open PRs into production per
   repo and says how many it did not list.
+- **Promote.** A first-tier change that reached production as a
+  cherry-picked hotfix (a production PR naming it) counts as released. It
+  no longer stays listed on the first tier until the lookback runs out.
 
 ### Fixed: crashes, hangs and lost work
 
