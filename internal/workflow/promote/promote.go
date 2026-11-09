@@ -165,7 +165,7 @@ func (w *Workflow) lastState(warns []string) *State {
 
 func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Repo, since time.Time) (RepoState, []string, error) {
 	rs := RepoState{Repo: repo}
-	set, err := gh.PromotePRs(ctx, repo, w.cfg.First(), w.cfg.Stage(), since)
+	set, err := gh.PromotePRs(ctx, repo, w.cfg.First(), w.cfg.Stage(), w.cfg.Prod(), since)
 	if err != nil {
 		return rs, nil, err
 	}

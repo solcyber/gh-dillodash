@@ -19,7 +19,7 @@ func prNode(n int) string {
 	return fmt.Sprintf(`{"number":%d,"title":"t%d","state":"MERGED","mergeCommit":{"oid":"m%d"},"author":{"login":"bob","__typename":"User"}}`, n, n, n)
 }
 
-// TestPromotePRsPages: the three searches go in one request; a search
+// TestPromotePRsPages: the four searches go in one request; a search
 // past its page reads the next pages by cursor up to promoteMax, and a
 // note says what is still left out.
 func TestPromotePRsPages(t *testing.T) {
@@ -41,13 +41,14 @@ func TestPromotePRsPages(t *testing.T) {
 			io.WriteString(w, `{"data":{"s":`+page(from, from+50, true)+`}}`)
 			return
 		}
-		if !strings.Contains(req.Variables["first"].(string), "base:dev merged:>=2026-10-23") || !strings.Contains(req.Variables["open"].(string), "is:open base:stage") {
+		if !strings.Contains(req.Variables["first"].(string), "base:dev merged:>=2026-10-23") || !strings.Contains(req.Variables["open"].(string), "is:open base:stage") ||
+			!strings.Contains(req.Variables["prod"].(string), "is:merged base:main merged:>=2026-10-23") {
 			t.Errorf("searches %v", req.Variables)
 		}
 		empty := `{"issueCount":0,"pageInfo":{"hasNextPage":false},"nodes":[]}`
-		io.WriteString(w, `{"data":{"first":`+page(0, 50, true)+`,"stage":`+empty+`,"open":`+empty+`}}`)
+		io.WriteString(w, `{"data":{"first":`+page(0, 50, true)+`,"stage":`+empty+`,"open":`+empty+`,"prod":`+empty+`}}`)
 	})
-	set, err := s.client(t).PromotePRs(context.Background(), webRepo, "dev", "stage", time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC))
+	set, err := s.client(t).PromotePRs(context.Background(), webRepo, "dev", "stage", "main", time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}

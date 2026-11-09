@@ -214,6 +214,18 @@ func Locate(in Inputs) (changes []*Change, released int) {
 	for _, s := range stage {
 		named[s] = refs(s)
 	}
+	// a first-tier change a production PR names (a hotfix cherry-picked
+	// straight to production, "cherry-picked from #N") is released even
+	// though no staging PR carried it
+	shipped := map[int]bool{}
+	for _, p := range in.Set.ProdMerged {
+		if p.HeadRefName == in.First {
+			continue // the first tier merged into production whole: its merge commit decides, not its text
+		}
+		for n := range refs(p) {
+			shipped[n] = true
+		}
+	}
 	linked := map[*model.PR]bool{}
 	for _, f := range in.Set.FirstMerged {
 		if f.HeadRefName == in.Stage || f.HeadRefName == in.Prod {
@@ -241,6 +253,10 @@ func Locate(in Inputs) (changes []*Change, released int) {
 		c := &Change{Repo: in.Repo, First: f, Promo: best}
 		if best != nil {
 			linked[best] = true
+		}
+		if best == nil && shipped[f.Number] {
+			released++ // shipped to production by a PR that names it
+			continue
 		}
 		place(c, in)
 		if c.Where == OnProd {

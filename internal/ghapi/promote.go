@@ -15,12 +15,16 @@ import (
 // ---- promotion reads ----
 
 // PromoteSet is what the promotion view reads of one repo: the PRs merged
-// into the first tier and into the staging tier since a date, and the PRs
-// open into the staging tier.
+// into the first tier, the staging tier and production since a date, and
+// the PRs open into the staging tier.
 type PromoteSet struct {
 	FirstMerged []*model.PR
 	StageMerged []*model.PR
 	StageOpen   []*model.PR
+	// ProdMerged are PRs merged into production: a hotfix that carried a
+	// first-tier change straight there names it, so the change is
+	// released, not still waiting on the first tier.
+	ProdMerged []*model.PR
 	// Notes are searches that hit their page (a PR past it is not read).
 	Notes []string
 }
@@ -37,11 +41,14 @@ const promotePRFields = `number title body state isDraft createdAt mergedAt
       mergeCommit { oid } author { login }
       commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }`
 
-// promoteQuery is the three searches in one request.
+// promoteAliases are the searches, in request order.
+var promoteAliases = []string{"first", "stage", "open", "prod"}
+
+// promoteQuery is the four searches in one request.
 func promoteQuery() string {
 	var b strings.Builder
-	b.WriteString("query($first: String!, $stage: String!, $open: String!) {\n  " + rateLimitField)
-	for _, a := range []string{"first", "stage", "open"} {
+	b.WriteString("query($first: String!, $stage: String!, $open: String!, $prod: String!) {\n  " + rateLimitField)
+	for _, a := range promoteAliases {
 		fmt.Fprintf(&b, "\n  %s: search(query: $%s, type: ISSUE, first: %d) {\n    issueCount pageInfo { hasNextPage endCursor }\n    nodes { ... on PullRequest { %s } }\n  }", a, a, promoteFirst, promotePRFields)
 	}
 	b.WriteString("\n}\n")
@@ -65,28 +72,29 @@ type promoteSearch struct {
 
 // PromoteSearches is the search text PromotePRs sends, by alias (tests
 // and the fake read it).
-func PromoteSearches(repo model.Repo, first, stage string, since time.Time) map[string]string {
+func PromoteSearches(repo model.Repo, first, stage, prod string, since time.Time) map[string]string {
 	r := "repo:" + repo.String()
 	day := since.UTC().Format("2006-01-02")
 	return map[string]string{
 		"first": fmt.Sprintf("%s is:pr is:merged base:%s merged:>=%s sort:updated-desc", r, first, day),
 		"stage": fmt.Sprintf("%s is:pr is:merged base:%s merged:>=%s sort:updated-desc", r, stage, day),
 		"open":  fmt.Sprintf("%s is:pr is:open base:%s sort:updated-desc", r, stage),
+		"prod":  fmt.Sprintf("%s is:pr is:merged base:%s merged:>=%s sort:updated-desc", r, prod, day),
 	}
 }
 
-// PromotePRs reads one repo's promotion PRs in one request of three
+// PromotePRs reads one repo's promotion PRs in one request of four
 // searches. A search that fails fails the call (the view would otherwise
 // say a change is where it isn't).
-func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (PromoteSet, error) {
+func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage, prod string, since time.Time) (PromoteSet, error) {
 	var out PromoteSet
-	q := PromoteSearches(repo, first, stage, since)
-	vars := map[string]any{"first": q["first"], "stage": q["stage"], "open": q["open"]}
+	q := PromoteSearches(repo, first, stage, prod, since)
+	vars := map[string]any{"first": q["first"], "stage": q["stage"], "open": q["open"], "prod": q["prod"]}
 	data, errs, err := c.graphql(ctx, promoteQuery(), vars)
 	if err != nil {
 		return out, err
 	}
-	for _, alias := range []string{"first", "stage", "open"} {
+	for _, alias := range promoteAliases {
 		var s promoteSearch
 		ok, err := data.get(alias, &s)
 		if err != nil || !ok {
@@ -132,6 +140,8 @@ func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage s
 			out.FirstMerged = prs
 		case "stage":
 			out.StageMerged = prs
+		case "prod":
+			out.ProdMerged = prs
 		default:
 			out.StageOpen = prs
 		}
