@@ -22,7 +22,7 @@ type Call struct {
 	Repo    model.Repo
 	Number  int
 	Body    string         // review/comment body, or the deployment comment
-	SHA     string         // merge: the expected head
+	SHA     string         // merge: the expected head; approve: the commit reviewed
 	Title   string         // merge: the commit title
 	Method  string         // merge: merge/squash/rebase
 	RunID   int64          // approve_deployments
@@ -418,11 +418,11 @@ func (f *Client) IssuesWithLabel(ctx context.Context, repo model.Repo, label str
 }
 
 // Approve records the approval.
-func (f *Client) Approve(ctx context.Context, repo model.Repo, number int, body string) error {
+func (f *Client) Approve(ctx context.Context, repo model.Repo, number int, body, headSHA string) error {
 	if err := f.fail("approve"); err != nil {
 		return err
 	}
-	f.record(Call{Op: "approve", Repo: repo, Number: number, Body: body})
+	f.record(Call{Op: "approve", Repo: repo, Number: number, Body: body, SHA: headSHA})
 	return nil
 }
 

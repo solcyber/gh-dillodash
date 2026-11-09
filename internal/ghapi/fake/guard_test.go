@@ -22,7 +22,7 @@ var (
 func writes(c ghapi.Client, repo model.Repo) map[string]error {
 	ctx := context.Background()
 	out := map[string]error{}
-	out["Approve"] = c.Approve(ctx, repo, 1, "")
+	out["Approve"] = c.Approve(ctx, repo, 1, "", "")
 	out["Comment"] = c.Comment(ctx, repo, 1, "x")
 	_, out["PostComment"] = c.PostComment(ctx, repo, 1, "x")
 	out["Dispatch"] = c.Dispatch(ctx, repo, "e", nil)

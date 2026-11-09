@@ -34,12 +34,12 @@ func TestApproveNoWindow(t *testing.T) {
 		}
 	}
 
-	v, ok := PlanVerdicts(noWindowPR("Window: **n/a (apply on approval)**"))[idA]
+	v, ok := PlanVerdicts(noWindowPR("Window: **n/a (apply on approval)**"), "")[idA]
 	check(t, "the n/a verdict is read", ok && v.None && v.Verdict == "n/a (apply on approval)")
 	check(t, "n/a is never disruptive", !IsDisruptive(v))
-	_, ok = PlanVerdicts(noWindowPR(""))[idA]
+	_, ok = PlanVerdicts(noWindowPR(""), "")[idA]
 	check(t, "no Window line: no verdict", !ok)
 	// a parenthesised window line still wins over the n/a reading
-	v = PlanVerdicts(windowed("disruptive · revertible", 0, false))[idA]
+	v = PlanVerdicts(windowed("disruptive · revertible", 0, false), "")[idA]
 	check(t, "a live window verdict is unchanged", !v.None && IsDisruptive(v))
 }

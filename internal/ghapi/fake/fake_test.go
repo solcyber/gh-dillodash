@@ -65,7 +65,7 @@ func TestFakeServesAndRecords(t *testing.T) {
 	}
 
 	// mutations are recorded in order, with their arguments
-	if err := f.Approve(ctx, infra, 3543, ""); err != nil {
+	if err := f.Approve(ctx, infra, 3543, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.Comment(ctx, infra, 3543, "/approve"); err != nil {
@@ -112,7 +112,7 @@ func TestFakeFailures(t *testing.T) {
 	if _, err := f.ListOpen(ctx, []model.Repo{infra}); !ghapi.IsRateLimit(err) {
 		t.Errorf("list rate limit: %v", err)
 	}
-	if err := f.Approve(ctx, infra, 1, ""); err != nil || len(f.Approvals) != 1 {
+	if err := f.Approve(ctx, infra, 1, "", ""); err != nil || len(f.Approvals) != 1 {
 		t.Error("other ops still work")
 	}
 	var _ ghapi.Client = f

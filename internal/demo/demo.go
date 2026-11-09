@@ -373,6 +373,12 @@ func Client() *fake.Client {
 		{ID: 602, Name: "deploy-web", Path: ".github/workflows/deploy-web.yml", Status: "completed", Conclusion: "success", HeadSHA: flight.MergeCommit.Oid, CreatedAt: at(5 * time.Minute)},
 		{ID: 603, Name: "migrate", Path: ".github/workflows/migrate.yml", Status: "in_progress", HeadSHA: flight.MergeCommit.Oid, CreatedAt: at(5 * time.Minute)},
 	}
+	// the plan bot's run on each terraform PR's head: its digests link
+	// it, so they read live (a head with no plan run is a stale plan)
+	for _, p := range []*model.PR{ta, tb, qd} {
+		gh.Runs[p.HeadRefOid] = append(gh.Runs[p.HeadRefOid], model.WorkflowRun{ID: 4062542, Name: "plan", Path: ".github/workflows/plan.yml",
+			Status: "completed", Conclusion: "success", Event: "pull_request", HeadSHA: p.HeadRefOid, CreatedAt: at(12 * time.Hour)})
+	}
 	gh.FileRuns = map[string][]model.WorkflowRun{infra.String() + ":apply.yml": {{
 		ID: 4062601, Name: "apply", DisplayTitle: "apply · PR #90 · plan rel:web-portal#90", Event: "repository_dispatch", Status: "in_progress", RunAttempt: 1,
 		HTMLURL: "https://github.com/acme/infra/actions/runs/4062601", CreatedAt: at(7*time.Minute + 30*time.Second), UpdatedAt: at(time.Minute),

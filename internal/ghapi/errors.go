@@ -132,3 +132,16 @@ func retryAt(status int, msg string, h http.Header, now time.Time) (time.Time, b
 	}
 	return time.Time{}, false
 }
+
+// Ambiguous reports whether a failed write may still have landed: the
+// request went out but no answer came back (a timeout, a dropped
+// connection, a truncated body: Status 0), or GitHub answered 5xx,
+// which it sometimes does after doing the work. A 4xx, a rate limit or
+// a refusal before sending is a clean "not done".
+func Ambiguous(err error) bool {
+	e, ok := AsError(err)
+	if !ok || e.IsRateLimit() {
+		return false
+	}
+	return e.Status == 0 || e.Status >= 500
+}

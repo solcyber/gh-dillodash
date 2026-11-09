@@ -122,7 +122,10 @@ func (m *Model) doApprove(app *lockedApp) {
 		app.Notice("approve cancelled")
 		return
 	}
-	if err := m.gh.Approve(m.ctx, m.repoOf(pr), pr.Number, ""); err != nil {
+	if !workflow.HeadStill(app, pr, "approval") {
+		return
+	}
+	if err := m.gh.Approve(m.ctx, m.repoOf(pr), pr.Number, "", pr.HeadRefOid); err != nil {
 		app.Fail(fmt.Sprintf("review approval of %s failed: %s%s", where, err, deploys.TokenHint(err, "Pull requests", m.repoOf(pr))))
 		return
 	}
