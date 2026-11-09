@@ -121,9 +121,12 @@ in a promotion PR, `D` says that its checks are on the PR.
 
 Each refresh, for each repo, costs:
 
-- **One GraphQL request** of three searches: PRs merged into the first
-  tier since `lookback_days`, PRs merged into staging since then, and
-  open PRs into staging. A search that hits its page of 50 is a warning.
+- **One GraphQL request** of four searches: PRs merged into the first
+  tier since `lookback_days`, PRs merged into staging and into production
+  since then, and open PRs into staging. A search that hits its page of
+  50 is a warning. A first-tier change that no staging PR carried but a
+  production PR names (`#N`: a hotfix cherry-picked straight to
+  production) counts as released and is not listed.
 - **One compare** of production and staging.
 - **Two tag listings.**
 - **The runs on each listed change's tier commit.** A commit whose runs

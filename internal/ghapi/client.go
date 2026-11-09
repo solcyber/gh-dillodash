@@ -241,7 +241,7 @@ type Client interface {
 	// IsAncestor reports a on b's history. CommitChange is a commit's
 	// parents and files; BlobAt a path's blob sha at a ref (exists false
 	// on a 404); BlobBase64 a blob's content; BranchHead a branch's tip.
-	PromotePRs(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (PromoteSet, error)
+	PromotePRs(ctx context.Context, repo model.Repo, first, stage, prod string, since time.Time) (PromoteSet, error)
 	IsAncestor(ctx context.Context, repo model.Repo, a, b string) (bool, error)
 	CommitChange(ctx context.Context, repo model.Repo, sha string) (model.CommitChange, error)
 	BlobAt(ctx context.Context, repo model.Repo, path, ref string) (sha string, exists bool, err error)

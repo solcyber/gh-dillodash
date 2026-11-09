@@ -838,7 +838,7 @@ func (f *Client) FileContents(ctx context.Context, repo model.Repo, path, ref st
 // ---- promotion ----
 
 // PromotePRs serves Promote[repo].
-func (f *Client) PromotePRs(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (ghapi.PromoteSet, error) {
+func (f *Client) PromotePRs(ctx context.Context, repo model.Repo, first, stage, prod string, since time.Time) (ghapi.PromoteSet, error) {
 	if err := f.fail("promote_prs"); err != nil {
 		return ghapi.PromoteSet{}, err
 	}

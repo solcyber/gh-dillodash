@@ -437,3 +437,28 @@ func TestDeployRowApprovesTheTierDeploy(t *testing.T) {
 }
 
 var _ ghapi.Client = (*fake.Client)(nil)
+
+// TestLocateHotfixedChange: a first-tier change that reached production
+// as a cherry-picked hotfix (a production PR naming it) is released, not
+// listed on the first tier until the lookback runs out; a first-tier
+// change a production PR does not name stays listed, and so does one a
+// whole-tier merge of the first tier "names" in its text.
+func TestLocateHotfixedChange(t *testing.T) {
+	hot := merged(611, "main", "hotfix/search-fix", "hotfix: the search fix", "p611", 2)
+	hot.Body = "Cherry-picked from #511 for an early release."
+	whole := merged(612, "main", "dev", "dev → main (mentions #513)", "p612", 1)
+	set := ghapi.PromoteSet{
+		FirstMerged: []*model.PR{
+			merged(511, "dev", "feat/search-fix", "the search fix", "d511", 3),
+			merged(512, "dev", "feat/other", "still on dev", "d512", 3),
+			merged(513, "dev", "feat/third", "named only by a whole-tier merge", "d513", 3),
+		},
+		ProdMerged: []*model.PR{hot, whole},
+	}
+	in := Inputs{Repo: web, First: "dev", Stage: "stage", Prod: "main", Set: set, AheadOK: true, Ahead: map[string]bool{}}
+	changes, released := Locate(in)
+	got := numbers(changes)
+	if released != 1 || len(got) != 2 || got[0] == 511 || got[1] == 511 {
+		t.Errorf("released %d, listed %v: want #511 released, #512 and #513 listed", released, got)
+	}
+}
