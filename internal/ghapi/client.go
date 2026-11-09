@@ -111,6 +111,9 @@ type ReleaseRepo struct {
 	ProdOid  string
 	StageOid string
 	Archived bool
+	// Unlisted is how many open PRs into production one query did not
+	// return (the oldest-updated beyond the first 50): said, not hidden.
+	Unlisted int
 	Err      error
 }
 

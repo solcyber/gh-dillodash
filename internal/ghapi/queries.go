@@ -205,7 +205,7 @@ query($owner: String!, $name: String!, $prod: String!,
     nameWithOwner isArchived
     prod: ref(qualifiedName: $prodRef) { target { oid } }
     stage: ref(qualifiedName: $stageRef) { target { oid } }
-    open: pullRequests(states: [OPEN], baseRefName: $prod, first: 20,
+    open: pullRequests(states: [OPEN], baseRefName: $prod, first: 50,
                        orderBy: {field: UPDATED_AT, direction: DESC}) {
       totalCount nodes { ...RelPR } }
     merged: pullRequests(states: [MERGED], baseRefName: $prod, first: 5,

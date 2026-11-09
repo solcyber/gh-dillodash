@@ -17,6 +17,7 @@ package maintenancewindow
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -596,20 +597,25 @@ func Place(pr *model.PR, manifests map[string]*Manifest, now time.Time, cfg *con
 // NightLabel is a night sub-header: "window 2026-10-21 23:00 ET, tonight".
 func NightLabel(night string, now time.Time, cfg *config.MaintenanceWindowConfig) string {
 	local := cfg.Local()
-	rel := night
+	rel, start := night, local.T(cfg.Start)
 	if day, err := nightDate(night, local); err == nil {
+		start = local.TOn(day, cfg.Start)
 		today := local.Today(now)
-		days := int((day.Sub(today).Hours() + 12) / 24)
-		switch days {
+		// floor, not truncation: yesterday is -1 (a manifest still open
+		// after midnight is last night's, not tonight's), and the +12h
+		// absorbs the 23- or 25-hour day of a DST switch
+		switch days := int(math.Floor((day.Sub(today).Hours() + 12) / 24)); days {
 		case 0:
 			rel = "tonight"
 		case 1:
 			rel = "tomorrow night"
+		case -1:
+			rel = "last night"
 		default:
 			rel = day.Format("Mon")
 		}
 	}
-	return fmt.Sprintf("window %s %s, %s", night, local.T(cfg.Start), rel)
+	return fmt.Sprintf("window %s %s, %s", night, start, rel)
 }
 
 // QueueRows builds the "queued for the maintenance window" section: a

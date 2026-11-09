@@ -711,7 +711,9 @@ func TestDoWindow(t *testing.T) {
 		check(t, "w: the menu names the night and the attendance", strings.HasPrefix(app.Menus[0][0], "window 2026-10-28 23:00 ET, manifest #4040: "+tc.phase+"; attending: "))
 		check(t, "w: the question names the manifest", strings.Contains(app.Questions[0], "post "+tc.cmd+" on manifest #4040 (window 2026-10-28 23:00 ET)?"))
 		check(t, "w: the reply is fetched soon", len(app.Refreshes) == 1 && len(app.Soon) == 1 && app.Soon[0] == 45*time.Second)
-		check(t, "w: the command reads posted until the conductor replies", frozen.Mine.Get(strings.TrimPrefix(tc.cmd, "/")) == StatePosted)
+		now := app.State(Name).(*State).Nights["2026-10-28"]
+		check(t, "w: the command reads posted until the conductor replies", now.Mine.Get(strings.TrimPrefix(tc.cmd, "/")) == StatePosted)
+		check(t, "w: ...in a new night, not written under the UI", frozen.Mine.Get(strings.TrimPrefix(tc.cmd, "/")) == "")
 	}
 
 	app, w := newApp(cfg)
@@ -1024,4 +1026,18 @@ func TestNightStrip(t *testing.T) {
 	check(t, "a done night draws nothing", w.stripSegs(&Night{Phase: "closed", Items: night.Items}, mn, mid, 60) == nil)
 	check(t, "no slots, the window not open: nothing", w.stripSegs(&Night{Phase: "open"}, mn, start.Add(-6*time.Hour), 60) == nil)
 	check(t, "too narrow: nothing", w.stripSegs(night, mn, mid, 14) == nil)
+}
+
+// TestNightLabelPastAndDST: a manifest still open after midnight is last
+// night's; a night past the fall-back is labelled with its own zone.
+func TestNightLabelPastAndDST(t *testing.T) {
+	cfg := config.DefaultMaintenanceWindow()
+	cfg.TZLabel = ""
+	cfg.Timezone = "America/New_York"
+	now := at("2026-10-29T04:30:00Z") // 00:30 EDT on the 29th
+	check(t, "yesterday's night reads last night", strings.HasSuffix(NightLabel("2026-10-28", now, cfg), ", last night"))
+	check(t, "today's night reads tonight", strings.HasSuffix(NightLabel("2026-10-29", now, cfg), ", tonight"))
+	sat := at("2026-10-31T16:00:00Z") // Saturday, EDT; New York falls back 2026-11-01
+	check(t, "Sunday's 23:00 after the fall-back says EST", strings.Contains(NightLabel("2026-11-01", sat, cfg), " EST, tomorrow night"))
+	check(t, "tonight's says EDT", strings.Contains(NightLabel("2026-10-31", sat, cfg), " EDT, tonight"))
 }
