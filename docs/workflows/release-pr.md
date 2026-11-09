@@ -41,14 +41,14 @@ the day after it is enrolled, or at once after the cache file is deleted.
   nothing on this line; `o` and `y` give its compare page.
 - **A PR into production that is not a release** (its branch has neither
   prefix) is listed last in its repo, dimmed, with the chip `not a
-  release`. It is not counted, and `a`, `M` and `D` refuse it. Set
+  release`. It is not counted, and `A`, `M` and `D` refuse it. Set
   `list_other_prs = false` to hide them.
 - **A queued release** shows under its night in the window section, not
   among the releases; its manifest item id is `rel:<repo>#<N>`. With
   `approval_queues_for_window = true` the approving review itself queues
   it (an open, non-draft `release/*` PR with an APPROVED review no older
   than three nights, a review with no recorded time counting as fresh; a
-  hotfix never queues, and its `a` menu does not offer it), which is what
+  hotfix never queues, and its `A` menu does not offer it), which is what
   the conductor's freeze picks up: it labels nothing before then. A
   release carrying the conductor's queued label is queued either way.
   Once the release is on its way (released NOW, or its slot came) it is
@@ -69,13 +69,13 @@ the day after it is enrolled, or at once after the cache file is deleted.
 - **The summary row** counts `N releases need approval`, `N deploys wait
   on you (D)` and `N deploys stuck or failed`.
 
-## `a` on a release
+## `A` on a release
 
 ![A on a release: queue it for tonight's window, or release NOW with a reason](../shots/approve-menu.png)
 
 ![The release-now prompt: the reason, its length meter, and the exact comment that will be posted](../shots/release-now-prompt.png)
 
-Open it with `enter` first. `a` refuses drafts, your own PRs, merged ones
+Open it with `enter` first. `A` refuses drafts, your own PRs, merged ones
 and a PR that is not a release, then offers:
 
 - **queue it for the window (approve review)**, when
@@ -96,17 +96,17 @@ and a PR that is not a release, then offers:
   the dispatch fails after the comment landed, the status line says the
   manifest repo was not told and points at `M`, and the row says **`✗ not
   told · M`** in bold gold: no spinner and no running clock, because
-  nothing will pick it up. It stays followed, so `a` firing the dispatch
+  nothing will pick it up. It stays followed, so `A` firing the dispatch
   again or `M` merging it by hand moves it on (once merged by hand it says
   `merged by hand` until the app repo's deploy runs are read).
 - A **hotfix** lists NOW first (enter picks it): a hotfix into production
   is an emergency by definition.
 - A release **you already approved for this head** is queued already
-  (where approvals queue), so `a` offers only **release NOW**: the same
+  (where approvals queue), so `A` offers only **release NOW**: the same
   reason prompt and exact comment, then `/release-now "<reason>"` and the
   dispatch, with **no second review** (yours stands). This is the path for
   an approved release the window bumped or rolled. Once the release is on
-  its way, `a` says so and posts nothing. Before 1.5.3 the core refused `a`
+  its way, `A` says so and posts nothing. Before 1.5.3 the core refused `a`
   on any PR you had approved, so an approved release could only be
   released now by posting the comment and firing the dispatch by hand.
 - **Request changes**, always the last entry: a request-changes review
@@ -115,13 +115,13 @@ and a PR that is not a release, then offers:
   tonight's window before the freeze, with no comment on the manifest.
 - **Dismiss my approval**, after NOW on a release you approved: dismisses
   your approving review (by its id, read from the row or the PR) with a
-  message. Withdrawn, the release leaves the queue; `a` approves it again,
+  message. Withdrawn, the release leaves the queue; `A` approves it again,
   and so queues it again, whenever it should go (after a `/window-cancel`,
   say).
 - **A command nobody picked up.** A `/release-now` posted from the PR page
   fires no dispatch, and a dispatch can fail. When the command has waited
   two minutes with no run (at once when this session's dispatch failed),
-  `a` on the release offers one thing: fire the `release-now` dispatch for
+  `A` on the release offers one thing: fire the `release-now` dispatch for
   **that** comment (its id is the payload), with no second comment and no
   review. `M` stays the last resort after five minutes.
 - **From anywhere.** The same menu comes up whether the release was
@@ -129,10 +129,10 @@ and a PR that is not a release, then offers:
   (scheduled, bumped or rolled), from `:` (`repo#N` reaches the enrolled
   release repos too, not only the review repos), or from a link in the
   manifest. When no row carries the release (the state has not loaded,
-  or a rate-limited refresh stopped early), `a` tells a release by its
+  or a rate-limited refresh stopped early), `A` tells a release by its
   repo and branches: open into `production_branch` of an enrolled repo
   from a `release_prefix` or `hotfix_prefix` head. Until the enrolled
-  repos are known (discovery has not run yet), `a` says `couldn't read
+  repos are known (discovery has not run yet), `A` says `couldn't read
   release state … press r and retry` and posts nothing: a release never
   gets a plain review, and never the core's "a second review changes
   nothing". A release whose thread quotes a plan digest is still a
@@ -153,7 +153,7 @@ Without the window workflow, an approving review is just an approval, and
   merged PR. With the window workflow on, inside `release_from`–`end` it
   asks once ("This DEPLOYS production"). Outside the window, while
   `release_now_dispatch` can tell the manifest repo, `M` refuses and points
-  at `a`: release NOW posts the command and fires the dispatch, and the
+  at `A`: release NOW posts the command and fires the dispatch, and the
   release job merges. Merging by hand is the last resort, for when the
   dispatch can't fire (it failed this session, the command has waited
   five minutes with no run, or `release_now_dispatch` is off); then `M` first asks you to call it an emergency (the
@@ -163,11 +163,11 @@ Without the window workflow, an approving review is just an approval, and
   whose head is that merge, only environments you are a reviewer of. With
   nothing to approve it says what the deploy is doing instead. The
   approval carries `deploy_approval_comment`.
-- `x` on a release (its row, or its detail) lists its runs: the release
+- `X` on a release (its row, or its detail) lists its runs: the release
   run in the manifest repo, then the runs on its merge (or head) commit.
   Pick one to re-run its failed jobs or every job, cancel it, reject the
   deployment it waits on (a second choice with its own prompt and confirm;
-  `D` only ever approves), or read a job's log in `$PAGER`. Every write
+  `D` only ever approves). `x` reads a job's log in `$PAGER`. Every write
   asks first.
 - While a deploy waits or runs dillodash refreshes every
   `deploy_refresh_secs` and says once per environment when one starts
@@ -183,8 +183,8 @@ replays one offline; these shots are its steps.
 
 ![A release night after the freeze: the approved release the window bumped says A: release NOW, the migration holds its slot nine minutes into the window](../shots/night-1-bumped.png)
 
-- **`a` on a release row** in the list is the detail's `a`: no need to
-  open it first. A release the freeze bumped keeps its approval, so `a`
+- **`A` on a release row** in the list is the detail's `A`: no need to
+  open it first. A release the freeze bumped keeps its approval, so `A`
   offers release NOW alone.
 
 ![A on the bumped release: the approval stands, so release NOW is the one choice](../shots/night-2-now.png)
@@ -328,7 +328,7 @@ sweeps and the card still redraws on every poll.
 On every release repo the token needs Pull requests read and write (the
 review), Issues read and write (the `/release-now` comment), Contents read,
 Actions read, Metadata read (discovery), and for `M` and `D` Contents and
-Deployments read and write; for `x`, Actions read and write. The release-now dispatch needs Contents read
+Deployments read and write; for `X`, Actions read and write. The release-now dispatch needs Contents read
 and write on the window's `manifest_repo` (a `repository_dispatch` is a
 contents write there); following the release there needs Actions read on
 it (the run's jobs and steps). With `[github] approvers_team`, organization

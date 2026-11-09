@@ -9,7 +9,7 @@ branch runs that tier's deploy.
 The [`release_pr`](release-pr.md) workflow covers the last hop. This one
 covers everything before it. Each change gets one row from the moment it
 merges into the first tier until it reaches production. The row says
-where the change is and what its tier's deploy did. `p` moves the change
+where the change is and what its tier's deploy did. `P` moves the change
 one tier on, and `D` approves the deploy its tier waits on.
 
 ```toml
@@ -87,21 +87,21 @@ staging or production into a lower tier) are not changes.
   `go/<staging PR number>` or `hold/<staging PR number>`, as the release
   cut reads it.
 
-## `p`
+## `P`
 
 ![P on a staging unit: tag it go for the next release cut, or hold to keep it on stage](../shots/promote-tag.png)
 
-`p` on a change moves it one tier on. What that means depends on where
+`P` on a change moves it one tier on. What that means depends on where
 the change is.
 
-| Where | `p` does |
+| Where | `P` does |
 |---|---|
-| `on dev` | **Opens the promotion PR.** It reads the change's merge commit and checks each file against the staging head. A file is taken when staging still has what the first tier had before the change, or already has the result. Any other file is a conflict, and `p` refuses with the files named: promote what the change depends on first, or promote it by hand. Nothing is merged three-way. After a confirm, `p` creates `promote/<N>-stage` from the staging head, commits the change there in one commit that GitHub signs (`createCommitOnBranch`, so a signed-commits rule holds), and opens the PR `Promote #N to stage: <title>`. If the commit fails, the branch is deleted again. If the branch already exists, `p` says so and writes nothing. |
+| `on dev` | **Opens the promotion PR.** It reads the change's merge commit and checks each file against the staging head. A file is taken when staging still has what the first tier had before the change, or already has the result. Any other file is a conflict, and `P` refuses with the files named: promote what the change depends on first, or promote it by hand. Nothing is merged three-way. After a confirm, `P` creates `promote/<N>-stage` from the staging head, commits the change there in one commit that GitHub signs (`createCommitOnBranch`, so a signed-commits rule holds), and opens the PR `Promote #N to stage: <title>`. If the commit fails, the branch is deleted again. If the branch already exists, `P` says so and writes nothing. |
 | `→ stage` | **Merges the promotion PR** once GitHub says it can (`ready`), with `[merge] methods` for the repo. `checks`, `behind`, `conflicts` and `draft` are said, not forced. The merge's push deploys staging. |
 | `stage · …` | **Tags the unit.** A menu offers `go/<N>` (release it with the next cut) and `hold/<N>` (keep it on stage), minus the current tag. Before a go, the confirm says what staging's deploy of the unit did, and asks again unless it passed. Then a tag message (prefilled), and a last confirm. A flip deletes the other tag first. The tag is annotated, on the unit's commit, with "Tagged with dillodash by <you>." in its message. |
-| `stage · go` | Tagging is still offered (`hold`). The menu's title says the last hop: the open release PR into production that carries it (`a` approves it there), the unit ahead of it that holds the cut, or the next release cut. |
+| `stage · go` | Tagging is still offered (`hold`). The menu's title says the last hop: the open release PR into production that carries it (`A` approves it there), the unit ahead of it that holds the cut, or the next release cut. |
 
-Every `p` write passes the same guards as the other keys. `allowed_repos`
+Every `P` write passes the same guards as the other keys. `allowed_repos`
 refuses it outside the list, and a `[bots]` login or a login outside
 `approvers_team` posts nothing. A newer installed release is offered
 first. The release itself keeps its own rules (`release_pr`, the

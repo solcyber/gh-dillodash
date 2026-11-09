@@ -43,7 +43,7 @@ assume the example window.
   tonight.
 - **The night's manifest issue is the first row under its sub-header**
   (chip `manifest <phase>`), never a loose row in `issues`. `enter` opens
-  it, `o` opens it in the browser, `w` acts on its night. In its title's
+  it, `o` opens it in the browser, `W` acts on its night. In its title's
   place (the title repeats the night above it) it draws the night's
   timeline: the window from its start to its end, a mark per slot in run
   order (a blue dot scheduled, gold running, a blue block done, a gold
@@ -60,7 +60,7 @@ assume the example window.
   `closes at <closer>`, then `closer late`.
 - **A missed freeze.** When the freeze never ran, the conductor fires
   nothing that night. dillodash shows a gold `missed freeze` chip and the
-  recovery (`missed_freeze_hint`) on the night, and `w` stops offering
+  recovery (`missed_freeze_hint`) on the night, and `W` stops offering
   `/attend` and `/release` there. It tells by the conductor's comment
   carrying `missed_freeze_marker` (`MISSED FREEZE`), or by the manifest
   still `open` `missed_freeze_grace_mins` (30) after the cutoff. A
@@ -74,11 +74,11 @@ assume the example window.
   ordinary chip.
 - **The summary row** counts `N queued tonight`.
 
-## `w`
+## `W`
 
 From the list (on a queued terraform row, a release row under a night, or a
 manifest row), from a queued PR's or release's detail, or from the
-manifest's own detail, `w` opens a menu for that night, or the next night
+manifest's own detail, `W` opens a menu for that night, or the next night
 with a manifest: `/attend`, `/release`, `/window-cancel <id>` (only for the
 selected item: `#N` for a terraform PR, `rel:<repo>#<N>` for a release),
 open the manifest issue. Each entry says why it would or would not count
@@ -118,7 +118,7 @@ reserved_to = "17:15"
 reserved_stacks = ["prod/*"]      # path patterns; [] = every stack
 ```
 
-Inside the span, `a` on a plan that is not disruptive but goes to a
+Inside the span, `A` on a plan that is not disruptive but goes to a
 reserved stack asks first: wait until `reserved_to` (the first entry), or
 apply now with `outside_window_flag` and a reason, as for a disruptive
 plan. Outside the span, or on another stack, nothing changes.
