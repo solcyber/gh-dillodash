@@ -37,6 +37,37 @@ type Installer struct {
 	GOOS   string
 	GOARCH string
 	Find   FindOptions
+	// SkipPath remembers a release rolled back from, so the background
+	// updater does not put it straight back ("" remembers nothing). An
+	// explicit `update` clears it.
+	SkipPath string
+}
+
+// Skipped is the release a rollback left, "" when none.
+func (in *Installer) Skipped() string {
+	if in == nil || in.SkipPath == "" {
+		return ""
+	}
+	b, err := os.ReadFile(in.SkipPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// ClearSkip forgets a rollback (an explicit `update` asks for the release).
+func (in *Installer) ClearSkip() {
+	if in != nil && in.SkipPath != "" {
+		_ = os.Remove(in.SkipPath)
+	}
+}
+
+// errManifest is a binary that was replaced while its manifest.yml was
+// not: installed, with a note.
+type errManifest struct{ err error }
+
+func (e errManifest) Error() string {
+	return fmt.Sprintf("installed, but manifest.yml still names the old tag (%v): gh extension list shows it", e.err)
 }
 
 // ErrDownload marks an install that failed to download (worth a retry),
@@ -49,6 +80,10 @@ type Result struct {
 	Updated []string // the paths replaced
 	Notes   []string // installs left alone, and why
 	Err     error    // nothing was installed (or rolled back)
+	// NotSelf: installs were replaced, but not the binary this process
+	// runs from (a root-owned copy on PATH, say), so a restart would run
+	// the old build again.
+	NotSelf bool
 }
 
 // AssetName is the release asset for a platform, as the release build
@@ -110,6 +145,12 @@ func (in *Installer) Install(ctx context.Context, rel *ghapi.Release, running st
 	defer os.Remove(src)
 	for _, t := range targets {
 		if err := place(src, want, t, rel.Tag); err != nil {
+			var me errManifest
+			if errors.As(err, &me) {
+				res.Updated = append(res.Updated, t.Path)
+				res.Notes = append(res.Notes, t.Path+": "+me.Error())
+				continue
+			}
 			res.Notes = append(res.Notes, fmt.Sprintf("%s NOT replaced: %s; by hand: %s", t.Path, err, t.ManualCommand(rel.Tag, name)))
 			continue
 		}
@@ -117,6 +158,15 @@ func (in *Installer) Install(ctx context.Context, rel *ghapi.Release, running st
 	}
 	if len(res.Updated) == 0 {
 		res.Err = fmt.Errorf("%s NOT installed anywhere", rel.Tag)
+		return res
+	}
+	res.NotSelf = true
+	for _, t := range targets {
+		for _, u := range res.Updated {
+			if t.Path == u && t.Running {
+				res.NotSelf = false
+			}
+		}
 	}
 	return res
 }
@@ -196,7 +246,10 @@ func (in *Installer) attest(ctx context.Context, path string) error {
 	if in.Run == nil {
 		return errors.New("build attestation not checked (no gh to run) — nothing installed")
 	}
-	out, err := in.Run(ctx, []string{"gh", "attestation", "verify", path, "--repo", Repo.String()})
+	// --signer-workflow: built by the release workflow itself, not by
+	// any workflow run that can write to the repo
+	out, err := in.Run(ctx, []string{"gh", "attestation", "verify", path, "--repo", Repo.String(),
+		"--signer-workflow", Repo.String() + "/.github/workflows/release.yml"})
 	if err != nil {
 		why := firstLine(string(out))
 		if why == "" {
@@ -254,7 +307,7 @@ func place(src, want string, t Install, tag string) error {
 	if t.Kind == KindExtension {
 		manifest := filepath.Join(dir, "manifest.yml")
 		if err := setManifestTag(manifest, tag); err != nil {
-			return fmt.Errorf("installed, but manifest.yml still names the old tag (%v): gh extension list shows it", err)
+			return errManifest{err}
 		}
 	}
 	return nil
@@ -338,6 +391,7 @@ func setManifestTag(path, tag string) error {
 // .prev, so a second rollback undoes the first.
 func (in *Installer) Rollback() Result {
 	var res Result
+	from := ""
 	for _, i := range Find(in.Find) {
 		if i.Kind == KindLauncher {
 			continue
@@ -359,9 +413,22 @@ func (in *Installer) Rollback() Result {
 			}
 		}
 		res.Updated = append(res.Updated, i.Path)
+		if Comparable(i.Version) && (from == "" || Newer(i.Version, from)) {
+			from = i.Version
+		}
 	}
-	if len(res.Updated) == 0 && len(res.Notes) == 0 {
+	switch {
+	case len(res.Updated) == 0 && len(res.Notes) == 0:
 		res.Err = errors.New("no install has a .prev to roll back to")
+	case len(res.Updated) == 0:
+		res.Err = errors.New("nothing was rolled back (the notes say why)")
+	}
+	if len(res.Updated) > 0 && from != "" && in.SkipPath != "" {
+		if err := os.MkdirAll(filepath.Dir(in.SkipPath), 0o700); err == nil {
+			if err := os.WriteFile(in.SkipPath, []byte(from+"\n"), 0o600); err == nil {
+				res.Notes = append(res.Notes, fmt.Sprintf("auto-update skips %s until a newer release is out (gh dillodash update installs it now)", from))
+			}
+		}
 	}
 	return res
 }
@@ -393,5 +460,9 @@ func (u *Updater) Install(ctx context.Context, st Status) Result {
 	if u.Installer == nil {
 		return Result{Err: errors.New("no installer")}
 	}
-	return u.Installer.Install(ctx, u.Checker.Release(), st.Running)
+	rel := u.Checker.Release()
+	if rel != nil && rel.Tag == u.Installer.Skipped() {
+		return Result{Version: rel.Tag, Err: fmt.Errorf("you rolled back from %s — auto-update waits for a newer release (gh dillodash update installs it now)", rel.Tag)}
+	}
+	return u.Installer.Install(ctx, rel, st.Running)
 }

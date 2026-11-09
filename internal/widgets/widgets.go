@@ -97,6 +97,12 @@ func Wrap(s string, width int) []string {
 			if w > width {
 				// a word wider than a line: fill what room is left
 				head := text.Clip(chunk, width-used)
+				if head == "" && used == 0 {
+					// not even one grapheme fits an empty line (a 2-cell
+					// rune at width 1): put it there anyway, so the loop
+					// always moves on; the canvas clips the overhang
+					head = text.FirstGrapheme(chunk)
+				}
 				if head != "" {
 					cur += head
 					used += text.Width(head)

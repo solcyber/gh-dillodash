@@ -956,3 +956,23 @@ func TestRowKindLiveAnimates(t *testing.T) {
 		t.Error("a quiet row does not")
 	}
 }
+
+// TestActionPanicIsAnError: a panic on the action goroutine becomes an
+// error on the status line and frees the action slot; the process (and
+// the terminal's mode) survive it.
+func TestActionPanicIsAnError(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	h.m.mu.Lock()
+	h.m.runAction(func() { panic("boom") })
+	h.m.mu.Unlock()
+	h.pump()
+	h.m.mu.Lock()
+	defer h.m.mu.Unlock()
+	if h.m.action {
+		t.Error("the action slot stays taken after a panic")
+	}
+	if !strings.Contains(h.m.errText, "boom") {
+		t.Errorf("status = %q, want the panic named", h.m.errText)
+	}
+}

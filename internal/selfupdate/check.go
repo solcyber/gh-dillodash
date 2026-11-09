@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -40,6 +41,9 @@ type Checker struct {
 	Path string // the cache file; "" keeps nothing
 	Now  func() time.Time
 	Find FindOptions
+
+	mu   sync.Mutex
+	last *ghapi.Release // the release the latest Check read, cache or not
 }
 
 // CachePath is the cache file under $XDG_CACHE_HOME (else ~/.cache).
@@ -106,6 +110,9 @@ func (c *Checker) Check(ctx context.Context, force bool) Status {
 		}
 		c.save(k)
 	}
+	c.mu.Lock()
+	c.last = k.Release
+	c.mu.Unlock()
 	st := Status{Running: c.Find.Running, CheckedAt: k.CheckedAt, Err: k.Err, Self: Self(c.Find)}
 	if k.Release != nil {
 		st.Latest, st.Notes, st.URL = k.Release.Tag, k.Release.Body, k.Release.HTMLURL
@@ -114,4 +121,15 @@ func (c *Checker) Check(ctx context.Context, force bool) Status {
 }
 
 // Release is the cached latest release (nil when none was ever read).
-func (c *Checker) Release() *ghapi.Release { return c.load().Release }
+// It is the one the latest Check read (an install never re-reads a
+// cache file another process may have changed, or one that could not
+// be written), else the cache's.
+func (c *Checker) Release() *ghapi.Release {
+	c.mu.Lock()
+	last := c.last
+	c.mu.Unlock()
+	if last != nil {
+		return last
+	}
+	return c.load().Release
+}

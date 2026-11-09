@@ -89,10 +89,16 @@ func DefaultPath(env func(string) string) string {
 }
 
 // InstallPath is where config init, migrate and pull write when no
-// --config is given: $DILLODASH_CONFIG when set (so the dashboard reads
-// what was just written), else DefaultPath.
+// --config is given: $DILLODASH_CONFIG when set, else the file the
+// dashboard loads today (FindPath: ~/.config/dillodash/config.toml is
+// read when $XDG_CONFIG_HOME has none), else DefaultPath. Writing
+// anywhere else would put a new file in front of the one in use, with
+// no --force and no backup.
 func InstallPath(env func(string) string) string {
 	if p := env(envVar); p != "" {
+		return p
+	}
+	if p, _, err := FindPath("", env); err == nil && p != "" {
 		return p
 	}
 	return DefaultPath(env)

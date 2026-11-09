@@ -2,7 +2,10 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -93,4 +96,45 @@ func ParseSource(data []byte) (Source, bool) {
 		src.At = t
 	}
 	return src, true
+}
+
+// Edited reports whether an installed, stamped config was changed by
+// hand since it was pulled: its body's git blob sha no longer matches
+// the sha in its stamp. An unstamped file is not "edited" (it was never
+// pulled).
+func Edited(installed []byte) bool {
+	src, ok := ParseSource(installed)
+	if !ok || src.SHA == "" {
+		return false
+	}
+	return blobSHA(StripHeader(installed)) != src.SHA
+}
+
+// blobSHA is git's blob id for data (git hash-object), the sha GitHub
+// reports for a file's contents.
+func blobSHA(data []byte) string {
+	h := sha1.New()
+	fmt.Fprintf(h, "blob %d\x00", len(data))
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Backup keeps a copy of path before an overwrite, when the file
+// exists, and returns the copy's path ("" when there was nothing). The
+// first copy is path.bak; when that exists the copy is stamped
+// (path.bak.20261109T153000Z), so a second overwrite never replaces the
+// first backup.
+func Backup(path string, now time.Time) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	dst := path + ".bak"
+	if _, err := os.Stat(dst); err == nil {
+		dst = path + ".bak." + now.UTC().Format("20060102T150405Z")
+	}
+	return dst, WriteFileAtomic(dst, data, 0o600)
 }

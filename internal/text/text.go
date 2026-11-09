@@ -235,6 +235,12 @@ func EllipLeft(s string, cols int) string {
 	return more + clipLeft(s, cols-mw)
 }
 
+// FirstGrapheme is s's first grapheme cluster ("" for "").
+func FirstGrapheme(s string) string {
+	g, _, _, _ := uniseg.FirstGraphemeClusterInString(s, -1)
+	return g
+}
+
 // clipLeft keeps the last cols cells of s, whole graphemes only.
 func clipLeft(s string, cols int) string {
 	if cols <= 0 {
@@ -257,6 +263,9 @@ func clipLeft(s string, cols int) string {
 	used := 0
 	for i := len(starts) - 1; i >= 0; i-- {
 		if used+widths[i] > cols {
+			if i == len(starts)-1 {
+				return "" // the last grapheme alone is wider than cols
+			}
 			return s[starts[i+1]:]
 		}
 		used += widths[i]

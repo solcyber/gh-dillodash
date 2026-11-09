@@ -91,6 +91,12 @@ func (m *Model) applyBuildInstall(res selfupdate.Result) {
 		if notes != "" {
 			m.lastMsg += " — " + notes
 		}
+	case len(res.Updated) > 0 && res.NotSelf:
+		// R would exec the same old binary: say where it landed instead
+		m.notice(fmt.Sprintf("installed dillodash %s at %s — this dashboard runs another copy, which was not replaced; quit and start the new one", res.Version, strings.Join(res.Updated, ", ")))
+		if notes != "" {
+			m.lastMsg += " — " + notes
+		}
 	case len(res.Updated) > 0:
 		m.upd.Installed = res.Version
 		m.ok(fmt.Sprintf("installed dillodash %s (%s) — R restarts into it", res.Version, strings.Join(res.Updated, ", ")))

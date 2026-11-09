@@ -33,13 +33,20 @@ func (m *Model) checkConfig() {
 	if m.cfg == nil || m.cfg.Path == "" || m.cfgChecking {
 		return
 	}
-	raw, err := os.ReadFile(m.cfg.Path)
-	if err != nil {
-		return
-	}
-	src, pulled := config.ParseSource(raw)
-	if !pulled {
-		return
+	// the source this process loaded, read once: a config pull in
+	// another shell changes the file, not what this dashboard runs, so
+	// the banner stays up until a restart picks the new file up
+	src := m.cfgSource
+	if src.SHA == "" {
+		raw, err := os.ReadFile(m.cfg.Path)
+		if err != nil {
+			return
+		}
+		s, pulled := config.ParseSource(raw)
+		if !pulled {
+			return
+		}
+		src = s
 	}
 	m.cfgSource, m.cfgChecking = src, true
 	ctx, gh := m.ctx, m.gh
@@ -105,6 +112,15 @@ func (m *Model) doConfigPull(app *lockedApp) {
 		return
 	}
 	src.SHA, src.At = sha, app.Now()
+	kept := ""
+	if raw, err := os.ReadFile(path); err == nil && config.Edited(raw) {
+		dst, err := config.Backup(path, app.Now())
+		if err != nil {
+			app.Fail("not installed: your local edits could not be backed up: " + err.Error())
+			return
+		}
+		kept = " (your local edits are in " + dst + ")"
+	}
 	if err := config.WriteFileAtomic(path, config.Stamp(src, data), 0o600); err != nil {
 		app.Fail("could not write the config: " + err.Error())
 		return
@@ -112,6 +128,6 @@ func (m *Model) doConfigPull(app *lockedApp) {
 	m.mu.Lock()
 	m.cfgSource, m.cfgNewer = src, ""
 	m.mu.Unlock()
-	app.OK(fmt.Sprintf("installed %s @ %s — restarting into it", src.Spec(), model.ShortSHA(sha)))
+	app.OK(fmt.Sprintf("installed %s @ %s%s — restarting into it", src.Spec(), model.ShortSHA(sha), kept))
 	app.RestartAfterAction()
 }

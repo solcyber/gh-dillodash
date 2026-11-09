@@ -134,7 +134,12 @@ func Find(o FindOptions) []Install {
 			} else {
 				in.Note = "no manifest.yml: a local install, not from a release"
 			}
-			if sameFile(ext, o.Exe) {
+			// the running binary's own path, unless another dashboard
+			// has installed a newer release over it since this one
+			// started (the manifest says so): then the file on disk is
+			// that release, and replacing it again would overwrite the
+			// .prev a rollback needs
+			if sameFile(ext, o.Exe) && !(Comparable(in.Version) && Newer(in.Version, o.Running)) {
 				in.Running, in.Version = true, o.Running
 			}
 			add(in)

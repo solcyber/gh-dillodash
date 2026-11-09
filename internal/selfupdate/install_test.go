@@ -249,3 +249,69 @@ func TestPendingRestart(t *testing.T) {
 		t.Errorf("gate %q", g)
 	}
 }
+
+// TestSecondDashboardKeepsPrev: two dashboards run v1.5.2; one installs
+// v1.5.4. The other must see the extension as v1.5.4 now (its manifest),
+// so it does not install again and overwrite the .prev a rollback needs.
+func TestSecondDashboardKeepsPrev(t *testing.T) {
+	m := newMachine(t)
+	body := []byte("new binary v1.5.4")
+	if res := m.installer(&fakeDL{body: body}, nil).Install(context.Background(), release("v1.5.4", body), "v1.5.2"); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	// the second dashboard: same exe path, still running v1.5.2
+	res := m.installer(&fakeDL{body: body}, nil).Install(context.Background(), release("v1.5.4", body), "v1.5.2")
+	for _, p := range res.Updated {
+		if p == m.ext {
+			t.Errorf("the extension was replaced twice: %q", res.Updated)
+		}
+	}
+	if read(t, m.ext+".prev") != "old extension binary" {
+		t.Error("the extension's .prev no longer holds the old build")
+	}
+}
+
+// TestRollbackFailsLoudAndSticks: a rollback that rolled nothing back is
+// an error; one that worked records the release it left, so the
+// background updater does not put it back, and an explicit update can.
+func TestRollbackFailsLoudAndSticks(t *testing.T) {
+	m := newMachine(t)
+	in := m.installer(nil, nil)
+	in.SkipPath = filepath.Join(t.TempDir(), "rolled-back-from")
+	if res := in.Rollback(); res.Err == nil {
+		t.Error("no .prev anywhere: want an error")
+	}
+	body := []byte("new binary v1.5.4")
+	if res := m.installer(&fakeDL{body: body}, nil).Install(context.Background(), release("v1.5.4", body), "v1.5.2"); res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	in.Find.Running = "v1.5.4"
+	res := in.Rollback()
+	if res.Err != nil || len(res.Updated) == 0 {
+		t.Fatalf("rollback: %v %q", res.Err, res.Notes)
+	}
+	if in.Skipped() != "v1.5.4" {
+		t.Errorf("skipped = %q, want v1.5.4", in.Skipped())
+	}
+	u := &Updater{Checker: &Checker{}, Installer: in}
+	u.Checker.last = release("v1.5.4", body)
+	if r := u.Install(context.Background(), Status{Running: "v1.5.2"}); r.Err == nil || !strings.Contains(r.Err.Error(), "rolled back from v1.5.4") {
+		t.Errorf("auto-update after a rollback: %v", r.Err)
+	}
+	in.ClearSkip()
+	if in.Skipped() != "" {
+		t.Error("ClearSkip leaves the skip")
+	}
+}
+
+// TestInstallElsewhereIsNotSelf: when the running binary is not among
+// the installs replaced, the result says so (R would exec the old one).
+func TestInstallElsewhereIsNotSelf(t *testing.T) {
+	m := newMachine(t)
+	m.opts.Exe = filepath.Join(t.TempDir(), "root-owned", "dillodash") // not on disk: nothing to replace
+	body := []byte("new binary v1.5.4")
+	res := m.installer(&fakeDL{body: body}, nil).Install(context.Background(), release("v1.5.4", body), "v1.5.2")
+	if res.Err != nil || len(res.Updated) == 0 || !res.NotSelf {
+		t.Errorf("updated %q NotSelf=%v err=%v", res.Updated, res.NotSelf, res.Err)
+	}
+}

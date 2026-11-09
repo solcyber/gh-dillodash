@@ -4,7 +4,7 @@ package fake
 
 import (
 	"context"
-	"crypto/sha256"
+	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -828,8 +828,11 @@ func (f *Client) FileContents(ctx context.Context, repo model.Repo, path, ref st
 	if !ok {
 		return nil, "", &ghapi.Error{Method: "GET", URL: repo.String() + "/contents/" + path, Status: 404, Message: "Not Found"}
 	}
-	sum := sha256.Sum256(data)
-	return append([]byte(nil), data...), hex.EncodeToString(sum[:])[:40], nil
+	// the sha is git's blob id, as GitHub's contents API reports it
+	h := sha1.New()
+	fmt.Fprintf(h, "blob %d\x00", len(data))
+	h.Write(data)
+	return append([]byte(nil), data...), hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // ---- promotion ----
