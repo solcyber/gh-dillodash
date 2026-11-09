@@ -97,7 +97,7 @@ func (m *Model) issueLines(iss *model.Issue, wrap int) []text.Line {
 		meta = append(meta, scenes.Chip(strings.ToLower(state), "chip.state")...)
 	}
 	meta = append(meta, text.S("  "+glyphs.G("sep")+"  ", "rule"), text.S(glyphs.Ico("person"), "faint"),
-		text.S(author, m.authorStyle(author)),
+		text.S(m.who(author, false), m.authorStyle(author)),
 		text.S(fmt.Sprintf("  %s  opened %s", glyphs.G("sep"), clock.FmtTime(iss.CreatedAt)), "faint"))
 	for _, lab := range iss.Labels.Names() {
 		meta = append(meta, text.S("  ", "text"))
@@ -126,10 +126,15 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	}
 	listed := m.listedFor(pr)
 	label, style, _, _ := m.decision(pr, listed)
-	meta := []text.Seg{text.S(glyphs.Ico("person"), "faint"), text.S(author, m.authorStyle(author)),
+	meta := []text.Seg{text.S(glyphs.Ico("person"), "faint"), text.S(m.who(author, false), m.authorStyle(author)),
 		text.S("  "+glyphs.G("sep")+"  ", "rule"), text.S(glyphs.Ico("branch"), "faint"),
 		text.S(pr.HeadRefName, "md.inline"), text.S(" "+glyphs.G("arrow")+" ", "faint"), text.S(pr.BaseRefName, "muted"),
 		text.S("  "+glyphs.G("sep")+"  ", "rule")}
+	if m.cfg != nil && m.cfg.Reviews.Applies(m.repoOf(pr)) {
+		// [reviews] merge_applies: a merge here deploys
+		meta = append(meta, scenes.Chip(glyphs.G("warn")+" merge applies", "chip.act")...)
+		meta = append(meta, text.S(" ", "text"))
+	}
 	if state == "OPEN" {
 		meta = append(meta, scenes.Chip(label, style)...)
 	} else {
@@ -222,7 +227,7 @@ func (m *Model) timeline(events []event, width int) []text.Line {
 			dotStyle = "tl.dot.bot"
 		}
 		when := clock.FmtTime(e.when)
-		head := []text.Seg{text.S(dot, dotStyle), text.S(e.who, m.authorStyle(e.who)),
+		head := []text.Seg{text.S(dot, dotStyle), text.S(m.who(e.who, false), m.authorStyle(e.who)),
 			text.S("  "+glyphs.G("sep")+"  ", "rule"), text.S(when, "tl.when"), text.S("  ", "text")}
 		if strings.HasPrefix(e.what, "review: ") {
 			rs := e.what[8:]

@@ -146,7 +146,7 @@ shape or motion. Amos is drawn in his own colors.
 
 ## The room
 
-![The room: in the release window the dashboard is the view out of a window, behind its mullions, with curtains, plants, Amos's portrait, a wall clock and a mug of coffee on the sill; the plaque says W goes back to work](shots/room.png)
+![The room: in the release window the dashboard is the view out of a window, behind its mullions, with curtains, plants, Amos's portrait, a wall clock and a mug of coffee on the sill; the plaque says w goes back to work](shots/room.png)
 
 While the release window is open (the `maintenance_window` workflow's
 `release_from` to `end`), dillodash is the view out of a window. The

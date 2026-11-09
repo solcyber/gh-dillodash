@@ -299,7 +299,11 @@ func (m *Model) doMerge(app *lockedApp) {
 	if base == "" {
 		base = "the base branch"
 	}
-	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod(repo))
+	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s, as %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod(repo), m.me)
+	if m.cfg != nil && m.cfg.Reviews.Applies(repo) {
+		// [reviews] merge_applies: this merge is a deploy, say it plainly
+		what = fmt.Sprintf("MERGING APPLIES: %s deploys on push to %s, so this merge changes what runs.\n%s", repo, base, what)
+	}
 	ok, handled := m.wf.MergeConfirm(app, pr)
 	if !handled {
 		ok = app.Confirm(what)

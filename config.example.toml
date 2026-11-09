@@ -27,6 +27,7 @@
 repos = ["acme/infra"]        # required: one or more "owner/name" (--repo replaces the list)
 # requested_repos = ["acme/web"] # busy repos listed only for the open PRs that ask for your review, that you reviewed, or that you opened (no issues); never one of repos
 # ci_recheck_secs = 900       # Actions-route CI: a settled, passing head is re-read after this long
+# merge_applies = []          # repos where a merge deploys or applies: M says so first, the PR header carries a chip
 
 # ============================================================================
 # Display
@@ -51,6 +52,9 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 [agent]
 # handoff_label = ""          # the label H adds; "" = H is off
 # handoff_comment = ""        # posted with the label when set (a first instruction, a note for the humans watching)
+# name = ""                   # what the dashboard calls the agent ("hand #6 to <name>?"); "" = "the agent"
+# login = ""                  # the agent's bot login: its PRs, comments and reviews show the name
+# section = false             # a "with <name>" section: its open PRs and the items carrying handoff_label
 
 # ============================================================================
 # Bots — logins drawn as bots (exact, case-insensitive; "[bot]" suffixes always

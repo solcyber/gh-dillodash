@@ -89,7 +89,7 @@ staging or production into a lower tier) are not changes.
 
 ## `p`
 
-![p on a staging unit: tag it go for the next release cut, or hold to keep it on stage](../shots/promote-tag.png)
+![P on a staging unit: tag it go for the next release cut, or hold to keep it on stage](../shots/promote-tag.png)
 
 `p` on a change moves it one tier on. What that means depends on where
 the change is.

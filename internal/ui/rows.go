@@ -51,6 +51,9 @@ func (m *Model) authorStyle(login string) string {
 	if l == strings.ToLower(m.me) {
 		return "author.me"
 	}
+	if m.cfg.Agent.IsAgent(l) {
+		return "author.agent" // the agent's work, not a bot's noise
+	}
 	if m.cfg.Bots.IsBot(l) {
 		return "author.bot"
 	}
@@ -60,6 +63,41 @@ func (m *Model) authorStyle(login string) string {
 		}
 	}
 	return "author"
+}
+
+// who is how a login is shown: the agent by its name ([agent] name;
+// short: its first word, for the list's author column), anyone else by
+// login.
+func (m *Model) who(login string, short bool) string {
+	if m.cfg == nil || m.cfg.Agent.Name == "" || !m.cfg.Agent.IsAgent(login) {
+		return login
+	}
+	if short {
+		first, _, _ := strings.Cut(m.cfg.Agent.Name, " ")
+		return first
+	}
+	return m.cfg.Agent.Name
+}
+
+// agentItem reports whether an open item belongs in the agent's section:
+// it carries the handoff label, or (a PR) the agent opened it.
+func (m *Model) agentItem(author string, labels []model.Label) bool {
+	a := m.cfg.Agent
+	if !a.Section {
+		return false
+	}
+	if a.IsAgent(author) {
+		return true
+	}
+	if a.HandoffLabel == "" {
+		return false
+	}
+	for _, l := range labels {
+		if strings.EqualFold(l.Name, a.HandoffLabel) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- the filter ----
@@ -104,23 +142,33 @@ func (m *Model) refilter() {
 		}{r.Kind, r.Ident()}
 	}
 	terms := strings.Fields(strings.ToLower(m.filter))
-	var rest []*model.PR
+	var rest, agentPRs []*model.PR
 	for _, p := range m.allPRs {
 		row := workflow.Row{Kind: "pr", Item: p}
 		if m.wf.Claims(row) {
 			continue
 		}
 		if m.rowMatches(row, terms) {
+			if m.agentItem(p.Author.Login, p.Labels.Nodes) {
+				agentPRs = append(agentPRs, p)
+				continue
+			}
 			rest = append(rest, p)
 		}
 	}
-	var issues []*model.Issue
+	var issues, agentIssues []*model.Issue
 	for _, i := range m.issues {
 		row := workflow.Row{Kind: "issue", Item: i}
 		if m.wf.Claims(row) {
 			continue
 		}
 		if m.rowMatches(row, terms) {
+			// an issue the agent opened stays with the issues (its report
+			// to the humans); one handed to it is in its queue
+			if i.State != "CLOSED" && m.agentItem("", i.Labels.Nodes) {
+				agentIssues = append(agentIssues, i)
+				continue
+			}
 			issues = append(issues, i)
 		}
 	}
@@ -143,6 +191,16 @@ func (m *Model) refilter() {
 		rows = append(rows, workflow.Row{Kind: "header", Item: fmt.Sprintf("pull requests (%d)", len(m.prs))})
 		for _, p := range m.prs {
 			rows = append(rows, workflow.Row{Kind: "pr", Item: p})
+		}
+	}
+	m.agentPRs = agentPRs
+	if n := len(agentPRs) + len(agentIssues); n > 0 {
+		rows = append(rows, workflow.Row{Kind: "header", Item: fmt.Sprintf("with %s (%d)", m.agentName(), n)})
+		for _, p := range agentPRs {
+			rows = append(rows, workflow.Row{Kind: "pr", Item: p})
+		}
+		for _, i := range agentIssues {
+			rows = append(rows, workflow.Row{Kind: "issue", Item: i})
 		}
 	}
 	rows = append(rows, m.wf.Sections(m, terms, m.me)...)
@@ -527,7 +585,7 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		}
 		if aw, ok := L["author"]; ok {
 			a := text.OrQ(item.Author.Login)
-			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))
+			segs = append(segs, text.S(text.Pad(text.Ellip(m.who(a, true), aw), aw)+" ", m.authorStyle(a)))
 		}
 		if aw, ok := L["age"]; ok {
 			age, st := clock.ShortAge(item.UpdatedAt, clock.Now())
@@ -579,7 +637,7 @@ func (m *Model) rowSegs(row workflow.Row, L workflow.Layout, w, pos int) []text.
 		}
 		if aw, ok := L["author"]; ok {
 			a := text.OrQ(item.Author.Login)
-			segs = append(segs, text.S(text.Pad(text.Ellip(a, aw), aw)+" ", m.authorStyle(a)))
+			segs = append(segs, text.S(text.Pad(text.Ellip(m.who(a, true), aw), aw)+" ", m.authorStyle(a)))
 		}
 		if aw, ok := L["age"]; ok {
 			age, st := clock.ShortAge(item.UpdatedAt, clock.Now())

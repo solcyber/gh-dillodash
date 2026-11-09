@@ -496,6 +496,11 @@ func (p *parser) parseAgent(top *table, cfg *Config) {
 	cfg.Agent.HandoffLabel = strings.TrimSpace(t.str("handoff_label", ""))
 	cfg.Agent.HandoffComment = strings.TrimSpace(t.str("handoff_comment", ""))
 	cfg.Agent.Name = strings.TrimSpace(t.str("name", ""))
+	cfg.Agent.Login = strings.TrimSpace(t.str("login", ""))
+	cfg.Agent.Section = t.boolean("section", false)
+	if cfg.Agent.Section && cfg.Agent.HandoffLabel == "" && cfg.Agent.Login == "" {
+		t.warnf("section", "has nothing to show without handoff_label or login")
+	}
 	if cfg.Agent.HandoffComment != "" && cfg.Agent.HandoffLabel == "" {
 		t.warnf("handoff_comment", "has no effect without handoff_label")
 	}
@@ -506,6 +511,8 @@ func (p *parser) parseReviews(top *table, cfg *Config, ov Overrides) {
 	t, _ := top.sub("reviews")
 	repos, present := t.repos("repos")
 	requested, _ := t.repos("requested_repos")
+	applies, _ := t.repos("merge_applies")
+	cfg.Reviews.MergeApplies = applies
 	cfg.Reviews.CIRecheckSecs = t.int("ci_recheck_secs", cfg.Reviews.CIRecheckSecs)
 	t.done()
 

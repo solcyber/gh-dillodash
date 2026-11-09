@@ -152,6 +152,7 @@ generated from the key table the dashboard itself runs on.
 - [Display](docs/display.md): the list columns, the chips, the colorblind
   palette, motion, and `--icons`/`--mono`/`--motion`.
 - [Fonts](docs/fonts.md): the bundled Nerd Font and `gh dillodash font`.
+- [Working with an AI agent](docs/agents.md): naming it, its section, handoffs, apply-on-approval repos.
 - [Fortress mode](docs/fortress.md).
 - [Troubleshooting](docs/troubleshooting.md).
 - [Contributing](CONTRIBUTING.md), [Changelog](CHANGELOG.md), [Security](SECURITY.md).

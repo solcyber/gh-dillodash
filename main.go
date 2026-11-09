@@ -119,7 +119,8 @@ flags:
   --motion MODE      full | off
   --mono             no colors, attributes only (also: NO_COLOR)
   --demo             open the dashboard on an offline fixture, no GitHub needed
-  --demo-night       replay a manual release night offline: release NOW, the lane, D
+  --demo-night       replay a manual release night offline
+  --demo-agent       an offline team working with an AI agent: apply on approval, a legacy repo, handoffs: release NOW, the lane, D
 
 environment:
   DILLODASH_CONFIG   the config file, when --config is not given
@@ -256,6 +257,7 @@ func dispatch(args []string) error {
 type flags struct {
 	demo       bool
 	demoNight  bool
+	demoAgent  bool
 	config     string
 	repos      repoList
 	refresh    int
@@ -283,6 +285,7 @@ func parseFlags(args []string) (flags, error) {
 	fs.BoolVar(&f.mono, "mono", false, "no colors")
 	fs.BoolVar(&f.demo, "demo", false, "run on an offline fixture (no GitHub)")
 	fs.BoolVar(&f.demoNight, "demo-night", false, "replay a manual release night offline")
+	fs.BoolVar(&f.demoAgent, "demo-agent", false, "run on an offline team that works with an AI agent (apply on approval)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Print(usage())
@@ -298,6 +301,9 @@ func parseFlags(args []string) (flags, error) {
 			f.refreshSet = true
 		}
 	})
+	if n := btoi(f.demo) + btoi(f.demoNight) + btoi(f.demoAgent); n > 1 {
+		return f, exitError{2, errors.New("--demo, --demo-night and --demo-agent are different replays: pass one")}
+	}
 	if f.demo && f.demoNight {
 		return f, exitError{2, errors.New("--demo and --demo-night are two different replays: pass one")}
 	}
@@ -355,7 +361,7 @@ func dashboard(args []string) error {
 	if err != nil {
 		return err
 	}
-	if f.demo || f.demoNight {
+	if f.demo || f.demoNight || f.demoAgent {
 		return runDemo(context.Background(), f)
 	}
 	cfg, err := loadConfig(f)
@@ -656,6 +662,10 @@ func refuseBot(cfg *config.Config, me, source string) error {
 func runDemo(ctx context.Context, f flags) error {
 	cfg := demo.Config()
 	var gh ghapi.Client = demo.Client()
+	me := demo.Me
+	if f.demoAgent {
+		cfg, gh, me = demo.AgentConfig(), demo.AgentClient(), demo.AgentMe
+	}
 	if f.demoNight {
 		clock.Now = demo.NightClock() // the night reads the same whenever it is replayed
 		cfg, gh = demo.NightConfig(), demo.NightClient(demo.NightStart).GH
@@ -687,7 +697,10 @@ func runDemo(ctx context.Context, f flags) error {
 	if err != nil {
 		return err
 	}
-	return ui.Run(ctx, ui.Options{Config: cfg, GH: gh, Workflows: wf, Me: demo.Me, Host: "github.com", Version: version + " demo"})
+	if len(cfg.GitHub.AllowedRepos) > 0 {
+		gh = ghapi.WithAllowedRepos(gh, cfg.GitHub.AllowedRepos)
+	}
+	return ui.Run(ctx, ui.Options{Config: cfg, GH: gh, Workflows: wf, Me: me, Host: "github.com", Version: version + " demo"})
 }
 
 func configCmd(args []string) error {
@@ -956,4 +969,11 @@ func whatsNewOnce() string {
 	_ = os.MkdirAll(filepath.Dir(marker), 0o700)
 	_ = os.WriteFile(marker, []byte(version+"\n"), 0o600)
 	return whatsNew20
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
