@@ -99,7 +99,7 @@ func (m *Model) applyBuildInstall(res selfupdate.Result) {
 		}
 	case len(res.Updated) > 0:
 		m.upd.Installed = res.Version
-		m.ok(fmt.Sprintf("installed dillodash %s (%s) — R restarts into it", res.Version, strings.Join(res.Updated, ", ")))
+		m.ok(fmt.Sprintf("installed dillodash %s (%s) — U restarts into it", res.Version, strings.Join(res.Updated, ", ")))
 		if notes != "" {
 			m.lastMsg += " — " + notes
 		}
@@ -220,7 +220,7 @@ func (m *Model) applyRestore() {
 // the restart waits for it.
 func doRestart(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 	if !m.upd.Pending() {
-		m.notice("no newer dillodash is installed — R restarts into one once it is")
+		m.notice("no newer dillodash is installed — U restarts into one once it is")
 		return nil
 	}
 	if m.modal != nil || m.action {

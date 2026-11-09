@@ -567,3 +567,30 @@ func baseOr(b string) string {
 	}
 	return b
 }
+
+// ApproveOffer: A on a PR with a live plan posts the approve command for
+// it; the key bar says which ("/approve plan-set", "/approve ceremony").
+func (w *Workflow) ApproveOffer(f workflow.Focus) (string, bool) {
+	pr, ok := f.Item().(*model.PR)
+	if !ok || pr == nil || (pr.State != "" && pr.State != "OPEN") {
+		return "", false
+	}
+	var live []Candidate
+	for _, c := range ExtractPlanCandidates(pr, w.cfg) {
+		if c.State == StateLive && !c.Applied {
+			live = append(live, c)
+		}
+	}
+	cmd := w.cfg.ApproveCommand
+	switch {
+	case len(live) == 0:
+		return "", false
+	case len(live) > 1:
+		return cmd + " a plan", true
+	case live[0].Set:
+		return cmd + " plan-set", true
+	case live[0].Ceremony:
+		return cmd + " ceremony", true
+	}
+	return cmd + " plan", true
+}

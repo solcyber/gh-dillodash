@@ -611,10 +611,10 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 // HelpRows are the workflow's help lines.
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
-		{"releases", fmt.Sprintf("a  on a release's row or in its detail: approve (queues it for the window) or approve + %s; on one already approved (or bumped by the window) %s alone, no second review", w.cfg.ReleaseNowCommand, w.cfg.ReleaseNowCommand)},
-		{"", "D  approve its deployments (row or detail)   x  its runs: re-run, cancel, reject a deploy, read a log   M  last resort: merge by hand when the release-now dispatch can't run (the release job merges at the slot)"},
+		{"releases", fmt.Sprintf("A  on a release's row or in its detail: approve (queues it for the window) or approve + %s; on one already approved (or bumped by the window) %s alone, no second review", w.cfg.ReleaseNowCommand, w.cfg.ReleaseNowCommand)},
+		{"", "D  approve its deployments (row or detail)   X  its runs: re-run, cancel, reject a deploy   x  read a log   M  last resort: merge by hand when the release-now dispatch can't run (the release job merges at the slot)"},
 		{"", "a release in flight shows its rail on the row and its steps, clocks and run in the detail; it says when it lands, and which release is next in the lane"},
-		{"", "a  also: request changes (takes it out of the window), dismiss your approval (a again re-queues), or fire the dispatch for a posted command nobody picked up"},
+		{"", "A  also: request changes (takes it out of the window), dismiss your approval (A again re-queues), or fire the dispatch for a posted command nobody picked up"},
 	}
 }
 
@@ -641,7 +641,7 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	ends = append(ends, sp)
 	ends = append(ends, scenes.Chip(markErr()+"release FAILED", "chip.fail")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("bumped — a: release NOW", "chip.act")...)
+	ends = append(ends, scenes.Chip("bumped — A: release NOW", "chip.act")...)
 	ends = append(ends, text.S(" yours to act on", "muted"))
 	return [][]text.Seg{row, rail, ends}
 }
@@ -711,12 +711,12 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	case merged:
 		rule = fmt.Sprintf("merged: D approves the environment deployments waiting on its merge commit; dillodash refreshes every %ds while one waits or runs and says when the next one waits", int(w.refreshEvery().Seconds()))
 	case kind == KindHotfix:
-		rule = fmt.Sprintf("a hotfix is an emergency by definition: a approves and posts %s with a reason", cmd)
+		rule = fmt.Sprintf("a hotfix is an emergency by definition: A approves and posts %s with a reason", cmd)
 	case kind == KindOther:
 		rule = fmt.Sprintf("only %s<date> (the go-tagged cut on %s) and %s<slug> ship to %s; a, M and D refuse anything else",
 			w.cfg.ReleasePrefix, w.cfg.StagingBranch, w.cfg.HotfixPrefix, w.cfg.ProductionBranch)
 	case (src.State == "" || src.State == "OPEN") && (workflow.IApproved(app, pr) || workflow.IApproved(app, src)):
-		rule = fmt.Sprintf("approved by you — a: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves the deployments waiting on the merge", cmd)
+		rule = fmt.Sprintf("approved by you — A: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves the deployments waiting on the merge", cmd)
 	case w.cfg.ApprovalQueuesForWindow && w.win != nil:
 		rule = fmt.Sprintf("a: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
 			w.NightPhrase(app.Now()), cmd)

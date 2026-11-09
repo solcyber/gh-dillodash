@@ -110,9 +110,9 @@ func TestKeyBarTrimKeepsQuitAndHelp(t *testing.T) {
 			t.Errorf("%d cols: wide bar lacks j/k: %q", w, bar)
 		}
 	}
-	items := []barItem{{"j/k", "move", 80}, {"a", "approve", 10}, {"q", "quit", 0}}
+	items := []barItem{{"j/k", "move", 80, false}, {"A", "approve", 10, true}, {"q", "quit", 0, false}}
 	cells := func(it barItem) int { return len(it.key) + len(it.label) + 4 }
-	if got := trimBar(items, 30, cells); len(got) != 2 || got[0].key != "a" || got[1].key != "q" {
+	if got := trimBar(items, 30, cells); len(got) != 2 || got[0].key != "A" || got[1].key != "q" {
 		t.Errorf("trim: %+v", got)
 	}
 	if got := trimBar(items, 1, cells); len(got) != 1 || got[0].key != "q" {
@@ -225,5 +225,28 @@ func TestNoSpacedHyphenSeparators(t *testing.T) {
 			}
 			return true
 		})
+	}
+}
+
+// TestShiftActsLowercaseLooks is the 2.0 rule: a key that acts is a
+// capital, and a capital acts, but for the vim motions (G, N, and the
+// fortress's HJKL, which only move).
+func TestShiftActsLowercaseLooks(t *testing.T) {
+	motions := map[rune]bool{'G': true, 'N': true, 'H': true, 'J': true, 'K': true, 'L': true}
+	for i := range bindings {
+		b := &bindings[i]
+		for _, k := range b.Keys {
+			if k.Rune == 0 {
+				continue
+			}
+			upper := k.Rune >= 'A' && k.Rune <= 'Z'
+			fortressOnly := len(b.Views) == 1 && b.Views[0] == ViewFortress
+			switch {
+			case b.Acts && !upper:
+				t.Errorf("%q acts but is lowercase (%s)", k.Rune, b.Help)
+			case upper && !b.Acts && !(motions[k.Rune] && (fortressOnly || k.Rune == 'G' || k.Rune == 'N')):
+				t.Errorf("%q is a capital that does not act (%s)", k.Rune, b.Help)
+			}
+		}
 	}
 }

@@ -412,6 +412,7 @@ func dashboard(args []string) error {
 		Version:   version,
 		Updater:   newChecker(gh),
 		Restore:   restore,
+		WhatsNew:  whatsNewOnce(),
 	})
 	var re *ui.RestartError
 	if errors.As(err, &re) {
@@ -928,4 +929,31 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 	fmt.Fprintf(w, "installed %s from %s @ %s\n", path, src.Spec(), model.ShortSHA(sha))
 	fmt.Fprintln(w, "next: gh dillodash config check")
 	return nil
+}
+
+// whatsNew20 is the card the first 2.x start shows: the keys moved.
+const whatsNew20 = `dillodash 2.0: Shift acts, lowercase looks.
+
+Every key that changes something (on GitHub, your install or your config) is now a capital and asks first; lowercase keys only move, open and show. The key bar leads with what you can do to the selected row, in gold, labelled with what it will do there, and the line above it says what the row waits on.
+
+Moved:  a → A approve (release NOW, /approve)   c → C comment (Enter on an empty line: $EDITOR)   t → T tag   s → S assign   p → P promote   w → W window (/attend, /release)   W → w the room   A → s show PRs others approved   R and P → U update (restart, newer config)   x reads a run's log, X re-runs, cancels or rejects (and runs a listed workflow).
+
+An old key does nothing now but say where it went. ? lists every key. Any key closes this.`
+
+// whatsNewOnce is the 2.0 card the first time this machine starts 2.x,
+// a restart into it included (that is when the keys change under your
+// hands): a marker in the cache directory remembers it was shown.
+func whatsNewOnce() string {
+	home, _ := os.UserHomeDir()
+	p := selfupdate.CachePath(os.Getenv, home)
+	if p == "" {
+		return ""
+	}
+	marker := filepath.Join(filepath.Dir(p), "seen-2.0")
+	if _, err := os.Stat(marker); err == nil {
+		return ""
+	}
+	_ = os.MkdirAll(filepath.Dir(marker), 0o700)
+	_ = os.WriteFile(marker, []byte(version+"\n"), 0o600)
+	return whatsNew20
 }

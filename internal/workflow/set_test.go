@@ -40,7 +40,7 @@ func (s *stub) Sections(App, []string, string) []Row {
 func (s *stub) LegendRows() [][]text.Seg { return [][]text.Seg{{text.S(s.name, "text")}} }
 
 func TestSetOrderAndMerge(t *testing.T) {
-	a := &stub{name: "b", order: 30, keys: []Key{{View: "list", Ch: "w", Label: "window"}}}
+	a := &stub{name: "b", order: 30, keys: []Key{{View: "list", Ch: "W", Label: "window"}}}
 	b := &stub{name: "a", order: 20, label: "applied, needs review", kinds: map[string]RowKind{"queued": {}}}
 	s, err := NewSet(nil, a, b)
 	if err != nil {
@@ -55,10 +55,10 @@ func TestSetOrderAndMerge(t *testing.T) {
 	if secs := s.Sections(nil, nil, ""); len(secs) != 2 || secs[0].Item != "a" {
 		t.Errorf("sections = %+v", secs)
 	}
-	if k, ok := s.Key("list", "w"); !ok || k.Label != "window" {
+	if k, ok := s.Key("list", "W"); !ok || k.Label != "window" {
 		t.Errorf("key = %+v %v", k, ok)
 	}
-	if _, ok := s.Key("detail", "w"); ok {
+	if _, ok := s.Key("detail", "W"); ok {
 		t.Error("w should not be bound in the detail view")
 	}
 	if s.Get("a") != b || s.Get("zzz") != nil {
@@ -80,10 +80,10 @@ func TestSetRejectsConflicts(t *testing.T) {
 	if _, err := NewSet(nil, &stub{name: "x", kinds: map[string]RowKind{"k": {}}}, &stub{name: "y", kinds: map[string]RowKind{"k": {}}}); err == nil {
 		t.Error("duplicate row kind should be rejected")
 	}
-	if _, err := NewSet(nil, &stub{name: "x", keys: []Key{{View: "detail", Ch: "a"}}}); err == nil {
+	if _, err := NewSet(nil, &stub{name: "x", keys: []Key{{View: "detail", Ch: "A"}}}); err == nil {
 		t.Error("core key should be rejected")
 	}
-	if _, err := NewSet(nil, &stub{name: "x", keys: []Key{{View: "list", Ch: "w"}}}, &stub{name: "y", keys: []Key{{View: "list", Ch: "w"}}}); err == nil {
+	if _, err := NewSet(nil, &stub{name: "x", keys: []Key{{View: "list", Ch: "W"}}}, &stub{name: "y", keys: []Key{{View: "list", Ch: "W"}}}); err == nil {
 		t.Error("duplicate key should be rejected")
 	}
 }

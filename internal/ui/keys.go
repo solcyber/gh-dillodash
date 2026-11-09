@@ -33,6 +33,13 @@ type binding struct {
 	wfBefore bool
 	// when gates the bar chip (D in the list needs a deploy provider).
 	when func(*Model) bool
+	// Acts marks a key that changes something (on GitHub, the install,
+	// the config) and asks first: a capital, drawn in the key bar's
+	// action zone. Everything else only moves, opens or shows.
+	Acts bool
+	// offer, when set, gates the chip on the focus and names what the key
+	// does there ("release NOW", "/approve plan-set"); "" keeps Label.
+	offer func(*Model) (string, bool)
 	// Do handles the key (lock held): the view's action. page is the
 	// view's page height; app is the action goroutine's handle.
 	Do func(m *Model, k widgets.Key, page int, app *lockedApp) tea.Cmd
@@ -67,40 +74,40 @@ var bindings = []binding{
 	{Views: []string{ViewList}, Keys: []widgets.Key{R(':')}, Bar: ":", Label: "go to #", Group: "any", Prio: 20, Do: doGoto}, // the chip; the "any" row below documents it
 	{Views: []string{ViewList}, Keys: []widgets.Key{K("esc")}, Group: "list",
 		Help: "esc  clear the filter", Doc: "clear the filter (Esc never quits: a stray escape from an Alt chord must not close the dashboard)", Do: doClearFilter},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('A')}, Bar: "A", Label: "approved", Group: "list", Prio: 30,
-		Help: "A  PRs approved by others", Doc: "toggle PRs approved by others (issues are always all shown)", Do: doShowAll},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "deploys", Group: "list", Prio: 30, when: (*Model).providesDeploys,
+	{Views: []string{ViewList}, Keys: []widgets.Key{R('s')}, Bar: "s", Label: "approved", Group: "list", Prio: 65,
+		Help: "s  show PRs approved by others", Doc: "show / hide PRs others approved (issues are always all shown)", Do: doShowAll},
+	{Views: []string{ViewList}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "approve deploys", Group: "list", Prio: 30, Acts: true, when: (*Model).providesDeploys, offer: (*Model).offerDeploysList,
 		Help: "D  approve a merged row's or a waiting run's deployments", Doc: "approve the deployments waiting on the selected merged PR, or on the selected waiting run (the bar shows it while `release_pr` or `waiting_runs` is on)", Do: doDeploys},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('x')}, Bar: "x", Label: "runs", Group: "list", Prio: 85,
-		Help: "x  re-run, cancel or reject a run; read its log", Doc: "the Actions runs of the selected row (a release's run, a waiting run, the runs on a PR's commit): re-run the failed jobs or every job, cancel, reject the deployment it waits on, or read a job's log in `$PAGER`", Do: doRuns},
-	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R('X')}, Bar: "X", Label: "run workflow", Group: "any", Prio: 50, when: (*Model).hasDispatches,
-		Help: "X  run a listed workflow", Doc: "run a workflow the config lists under `[[workflows.dispatch]]`: pick it, fill its inputs, confirm the exact payload; the status line follows the new run (the bar shows it while one is listed)", Do: doDispatch},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('P')}, Bar: "P", Label: "pull config", Group: "list", Prio: 5, when: (*Model).configStale,
-		Help: "P  pull the newer config", Doc: "pull the newer config from the repo it was pulled from (`config pull`) and restart into it, keeping your place (the bar shows it while the header says the config is outdated)", Do: doConfigPull},
+	{Views: []string{ViewList}, Keys: []widgets.Key{R('x')}, Bar: "x", Label: "runs", Group: "list", Prio: 85, offer: (*Model).offerRunsList,
+		Help: "x  a run's log", Doc: "the Actions runs of the selected row (a release's run, a waiting run, the runs on a PR's commit): read a job's log in `$PAGER` (`X` re-runs, cancels or rejects)", Do: doRunsLook},
+	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R('X')}, Bar: "X", Label: "runs", Group: "any", Prio: 50, Acts: true, offer: (*Model).offerRunsAct,
+		Help: "X  re-run, cancel or reject a run; run a listed workflow", Doc: "act on Actions runs: re-run the failed jobs or every job of the selected row's run, cancel it, or reject the deployment it waits on; or run a workflow the config lists under `[[workflows.dispatch]]` (pick it, fill its inputs, confirm the exact payload; the status line follows the new run)", Do: doRunsAct},
+	{Views: []string{ViewList, ViewDetail, "issue"}, Keys: []widgets.Key{R('U')}, Bar: "U", Label: "update", Group: "any", Prio: 5, Acts: true, offer: (*Model).offerUpdate,
+		Help: "U  update: restart into the new build / pull the newer config", Doc: "update: restart into the dillodash release installed in the background, and pull the newer config when the header says it is outdated (`config pull`), keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it while either is waiting)", Do: doUpdate},
 	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R('u')}, Bar: "u", Label: "since approval", Group: "any", Prio: 15, when: (*Model).staleSelected,
 		Help: "u  changes since a stale approval", Doc: "open the compare view from a stale approval's commit to the head: what changed since the PR was approved, so a re-approve is a look at the delta (the bar shows it while the selected PR's approval is on an older commit)", Do: doSinceApproval},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('d')}, Bar: "d", Label: "fortress", Group: "list", Prio: 60, wfBefore: true,
 		Help: "d  fortress mode", Doc: "fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits", Do: doFortress},
 	// detail (and the issue view where it applies)
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('a')}, Bar: "a", Label: "approve", Group: "detail", Prio: 10,
-		Help: "a  approve", Doc: "approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm", Do: doApprove},
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('M')}, Bar: "M", Label: "merge", Group: "detail", Prio: 10,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('A')}, Bar: "A", Label: "approve", Group: "detail", Prio: 10, Acts: true, offer: (*Model).offerApprove,
+		Help: "A  approve", Doc: "approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm", Do: doApprove},
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('M')}, Bar: "M", Label: "merge", Group: "detail", Prio: 12, Acts: true, offer: (*Model).offerMerge,
 		Help: "M  merge an approved PR", Doc: "merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first", Do: doMerge},
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "deploys", Group: "detail", Prio: 30,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "approve deploys", Group: "detail", Prio: 30, Acts: true, offer: (*Model).offerDeploysDetail,
 		Help: "D  approve its waiting deployments", Doc: "approve the environment deployments waiting on the open merged PR", Do: doDeploys},
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('x')}, Bar: "x", Label: "runs", Group: "detail", Prio: 40,
-		Help: "x  re-run, cancel or reject a run; read its log", Doc: "the Actions runs of the open PR (its head's, or its merge's once merged, and a release's run): re-run, cancel, reject the deployment it waits on, or read a job's log in `$PAGER`", Do: doRuns},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('c'), R('C')}, Bar: "c/C", Label: "comment", Group: "detail", Prio: 30,
-		Help: "c  comment   C  comment in $EDITOR", Doc: "comment inline / in `$EDITOR`", Do: doComment},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('t')}, Bar: "t", Label: "tag", Group: "detail", Prio: 30,
-		Help: "t  tag someone", Doc: "tag someone: pick a repo user, `$EDITOR` opens seeded with the mention, posts as a comment", Do: doTag},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('L')}, Bar: "L", Label: "labels", Group: "detail", Prio: 45,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('x')}, Bar: "x", Label: "runs", Group: "detail", Prio: 70,
+		Help: "x  a run's log", Doc: "the Actions runs of the open PR (its head's, or its merge's once merged, and a release's run): read a job's log in `$PAGER` (`X` acts on them)", Do: doRunsLook},
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('C')}, Bar: "C", Label: "comment", Group: "detail", Prio: 30, Acts: true,
+		Help: "C  comment (Enter on an empty line: $EDITOR)", Doc: "comment: type it on the line and Enter posts it; Enter on an empty line opens `$EDITOR` for a longer one", Do: doComment},
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('T')}, Bar: "T", Label: "tag someone", Group: "detail", Prio: 40, Acts: true,
+		Help: "T  tag someone", Doc: "tag someone: pick a repo user, `$EDITOR` opens seeded with the mention, posts as a comment", Do: doTag},
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('L')}, Bar: "L", Label: "labels", Group: "detail", Prio: 45, Acts: true,
 		Help: "L  add or remove a label", Doc: "labels: pick one of the repo's labels to add, or one the item carries (`[x]`) to remove", Do: doLabels},
-	{Views: []string{"issue"}, Keys: []widgets.Key{R('s')}, Bar: "s", Label: "assign", Group: "detail", Prio: 45,
-		Help: "s  assign or unassign (issues)", Doc: "assign an issue: pick a repo user to assign, or an assignee (`[x]`) to unassign", Do: doAssign},
-	{Views: []string{"issue"}, Keys: []widgets.Key{R('Z')}, Bar: "Z", Label: "close/reopen", Group: "detail", Prio: 50,
+	{Views: []string{"issue"}, Keys: []widgets.Key{R('S')}, Bar: "S", Label: "assign", Group: "detail", Prio: 45, Acts: true,
+		Help: "S  assign or unassign (issues)", Doc: "assign an issue: pick a repo user to assign, or an assignee (`[x]`) to unassign", Do: doAssign},
+	{Views: []string{"issue"}, Keys: []widgets.Key{R('Z')}, Bar: "Z", Label: "close/reopen", Group: "detail", Prio: 50, Acts: true, offer: (*Model).offerIssueState,
 		Help: "Z  close or reopen (issues)", Doc: "close an open issue as completed or as not planned; reopen a closed one (after a confirm)", Do: doIssueState},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('H')}, Bar: "H", Label: "to agent", Group: "detail", Prio: 25, when: (*Model).hasHandoff,
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('H')}, Bar: "H", Label: "to agent", Group: "detail", Prio: 25, Acts: true, when: (*Model).hasHandoff, offer: (*Model).offerHandoff,
 		Help: "H  hand to the agent", Doc: "hand the open PR or issue to the agent: adds `[agent] handoff_label` and, when set, posts `handoff_comment`, after a confirm (an agent that is a GitHub App's bot watches a label, not @-mentions; the bar shows it while `handoff_label` is set)", Do: doHandoff},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('f')}, Bar: "f", Label: "files", Group: "detail", Prio: 30, wfBefore: true,
 		Help: "f  changed files", Doc: "changed files", Do: doFiles},
@@ -154,11 +161,9 @@ var bindings = []binding{
 		Help: "o  open the URL in a browser", Doc: "open the URL in a browser when this host has one; otherwise like `y`", Do: doOpenURL},
 	{Views: []string{ViewList, ViewDetail, "issue", ViewPatch, ViewFortress}, Keys: []widgets.Key{R('r')}, Bar: "r", Label: "refresh", Group: "any", Prio: 60,
 		Help: "r  refresh now", Doc: "refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed)", Do: doRefresh},
-	{Views: []string{ViewList, ViewDetail, "issue"}, Keys: []widgets.Key{R('R')}, Bar: "R", Label: "restart", Group: "any", Prio: 5, when: (*Model).pendingRestart,
-		Help: "R  restart into the update", Doc: "restart into the dillodash release installed in the background, keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it once one is installed)", Do: doRestart},
-	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('W')}, Bar: "W", Label: "room", Group: "any", Prio: 55, when: (*Model).roomChipInWindow, Do: doRoom}, // the window's reminder chip; the "any" row below documents W
-	{Views: []string{anyView}, Keys: []widgets.Key{R('W')}, Bar: "W", Label: "room", Group: "any", Prio: 75, when: (*Model).roomChipOutside,
-		Help: "W  the room: the view out of a window", Doc: "the room: while the release window is open the dashboard is the view out of a window, behind the glass in the middle of a room, as a reminder; `W` steps out to the plain dashboard and back in (the plaque on the wall says so, and the bar shows `W` while you are out). The next window opens in the room again. Outside the window the dashboard is plain and `W` steps into the room any time (the bar shows `W` there too, among the first chips to go when the bar is short)", Do: doRoom},
+	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('w')}, Bar: "w", Label: "room", Group: "any", Prio: 55, when: (*Model).roomChipInWindow, Do: doRoom}, // the window's reminder chip; the "any" row below documents w
+	{Views: []string{anyView}, Keys: []widgets.Key{R('w')}, Bar: "w", Label: "room", Group: "any", Prio: 75, when: (*Model).roomChipOutside,
+		Help: "w  the room: the view out of a window", Doc: "the room: while the release window is open the dashboard is the view out of a window, behind the glass in the middle of a room, as a reminder; `w` steps out to the plain dashboard and back in (the plaque on the wall says so, and the bar shows `w` while you are out). The next window opens in the room again. Outside the window the dashboard is plain and `w` steps into the room any time (the bar shows `w` there too, among the first chips to go when the bar is short)", Do: doRoom},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('q')}, Bar: "q", Label: "quit", Group: "list", Prio: 0,
 		Help: "q  quit", Doc: "quit (press twice while an action is still talking to GitHub)", Do: doQuit},
 	{Views: []string{anyView}, Keys: []widgets.Key{R(':')}, Group: "any",
@@ -225,30 +230,51 @@ func (b *binding) barLabel(view string) string {
 	return b.Label
 }
 
-// barItem is one key-bar chip with its trim priority.
+// barItem is one key-bar chip with its trim priority; acts marks a key
+// that changes something (the bar's first zone).
 type barItem struct {
 	key, label string
 	prio       int
+	acts       bool
 }
 
-// barFor is the key bar of a view, in table order, the workflows' keys
-// spliced in after the view's actions, ending with q (or back). The
-// bar's "? help" chip is appended by drawKeys.
+// lookPrio pushes a look key behind every act when the bar is trimmed:
+// what you can do here outlasts how to move around (q and ? never go).
+const lookPrio = 100
+
+// barFor is the key bar of a view: first the keys that act on the
+// selected row or the open item (each labelled with what it does
+// there), then the keys that move, open and show, ending with q (or
+// back). The "? help" chip is appended by drawKeys.
 func (m *Model) barFor(view string) []barItem {
-	var out []barItem
+	f := m.focus()
+	var acts, looks []barItem
+	add := func(it barItem) {
+		if it.acts {
+			acts = append(acts, it)
+			return
+		}
+		if it.prio > 0 {
+			it.prio += lookPrio
+		}
+		looks = append(looks, it)
+	}
 	wf := m.wf.Keys(view)
 	if view == "issue" {
 		wf = nil
 	}
-	spliced := false
-	splice := func() {
-		if spliced {
-			return
+	for _, k := range wf {
+		label := k.Label
+		if k.Offer != nil {
+			l, ok := k.Offer(f)
+			if !ok {
+				continue
+			}
+			if l != "" {
+				label = l
+			}
 		}
-		spliced = true
-		for _, k := range wf {
-			out = append(out, barItem{k.Ch, k.Label, max(1, k.Priority)})
-		}
+		add(barItem{k.Ch, label, max(1, k.Priority), actsKey(k.Ch)})
 	}
 	for i := range bindings {
 		b := &bindings[i]
@@ -258,17 +284,30 @@ func (m *Model) barFor(view string) []barItem {
 		if b.when != nil && !b.when(m) {
 			continue
 		}
-		if b.wfBefore {
-			splice()
+		label := b.barLabel(view)
+		if b.offer != nil {
+			l, ok := b.offer(m)
+			if !ok {
+				continue
+			}
+			if l != "" {
+				label = l
+			}
 		}
 		key := b.Bar
 		if key == "↵" && glyphs.Active() == glyphs.ASCII {
 			key = "enter"
 		}
-		out = append(out, barItem{key, b.barLabel(view), b.Prio})
+		add(barItem{key, label, b.Prio, b.Acts})
 	}
-	splice()
-	return out
+	sort.SliceStable(acts, func(i, j int) bool { return acts[i].prio < acts[j].prio })
+	return append(acts, looks...)
+}
+
+// actsKey is the rule for a workflow's key: a capital acts.
+func actsKey(ch string) bool {
+	r := []rune(ch)
+	return len(r) == 1 && r[0] >= 'A' && r[0] <= 'Z'
 }
 
 // keysFor is barFor as [key, label] pairs (the tests read it).
@@ -450,6 +489,7 @@ func KeysDoc() string {
 	var b strings.Builder
 	b.WriteString("# Keys\n\n")
 	b.WriteString("<!-- generated from internal/ui/keys.go by `go test ./internal/ui -update`; edit the table, not this file -->\n\n")
+	b.WriteString("**Shift acts, lowercase looks.** A capital changes something (on GitHub, your install or your config) and asks first; a lowercase key only moves, opens or shows. The only capitals that just move are the vim motions `G`, `N` and the fortress's `HJKL`. The key bar leads with the keys that act on the selected row, labelled with what they do there; the line above it says what the row waits on.\n\n")
 	b.WriteString("| View | Key | Action |\n|---|---|---|\n")
 	for i := range bindings {
 		bd := &bindings[i]
@@ -459,12 +499,13 @@ func KeysDoc() string {
 		}
 		b.WriteString("| " + docViews(bd) + " | " + docKey(bd) + " | " + doc + " |\n")
 	}
-	b.WriteString("| list | `a` | with `release_pr`, on a release's row: what `a` does in its detail — release NOW alone on a release you approved (or one the window bumped), else approve with the queue-or-now choice |\n")
-	b.WriteString("| list, detail | `w` | with `maintenance_window`: `/attend`, `/release` or `/window-cancel` on the night's manifest issue, or open it |\n")
-	b.WriteString("| list | `p` | with `promote`, on a change's row: move it one tier on — open its promotion PR from the first tier, merge the open promotion PR, or tag the staging unit go or hold |\n")
+	b.WriteString("| list | `A` | with `release_pr`, on a release's row: what `A` does in its detail — release NOW alone on a release you approved (or one the window bumped), else approve with the queue-or-now choice |\n")
+	b.WriteString("| list, detail | `W` | with `maintenance_window`: `/attend`, `/release` or `/window-cancel` on the night's manifest issue, or open it |\n")
+	b.WriteString("| list | `P` | with `promote`, on a change's row: move it one tier on — open its promotion PR from the first tier, merge the open promotion PR, or tag the staging unit go or hold |\n")
 	b.WriteString("| prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |\n")
 	b.WriteString("| menus | `j`/`k` + enter, `1`–`9` | choose; esc, `q`, Ctrl-C cancel |\n")
 	b.WriteString("| confirms | `y` | anything else is no |\n")
+	b.WriteString("| moved in 2.0 | `a` `c` `t` `s` `p` `R` `P` | do nothing but say where they went: `A` `C` `T` `S` `P` `U` `U` (and `w`/`W` swapped: `W` is the window's commands, `w` the room) |\n")
 	b.WriteString("\nEsc never quits the list: Alt+key and some terminals' Ctrl+arrow sequences\nbegin with an escape, so a stray one must never quit.\n")
 	b.WriteString("\n## The screens\n\nRendered from the offline demo fixture by `go run ./cmd/screenshot`.\n")
 	for _, sc := range docScreens {

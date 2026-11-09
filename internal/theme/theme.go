@@ -289,7 +289,12 @@ var Styles = map[string]Spec{
 	"toast.info": sp(G6, None, 0), "toast.ok": sp(Blue2, None, b),
 	"toast.warn": sp(Gold, None, b), "toast.fade": sp(G4, None, 0),
 	"keylabel": sp(G5, None, 0),
-	"prompt":   sp(White, None, b), "input": sp(White, None, 0),
+	// the key bar's action zone and the hint line above it: gold is "this
+	// changes something"
+	"chip.key.act": sp(K, Gold, b), "keylabel.act": sp(Gold, None, b),
+	"keysep": sp(G4, None, 0), "hint": sp(G5, None, 0), "hint.key": sp(Gold, None, b),
+	"hint.subject": sp(G6, None, 0),
+	"prompt":       sp(White, None, b), "input": sp(White, None, 0),
 	"menu.title": sp(White, None, b), "menu.item": sp(G6, None, 0),
 	"menu.hint": sp(G4, None, 0), "art": sp(G4, None, 0),
 	"allclear": sp(Blue3, None, b),
@@ -328,7 +333,7 @@ func set(names ...string) map[string]bool {
 
 // MonoBold is the styles whose meaning is "look here": bold in mono, gold
 // elsewhere.
-var MonoBold = set("chip.await", "chip.changes", "chip.err", "chip.act", "chip.fail", "ci.fail", "failnames",
+var MonoBold = set("chip.await", "chip.key.act", "keylabel.act", "hint.key", "chip.changes", "chip.err", "chip.act", "chip.fail", "ci.fail", "failnames",
 	"tf.destroy", "tf.replace", "plan.destroy", "destroys.n",
 	"approve.refused", "verdict.notrev", "rev.attend", "sum.attn",
 	"budget.low", "chip.rev.changes", "chip.plan.warn", "hint.bad",

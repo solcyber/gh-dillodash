@@ -127,8 +127,9 @@ func TestCIFallbackSeesWorkflowSHAsAsLive(t *testing.T) {
 	_ = time.Second
 }
 
-// TestListKeyBarShowsDeploysWithReleasePR (#7): D in the list bar while
-// release_pr is on, in the help under list as well as detail.
+// TestListKeyBarShowsDeploysWithReleasePR (#7): D is in the list bar
+// only where it acts (a merged row, a waiting run), in the action zone,
+// and in the help under list as well as detail.
 func TestListKeyBarShowsDeploysWithReleasePR(t *testing.T) {
 	h := newHarness(t)
 	h.load()
@@ -138,24 +139,24 @@ func TestListKeyBarShowsDeploysWithReleasePR(t *testing.T) {
 		}
 	}
 	withReleasePR(t, h)
-	keys := h.m.keysFor(ViewList)
-	di, dd := -1, -1
-	for i, k := range keys {
-		switch k[0] {
-		case "D":
-			di = i
-			if k[1] != "deploys" {
-				t.Errorf("label %q", k[1])
-			}
-		case "d":
-			dd = i
+	for _, k := range h.m.keysFor(ViewList) {
+		if k[0] == "D" {
+			t.Errorf("D on an open PR, which has no deploys: %v", h.m.keysFor(ViewList))
 		}
 	}
-	if di < 0 || dd < 0 || di > dd {
-		t.Errorf("D before d: %v", keys)
+	// a merged row: D leads the bar, before every look key
+	h.m.mu.Lock()
+	for i, r := range h.m.rows {
+		if p, ok := r.Item.(*model.PR); ok && p != nil {
+			p.State = "MERGED"
+			h.m.selected = i
+			break
+		}
 	}
-	if s := h.screen(); !strings.Contains(s, " D  deploys ") {
-		t.Errorf("bar lacks D:\n%s", s)
+	keys := h.m.keysFor(ViewList)
+	h.m.mu.Unlock()
+	if len(keys) == 0 || keys[0][0] != "D" || keys[0][1] != "approve deploys" {
+		t.Errorf("D leads the bar on a merged row: %v", keys)
 	}
 	h.key('?')
 	if s := h.screen(); !strings.Contains(s, "D  approve a merged row's or a waiting run's deployments") {
@@ -184,7 +185,7 @@ func TestApproveReachesTheWorkflowOnAnApprovedRelease(t *testing.T) {
 	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return 0 }
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "bumped from the window for time", true }
 	h.m.tp.Confirm = func(string) bool { return true }
-	h.key('a')
+	h.key('A')
 	if len(h.gh.Approvals) != 0 {
 		t.Errorf("no second review: %v", h.gh.Approvals)
 	}
@@ -216,7 +217,7 @@ func TestGotoReachesAReleaseRepo(t *testing.T) {
 	}
 	var menu []string
 	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return -1 }
-	h.key('a')
+	h.key('A')
 	if len(menu) != 3 || !strings.HasPrefix(menu[0], "release NOW") || !strings.HasPrefix(menu[1], "dismiss my approval") {
 		t.Errorf("the menu offers NOW first, then dismiss or request changes: %q (status %q)", menu, h.m.status)
 	}
@@ -240,7 +241,7 @@ func TestCoreNeverReviewsARelease(t *testing.T) {
 	h.m.mu.Unlock()
 	asked := false
 	h.m.tp.Confirm = func(string) bool { asked = true; return true }
-	h.key('a')
+	h.key('A')
 	if asked || len(h.gh.Approvals) != 0 || len(h.gh.CommentsPosted) != 0 {
 		t.Errorf("nothing posted or asked: asked %v %v %v", asked, h.gh.Approvals, h.gh.CommentsPosted)
 	}

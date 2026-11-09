@@ -150,12 +150,12 @@ func TestListApprove(t *testing.T) {
 	}
 	app.Sel = 2
 	w.listApprove(app)
-	if !logHas(app, "notice", "enter opens infra#7, then a") {
+	if !logHas(app, "notice", "enter opens infra#7, then A") {
 		t.Errorf("any other row: %q", app.Log)
 	}
 	keys := w.Keys()
-	if len(keys) != 1 || keys[0].View != "list" || keys[0].Ch != "a" {
-		t.Errorf("binds list a: %+v", keys)
+	if len(keys) != 1 || keys[0].View != "list" || keys[0].Ch != "A" {
+		t.Errorf("binds list A: %+v", keys)
 	}
 }
 

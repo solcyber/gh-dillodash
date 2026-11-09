@@ -599,7 +599,7 @@ func (w *Workflow) segs(app workflow.App, row workflow.Row, L workflow.Layout, w
 // HelpRows are the workflow's help lines.
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
-		{"promote", fmt.Sprintf("p  on a change: move it one tier on (%s: open the promotion PR · → %s: merge it · %s: tag go or hold)   D  approve the deploy its tier waits on   ↵  open its PR",
+		{"promote", fmt.Sprintf("P  on a change: move it one tier on (%s: open the promotion PR · → %s: merge it · %s: tag go or hold)   D  approve the deploy its tier waits on   ↵  open its PR",
 			w.cfg.First(), w.cfg.Stage(), w.cfg.Stage())},
 	}
 }
@@ -608,15 +608,35 @@ func (w *Workflow) HelpRows() [][2]string {
 func (w *Workflow) LegendRows() [][]text.Seg {
 	row := []text.Seg{text.S(text.Pad("promote", 10), "section")}
 	row = append(row, scenes.Chip("on "+w.cfg.First(), "chip.state")...)
-	row = append(row, text.S(" p opens the promotion  ", "muted"))
+	row = append(row, text.S(" P opens the promotion  ", "muted"))
 	row = append(row, scenes.Chip(w.cfg.Stage()+" · untagged", "chip.await")...)
-	row = append(row, text.S(" p tags it  ", "muted"))
+	row = append(row, text.S(" P tags it  ", "muted"))
 	row = append(row, scenes.Chip(w.cfg.Stage()+" · go", "chip.approved")...)
 	row = append(row, text.S(" rides the next release", "muted"))
 	return [][]text.Seg{row}
 }
 
-// Keys is p.
+// Keys is P.
 func (w *Workflow) Keys() []workflow.Key {
-	return []workflow.Key{{View: "list", Ch: "p", Label: "promote", Priority: 25, Handler: w.doPromote}}
+	return []workflow.Key{{View: "list", Ch: "P", Label: "promote", Priority: 25, Handler: w.doPromote, Offer: w.offerPromote}}
+}
+
+// offerPromote: P acts on a change row, and says which step it takes.
+func (w *Workflow) offerPromote(f workflow.Focus) (string, bool) {
+	if !f.HasRow || f.Row.Kind != RowChange {
+		return "", false
+	}
+	c, ok := f.Row.Item.(*Change)
+	if !ok || c == nil {
+		return "", false
+	}
+	switch c.Where {
+	case OnFirst:
+		return "open the promotion PR", true
+	case Promoting:
+		return "merge the promotion", true
+	case OnStage:
+		return "tag go / hold", true
+	}
+	return "", false
 }

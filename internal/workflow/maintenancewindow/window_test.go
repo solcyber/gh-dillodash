@@ -758,7 +758,7 @@ func TestDoWindow(t *testing.T) {
 	w.DoWindow(app)
 	check(t, "w on a night without a manifest says so", app.Last() == "notice: no manifest issue for the night of 2026-12-01 yet (r refreshes)")
 	keys := w.Keys()
-	check(t, "w is bound in the list and the detail view", len(keys) == 2 && keys[0].Ch == "w" && keys[0].View == "list" && keys[1].View == "detail" && keys[0].Label == "window")
+	check(t, "W is bound in the list and the detail view", len(keys) == 2 && keys[0].Ch == "W" && keys[0].View == "list" && keys[1].View == "detail" && keys[0].Label == "window")
 }
 
 // ---- rows, legend, help ----

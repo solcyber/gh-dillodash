@@ -234,7 +234,7 @@ func TestErrorMessagesNameTheThing(t *testing.T) {
 	}{
 		{"files", 'f', "couldn't load the files of #101"},
 		{"diff", 'v', "couldn't fetch the diff of #101"},
-		{"users", 't', "couldn't list who is assignable in acme/infra"},
+		{"users", 'T', "couldn't list who is assignable in acme/infra"},
 	} {
 		h.gh.Fail = map[string]error{tc.op: boom}
 		h.key(tc.key)
@@ -247,7 +247,7 @@ func TestErrorMessagesNameTheThing(t *testing.T) {
 	}
 	h.gh.Fail = map[string]error{"approve": boom}
 	h.m.tp.Confirm = func(string) bool { return true }
-	h.key('a')
+	h.key('A')
 	if !strings.Contains(h.m.errText, "review approval of #101 failed") || !strings.Contains(h.m.errText, "Pull requests") {
 		t.Errorf("approve errText = %q", h.m.errText)
 	}

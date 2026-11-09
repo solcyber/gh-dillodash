@@ -99,7 +99,7 @@ func TestStaleBuildGatesApproveOnARelease(t *testing.T) {
 	var asked []string
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return false }
 	h.m.tp.Pick = func(string, []string) int { t.Error("no menu before the gate is passed"); return -1 }
-	h.key('a')
+	h.key('A')
 	want := "release NOW on an approved release needs ≥ v1.5.3 — you run v1.5.2: gh extension upgrade dillodash"
 	if len(asked) != 1 || !strings.HasPrefix(asked[0], want) {
 		t.Errorf("gate question: %q", asked)
@@ -115,7 +115,7 @@ func TestStaleBuildGatesApproveOnARelease(t *testing.T) {
 	var menu []string
 	h.m.tp.Pick = func(_ string, labels []string) int { menu = labels; return -1 }
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "", false }
-	h.key('a')
+	h.key('A')
 	if len(menu) != 3 || !strings.HasPrefix(menu[0], "release NOW") {
 		t.Errorf("after the gate: %q", menu)
 	}
@@ -131,10 +131,10 @@ func TestAutoUpdateInstallsAndRestartKeepsThePlace(t *testing.T) {
 		t.Fatalf("installs: %d", u.installs)
 	}
 	s := h.screen()
-	if !strings.Contains(s, "installed dillodash v1.5.4") || !strings.Contains(s, "R  restart") {
+	if !strings.Contains(s, "installed dillodash v1.5.4") || !strings.Contains(s, "U  restart into v1.5.4") {
 		t.Errorf("after the install:\n%s", s)
 	}
-	if line, _ := h.m.persistentLine(); line != "dillodash v1.5.4 installed — R: restart now (keeps your place)" {
+	if line, _ := h.m.persistentLine(); line != "dillodash v1.5.4 installed — U: restart now (keeps your place)" {
 		t.Errorf("standing line %q", line)
 	}
 	// a later check does not install the same release twice
@@ -149,7 +149,7 @@ func TestAutoUpdateInstallsAndRestartKeepsThePlace(t *testing.T) {
 	// a release action first offers the restart
 	var asked []string
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return false }
-	h.key('a')
+	h.key('A')
 	if len(asked) == 0 || !strings.Contains(asked[0], "dillodash v1.5.4 is installed — restart into v1.5.4 first?") {
 		t.Errorf("gate: %q", asked)
 	}
@@ -157,11 +157,11 @@ func TestAutoUpdateInstallsAndRestartKeepsThePlace(t *testing.T) {
 		t.Error("approved with every confirm declined")
 	}
 	h.m.mu.Lock()
-	cmd := h.m.handleKey(widgets.R('R'))
+	cmd := h.m.handleKey(widgets.R('U'))
 	r := h.m.restartTo
 	h.m.mu.Unlock()
 	if cmd == nil || r == nil {
-		t.Fatal("R did not quit with a restart")
+		t.Fatal("U did not quit with a restart")
 	}
 	if r.Detail == nil || r.Detail.Repo != "acme/infra" || r.Detail.Number != 101 || r.Detail.Kind != "pr" {
 		t.Errorf("restore detail %+v", r.Detail)
@@ -183,7 +183,7 @@ func TestReleaseActionRestartsFirst(t *testing.T) {
 	h.named("enter")
 	h.m.tp.Confirm = func(string) bool { return true }
 	h.m.tp.Pick = func(string, []string) int { t.Error("no menu after yes to the restart"); return -1 }
-	h.key('a')
+	h.key('A')
 	h.pump()
 	h.m.Update(tickMsg{h.m.tickGen})
 	if h.m.restartTo == nil || h.m.restartTo.Detail == nil || h.m.restartTo.Detail.Number != 101 {
@@ -201,7 +201,7 @@ func TestRestartWaitsForAnActionInFlight(t *testing.T) {
 	h.load()
 	h.m.mu.Lock()
 	h.m.action = true
-	cmd := h.m.handleKey(widgets.R('R'))
+	cmd := h.m.handleKey(widgets.R('U'))
 	queued := h.m.restartQueued && h.m.restartTo == nil
 	h.m.mu.Unlock()
 	if !queued || !strings.Contains(h.m.status, "waits for the action in flight") {

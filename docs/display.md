@@ -168,7 +168,7 @@ glass: every key works, menus and the help open inside it, and a release's
 launch fills the room. Nothing in front of the glass covers a letter except
 the mullions themselves.
 
-![W steps out of the room: the plain dashboard, the same night, for getting work done](shots/room-off.png)
+![w steps out of the room: the plain dashboard, the same night, for getting work done](shots/room-off.png)
 
 `W` steps out to the plain dashboard (the brass plaque under the window
 says so) and back in; while you are out the key bar shows `W room`. The

@@ -225,10 +225,10 @@ func TestBumpedChipOffersNow(t *testing.T) {
 		t.Fatalf("the bumped flag is a terminal phase: %q %v", ph, p.Terminal)
 	}
 	got := plain(w.progressChipSegs(app, pr, p, 0, false))
-	if !strings.Contains(got, "bumped — a: release NOW") {
+	if !strings.Contains(got, "bumped — A: release NOW") {
 		t.Errorf("chip: %q", got)
 	}
-	if got := plain(w.progressChipSegs(app, pr, p, 0, true)); !strings.Contains(got, "bumped · a: NOW") {
+	if got := plain(w.progressChipSegs(app, pr, p, 0, true)); !strings.Contains(got, "bumped · A: NOW") {
 		t.Errorf("compact chip: %q", got)
 	}
 	notMine := approved(makeRelease(relOpts{number: 744}), "carol")

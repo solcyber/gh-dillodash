@@ -107,22 +107,66 @@ func (w *Workflow) laneWait(app workflow.App, pr *model.PR) bool {
 // Keys binds a in the list: on a release row (under releases or under a
 // night) it is the detail's a, without opening the release first.
 func (w *Workflow) Keys() []workflow.Key {
-	return []workflow.Key{{View: "list", Ch: "a", Label: "approve", Priority: 15, Handler: w.listApprove}}
+	return []workflow.Key{{View: "list", Ch: "A", Label: "approve", Priority: 15, Handler: w.listApprove, Offer: w.offerListApprove}}
 }
 
 func (w *Workflow) listApprove(app workflow.App) {
 	row, ok := app.Selected()
 	pr, isPR := row.Item.(*model.PR)
 	if !ok || !isPR || pr == nil {
-		app.Notice("a in the list approves a release row; enter opens anything else")
+		app.Notice("A in the list approves a release row; enter opens anything else, and A approves there")
 		return
 	}
 	if _, sure := w.classify(pr, pr, w.stateOf(app)); sure == NotRelease {
-		app.Notice(fmt.Sprintf("a in the list approves a release row; enter opens %s, then a", where(pr)))
+		app.Notice(fmt.Sprintf("A in the list approves a release row; enter opens %s, then A", where(pr)))
 		return
 	}
 	if !workflow.StaleGate(app, "approve") { // the detail's a asks the same
 		return
 	}
 	w.Approve(app, pr, pr)
+}
+
+// offerListApprove: A in the list acts on a release row that is open.
+func (w *Workflow) offerListApprove(f workflow.Focus) (string, bool) {
+	if !f.HasRow {
+		return "", false
+	}
+	pr, ok := f.Row.Item.(*model.PR)
+	if !ok || pr == nil {
+		return "", false
+	}
+	return w.approveLabel(f, pr, pr)
+}
+
+// ApproveOffer: A on an open release says what it does there.
+func (w *Workflow) ApproveOffer(f workflow.Focus) (string, bool) {
+	pr, ok := f.Item().(*model.PR)
+	if !ok || pr == nil {
+		return "", false
+	}
+	listed := f.Listed
+	if f.View == "list" {
+		listed = pr
+	}
+	return w.approveLabel(f, pr, listed)
+}
+
+// approveLabel is what A does on a release PR (ok false: not a release,
+// or nothing to approve on it).
+func (w *Workflow) approveLabel(f workflow.Focus, pr, listed *model.PR) (string, bool) {
+	var st *State
+	if f.State != nil {
+		st, _ = f.State(Name).(*State)
+	}
+	if _, sure := w.classify(pr, listed, st); sure != IsRelease {
+		return "", false
+	}
+	if (pr.State != "" && pr.State != "OPEN") || pr.IsDraft || strings.EqualFold(pr.Author.Login, f.Me) || w.NotARelease(pr) {
+		return "", false
+	}
+	if pr.MyApprovalStands(f.Me) {
+		return "release NOW", true
+	}
+	return "approve release", true
 }

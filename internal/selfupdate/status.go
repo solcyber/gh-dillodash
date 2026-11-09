@@ -43,7 +43,7 @@ func (s Status) Unchanged(prev Status) Status {
 // Banner is the stale build's line on every screen ("" when current).
 func (s Status) Banner() string {
 	if s.Pending() {
-		return fmt.Sprintf("dillodash %s installed — R: restart now (keeps your place)", s.Installed)
+		return fmt.Sprintf("dillodash %s installed — U: restart now (keeps your place)", s.Installed)
 	}
 	if !s.Stale() {
 		return ""
@@ -75,7 +75,7 @@ var Needs = map[string]Need{
 // the gap, since the newer release may carry release fixes.
 func (s Status) Gate(action string) string {
 	if s.Pending() {
-		return fmt.Sprintf("dillodash %s is installed and this session still runs %s — R restarts into it (keeps your place)", s.Installed, s.Running)
+		return fmt.Sprintf("dillodash %s is installed and this session still runs %s — U restarts into it (keeps your place)", s.Installed, s.Running)
 	}
 	if n, ok := Needs[action]; ok && Comparable(s.Running) && Compare(s.Running, n.Min) < 0 {
 		return fmt.Sprintf("%s needs ≥ %s — you run %s: %s", n.What, n.Min, s.Running, s.Self.UpgradeHint(n.Min))

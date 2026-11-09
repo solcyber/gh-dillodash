@@ -58,7 +58,7 @@ func TestRoomShowsInTheWindow(t *testing.T) {
 	if got := h.m.Width(); got >= 160 || got < 60 {
 		t.Errorf("the dashboard is laid out %d wide in the room", got)
 	}
-	h.key('W')
+	h.key('w')
 	if shown(h) {
 		t.Fatal("W did not step out of the room")
 	}
@@ -68,11 +68,11 @@ func TestRoomShowsInTheWindow(t *testing.T) {
 	if !strings.Contains(h.screen(), "steps back into the room") {
 		t.Errorf("no status for W:\n%s", h.screen())
 	}
-	h.key('W')
+	h.key('w')
 	if !shown(h) {
 		t.Fatal("W did not step back in")
 	}
-	h.key('W')
+	h.key('w')
 	open = false // the window closes: W is forgotten
 	if shown(h) {
 		t.Fatal("the room outlived the window")
@@ -84,7 +84,7 @@ func TestRoomShowsInTheWindow(t *testing.T) {
 	// outside the window W previews the room
 	open = false
 	shown(h)
-	h.key('W')
+	h.key('w')
 	if !shown(h) {
 		t.Fatal("W outside the window shows no room")
 	}
@@ -98,8 +98,8 @@ func TestRoomNeedsTheSpace(t *testing.T) {
 	if shown(h) {
 		t.Fatal("the room shows on a small terminal")
 	}
-	h.key('W')
-	h.key('W') // the first W stepped out of a room too small to show; this one tries to step in
+	h.key('w')
+	h.key('w') // the first w stepped out of a room too small to show; this one tries to step in
 	if s := h.screen(); !strings.Contains(s, "the room needs a terminal") {
 		t.Errorf("no reason given:\n%s", s)
 	}
@@ -115,7 +115,7 @@ func TestRoomConfigOff(t *testing.T) {
 	if shown(h) {
 		t.Fatal("room = false still shows the room")
 	}
-	h.key('W')
+	h.key('w')
 	if !shown(h) {
 		t.Fatal("W shows no room with room = false")
 	}
@@ -132,7 +132,7 @@ func TestRoomScreen(t *testing.T) {
 	s := h.screen()
 	lines := strings.Split(s, "\n")
 	l, _ := scenes.RoomFit(48, 160)
-	if !strings.Contains(s, "W: back to work") {
+	if !strings.Contains(s, "w: back to work") {
 		t.Errorf("no plaque:\n%s", s)
 	}
 	if !strings.Contains(s, "#101") {
@@ -148,7 +148,7 @@ func TestRoomScreen(t *testing.T) {
 			t.Errorf("row %d draws left of the glass: %q", y, ln)
 		}
 	}
-	h.key('W')
+	h.key('w')
 	out := strings.Split(h.screen(), "\n")
 
 	closed := false
@@ -162,8 +162,8 @@ func TestRoomScreen(t *testing.T) {
 			continue // the status line says what W did
 		}
 		if i == len(want)-1 {
-			if !strings.Contains(out[i], " W  room ") {
-				t.Errorf("the bar lacks W while the window is open: %q", out[i])
+			if !strings.Contains(out[i], " w  room ") {
+				t.Errorf("the bar lacks w while the window is open: %q", out[i])
 			}
 			continue
 		}
@@ -185,20 +185,20 @@ func TestRoomChipAnyTime(t *testing.T) {
 		lines := strings.Split(h.screen(), "\n")
 		return lines[len(lines)-1]
 	}
-	if !strings.Contains(bar(), "W  room") {
-		t.Errorf("outside the window the bar has no W:\n%s", bar())
+	if !strings.Contains(bar(), "w  room") {
+		t.Errorf("outside the window the bar has no w:\n%s", bar())
 	}
-	h.key('W')
-	if !shown(h) || strings.Contains(bar(), "W  room") {
-		t.Errorf("in the room the bar still offers W:\n%s", bar())
+	h.key('w')
+	if !shown(h) || strings.Contains(bar(), "w  room") {
+		t.Errorf("in the room the bar still offers w:\n%s", bar())
 	}
-	h.key('W')
+	h.key('w')
 	open = true
 	if !shown(h) {
 		t.Fatal("no room in the window")
 	}
-	h.key('W')
-	if shown(h) || !strings.Contains(bar(), "W  room") {
-		t.Errorf("stepped out in the window, the bar has no W:\n%s", bar())
+	h.key('w')
+	if shown(h) || !strings.Contains(bar(), "w  room") {
+		t.Errorf("stepped out in the window, the bar has no w:\n%s", bar())
 	}
 }

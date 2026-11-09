@@ -94,7 +94,7 @@ func (w *Workflow) dismissMine(app workflow.App, pr *model.PR, wh string) {
 		return
 	}
 	msg := fmt.Sprintf("withdrawn by %s from dillodash", app.Me())
-	if !app.Confirm(fmt.Sprintf("dismiss your approval of %s? It leaves the queue; a approves it again to re-queue it.\nmessage: %s", wh, msg)) {
+	if !app.Confirm(fmt.Sprintf("dismiss your approval of %s? It leaves the queue; A approves it again to re-queue it.\nmessage: %s", wh, msg)) {
 		app.Notice("dismiss cancelled")
 		return
 	}
@@ -103,7 +103,7 @@ func (w *Workflow) dismissMine(app workflow.App, pr *model.PR, wh string) {
 		return
 	}
 	app.UnmarkApproved(pr)
-	app.OK(fmt.Sprintf("dismissed your approval of %s — a approves it again to re-queue it", wh))
+	app.OK(fmt.Sprintf("dismissed your approval of %s — A approves it again to re-queue it", wh))
 	app.Refresh(true)
 }
 

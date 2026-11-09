@@ -87,17 +87,11 @@ func NewSet(ctx *Context, items ...Workflow) (*Set, error) {
 // coreKeys are bound by the dashboard itself and may not be taken: the
 // ui package's key table, view:key (a test keeps the two equal).
 var coreKeys = map[string]bool{
-	"list:/": true, "list::": true, "list:A": true, "list:D": true, "list:G": true, "list:d": true, "list:g": true, "list:j": true,
-	"list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:y": true, "list:R": true,
-	"list:x": true, "list:X": true, "list:P": true, "detail:x": true, "detail:X": true, "list:u": true, "detail:u": true,
-	"detail:/": true, "detail:C": true, "detail:D": true, "detail:G": true, "detail:M": true, "detail:N": true, "detail:a": true, "detail:c": true,
-	"detail:f": true, "detail:g": true, "detail:h": true, "detail:j": true, "detail:k": true, "detail:m": true, "detail:n": true, "detail:o": true,
-	"detail:q": true, "detail:r": true, "detail:t": true, "detail:v": true, "detail:y": true, "detail:R": true,
-	"issue:/": true, "issue:C": true, "issue:G": true, "issue:N": true, "issue:c": true, "issue:g": true, "issue:h": true, "issue:j": true,
-	"issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:t": true, "issue:y": true, "issue:R": true,
-	"any::": true, "any:?": true, "any:e": true, "any:W": true, "list:W": true, "detail:W": true, "issue:W": true,
-	// triage: labels, hand to the agent, and (issues) assign, close/reopen
-	"detail:L": true, "detail:H": true, "issue:L": true, "issue:H": true, "issue:s": true, "issue:Z": true,
+	// Shift acts, lowercase looks: the dashboard's own keys per view
+	"list:/": true, "list::": true, "list:D": true, "list:G": true, "list:U": true, "list:X": true, "list:d": true, "list:g": true, "list:j": true, "list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:s": true, "list:u": true, "list:w": true, "list:x": true, "list:y": true,
+	"detail:/": true, "detail:A": true, "detail:C": true, "detail:D": true, "detail:G": true, "detail:H": true, "detail:L": true, "detail:M": true, "detail:N": true, "detail:T": true, "detail:U": true, "detail:X": true, "detail:f": true, "detail:g": true, "detail:h": true, "detail:j": true, "detail:k": true, "detail:m": true, "detail:n": true, "detail:o": true, "detail:q": true, "detail:r": true, "detail:u": true, "detail:v": true, "detail:w": true, "detail:x": true, "detail:y": true,
+	"issue:/": true, "issue:C": true, "issue:G": true, "issue:H": true, "issue:L": true, "issue:N": true, "issue:S": true, "issue:T": true, "issue:U": true, "issue:Z": true, "issue:g": true, "issue:h": true, "issue:j": true, "issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:w": true, "issue:y": true,
+	"any::": true, "any:?": true, "any:e": true, "any:w": true,
 }
 
 // CoreKeyIDs lists the view:key pairs the dashboard reserves, sorted;
@@ -577,6 +571,22 @@ func (s *Set) Keys(view string) []Key {
 		}
 	}
 	return out
+}
+
+// ApproveOffer is what A does on the focus by the first workflow that
+// takes it over, "" when none does (a plain review).
+func (s *Set) ApproveOffer(f Focus) string {
+	if s == nil {
+		return ""
+	}
+	for _, w := range s.Items {
+		if o, ok := w.(ApproveOfferer); ok {
+			if label, ok := o.ApproveOffer(f); ok {
+				return label
+			}
+		}
+	}
+	return ""
 }
 
 // Key finds a binding for a key in a view.

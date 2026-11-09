@@ -337,9 +337,9 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 	}
 	if w.nowOffered(app, pr, p) {
 		if compact {
-			label += " · a: NOW"
+			label += " · A: NOW"
 		} else {
-			label += " — a: release NOW"
+			label += " — A: release NOW"
 		}
 	}
 	segs = append(segs, text.S(label, style))

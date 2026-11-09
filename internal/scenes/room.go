@@ -61,7 +61,7 @@ type RoomInfo struct {
 	Clock  time.Time // the wall clock's time, already in its zone
 	Moving bool      // ambient motion: the plants sway, the steam rises, the second hand sweeps
 	T      float64   // the frame clock (seconds)
-	Sign   string    // the plaque, e.g. "W · back to work"
+	Sign   string    // the plaque, e.g. "w · back to work"
 }
 
 // RoomAnimated says whether the room has anything that moves at a tier

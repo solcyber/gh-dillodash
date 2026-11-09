@@ -51,7 +51,7 @@ func TestStaleApprovalOfMineNeedsAReReview(t *testing.T) {
 		t.Errorf("detail lacks the stale line:\n%s", s)
 	}
 	h.m.tp.Confirm = func(string) bool { return true }
-	h.key('a')
+	h.key('A')
 	if len(h.gh.Approvals) != 1 {
 		t.Errorf("re-approve after the head moved: approvals %v status %q", h.gh.Approvals, h.m.status)
 	}

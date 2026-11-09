@@ -541,6 +541,13 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 			segs = []text.Seg{text.S(" "+glyphs.Ico("warn")+line, "toast.warn")}
 		}
 	default:
+		// nothing to report: say what the selection waits on and which
+		// key moves it on
+		segs = m.hintSegs()
+		if len(segs) == 0 {
+			return
+		}
+		c.PutSegs(h-2, 0, text.EllipSegs(segs, max(0, w-1)), w, false, false)
 		return
 	}
 	if reveal, ok := m.fx.T("toast"); ok { // types itself in
@@ -558,9 +565,20 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 // full, wrapped, scrollable like the help.
 func (m *Model) drawMessage(c *canvas.Canvas, h, w int) {
 	bw := min(w-2, 100)
-	lines := widgets.Wrap(m.lastMsg, max(10, bw-4))
+	// paragraphs (a blank line between) keep their breaks
+	var lines []string
+	for i, para := range strings.Split(m.lastMsg, "\n\n") {
+		if i > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, widgets.Wrap(para, max(10, bw-4))...)
+	}
 	bh := min(h-2, len(lines)+4)
-	top, left, iw := widgets.DrawBox(c, max(1, (h-bh)/2), max(0, (w-bw)/2), bh, bw, glyphs.Ico("info")+"last message", "logo", "menu.title", -1)
+	title := m.msgTitle
+	if title == "" {
+		title = "last message"
+	}
+	top, left, iw := widgets.DrawBox(c, max(1, (h-bh)/2), max(0, (w-bw)/2), bh, bw, glyphs.Ico("info")+title, "logo", "menu.title", -1)
 	m.overlayDraw(c, lines, top, left, iw, bh)
 }
 
@@ -589,13 +607,24 @@ func (m *Model) drawKeys(c *canvas.Canvas, h, w int) {
 		view = "issue"
 	}
 	help := []text.Seg{text.S(" ? ", "chip.key"), text.S(" help ", "keylabel")}
-	room := w - 1 - text.SegsWidth(help)
+	sep := " " + glyphs.G("vbar") + " "
+	room := w - 1 - text.SegsWidth(help) - text.Width(sep)
 	cells := func(it barItem) int { return text.Width(" "+it.key+" ") + text.Width(" "+it.label+" ") }
+	// two zones: what acts on this row (gold, first), then how to move
+	// and look (blue), a rule between them
 	var segs []text.Seg
-	for _, it := range trimBar(m.barFor(view), room, cells) {
-		segs = append(segs, text.S(" "+it.key+" ", "chip.key"), text.S(" "+it.label+" ", "keylabel"))
+	items := trimBar(m.barFor(view), room, cells)
+	for i, it := range items {
+		if i > 0 && items[i-1].acts && !it.acts {
+			segs = append(segs, text.S(sep, "keysep"))
+		}
+		if it.acts {
+			segs = append(segs, text.S(" "+it.key+" ", "chip.key.act"), text.S(" "+it.label+" ", "keylabel.act"))
+		} else {
+			segs = append(segs, text.S(" "+it.key+" ", "chip.key"), text.S(" "+it.label+" ", "keylabel"))
+		}
 	}
-	if text.SegsWidth(segs) > room {
+	if text.SegsWidth(segs) > room+text.Width(sep) {
 		segs = nil // not even q fits: the help chip alone
 	}
 	c.PutSegs(h-1, 0, append(segs, help...), 0, false, false)
@@ -614,7 +643,11 @@ func helpKeySegs(line string) []text.Seg {
 			out = append(out, text.S(e, "text"))
 			continue
 		}
-		out = append(out, text.S(k, "md.inline"), text.S(" "+rest, "text"))
+		style := "md.inline"
+		if actsHelpKey(k) {
+			style = "hint.key" // gold: this key changes something
+		}
+		out = append(out, text.S(k, style), text.S(" "+rest, "text"))
 	}
 	return out
 }
@@ -653,12 +686,19 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 			// a row that leads with its key ("D  on a waiting run") shows
 			// the key in blue, as the key table does
 			if k, rest, ok := strings.Cut(line, " "); ok && k != "" && text.Width(k) <= 3 {
-				rows = append(rows, []text.Seg{label(name), text.S(k, "md.inline"), text.S(" "+rest, "text")})
+				style := "md.inline"
+				if actsHelpKey(k) {
+					style = "hint.key"
+				}
+				rows = append(rows, []text.Seg{label(name), text.S(k, style), text.S(" "+rest, "text")})
 				continue
 			}
 			rows = append(rows, []text.Seg{label(name), text.S(line, "text")})
 		}
 	}
+	// the rule first: it explains the whole table
+	rows = append(rows, []text.Seg{label("rule"), text.S("Shift", "hint.key"), text.S(" acts (and asks first)   ", "text"),
+		text.S("lowercase", "md.inline"), text.S(" moves, opens and shows", "text")})
 	for _, g := range helpGroups() {
 		addKeys(g.label, packEntries(g.entries, textW))
 		if g.label == "detail" {
@@ -953,4 +993,11 @@ func (m *Model) drawPatch(c *canvas.Canvas, h, w int) {
 	visible := max(1, h-4)
 	m.patchScroll = max(0, min(m.patchScroll, max(0, len(m.patchLines)-visible)))
 	m.drawLines(c, m.patchLines, m.glideTo("patch", m.patchScroll), top, visible, w)
+}
+
+// actsHelpKey: a help entry's key that acts (a lone capital, but the
+// vim motions G and N); HJKL are the fortress's moves, under its label.
+func actsHelpKey(k string) bool {
+	r := []rune(k)
+	return len(r) == 1 && r[0] >= 'A' && r[0] <= 'Z' && r[0] != 'G' && r[0] != 'N' && k != "HJKL"
 }

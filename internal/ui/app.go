@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -343,7 +344,7 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		if m.view == ViewList && k.Rune == 'q' {
 			return m.requestQuit(false) // warns once, quits on the second press
 		}
-		if k.Rune == 'R' && m.upd.Pending() {
+		if k.Rune == 'U' && m.upd.Pending() && !m.configStale() {
 			return doRestart(m, k, 0, nil) // queued until the action settles
 		}
 		// an action is mid-flight: the key is dropped, and says so unless
@@ -364,8 +365,27 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	}
 	if wk, ok := m.wf.Key(view, string(k.Rune)); ok && k.Rune != 0 {
 		m.runAction(func() { wk.Handler(app) })
+		return nil
+	}
+	if to, ok := movedKey(view, k.Rune); ok {
+		m.notice(fmt.Sprintf("%c is now %s: Shift acts, lowercase looks (? lists every key)", k.Rune, to))
 	}
 	return nil
+}
+
+// movedKey is where a 1.x key went in 2.0 (Shift acts, lowercase looks),
+// for a key that no longer does anything in view: the old habit gets a
+// pointer, never a different action.
+func movedKey(view string, r rune) (string, bool) {
+	moved := map[rune]string{'a': "A", 'c': "C", 't': "T", 'p': "P", 'R': "U"}
+	if view == "issue" {
+		moved['s'] = "S"
+	}
+	if view == ViewList {
+		moved['P'] = "U (pull the newer config)"
+	}
+	to, ok := moved[r]
+	return to, ok
 }
 
 // ---- the key table's actions (lock held) ----
@@ -516,16 +536,6 @@ func doDeploys(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	return nil
 }
 
-func doRuns(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
-	m.runAction(func() { m.doRuns(app) })
-	return nil
-}
-
-func doDispatch(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
-	m.runAction(func() { m.doDispatch(app) })
-	return nil
-}
-
 func doConfigPull(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	m.runAction(func() { m.doConfigPull(app) })
 	return nil
@@ -546,9 +556,8 @@ func doMerge(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	return nil
 }
 
-func doComment(m *Model, k widgets.Key, _ int, app *lockedApp) tea.Cmd {
-	editor := k.Rune == 'C'
-	m.runAction(func() { m.doComment(app, editor, "") })
+func doComment(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
+	m.runAction(func() { m.doComment(app, false, "") })
 	return nil
 }
 
@@ -652,7 +661,7 @@ func doMessage(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 	if m.lastMsg == "" {
 		m.notice("no message yet")
 	} else {
-		m.overlay, m.helpTop = "message", 0
+		m.overlay, m.helpTop, m.msgTitle = "message", 0, ""
 	}
 	return nil
 }

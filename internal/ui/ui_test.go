@@ -182,7 +182,7 @@ func TestApproveIsAPlainReview(t *testing.T) {
 		}
 		return true
 	}
-	h.key('a')
+	h.key('A')
 	if got := h.gh.Approvals; len(got) != 1 || got[0] != 101 {
 		t.Fatalf("approvals = %v", got)
 	}
@@ -194,7 +194,7 @@ func TestApproveIsAPlainReview(t *testing.T) {
 	}
 	// a declined confirmation posts nothing
 	h.m.tp.Confirm = func(string) bool { return false }
-	h.key('a')
+	h.key('A')
 	if len(h.gh.Approvals) != 1 {
 		t.Errorf("approvals after cancel = %v", h.gh.Approvals)
 	}
@@ -206,7 +206,7 @@ func TestApproveRefusesDraftAndSelf(t *testing.T) {
 	h.key('j') // the draft
 	h.gh.PRs[model.Ident{Repo: infra, Number: 102}] = h.gh.Open[infra].PRs[1]
 	h.named("enter")
-	h.key('a')
+	h.key('A')
 	if len(h.gh.Approvals) != 0 || !strings.Contains(h.m.status, "draft") {
 		t.Errorf("draft: approvals=%v status=%q", h.gh.Approvals, h.m.status)
 	}
@@ -217,7 +217,7 @@ func TestCommentInline(t *testing.T) {
 	h.load()
 	h.named("enter")
 	h.m.tp.Prompt = func(p string, _ workflow.PromptOpts) (string, bool) { return "ship it", true }
-	h.key('c')
+	h.key('C')
 	posted := h.gh.CommentsPosted
 	if len(posted) != 1 {
 		t.Fatalf("comments = %+v", posted)
@@ -662,8 +662,8 @@ func TestApproveRefusesAlreadyApproved(t *testing.T) {
 	h.load()
 	h.named("enter")
 	h.m.tp.Confirm = func(string) bool { return true }
-	h.key('a')
-	h.key('a')
+	h.key('A')
+	h.key('A')
 	if len(h.gh.Approvals) != 1 || !strings.Contains(h.m.status, "already approved by you") {
 		t.Errorf("approvals %v status %q", h.gh.Approvals, h.m.status)
 	}
@@ -674,12 +674,19 @@ func TestCommentInlineCancelAndBlank(t *testing.T) {
 	h.load()
 	h.named("enter")
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "", false }
-	h.key('c')
+	h.key('C')
 	if h.m.status != "comment cancelled" || len(h.gh.CommentsPosted) != 0 {
 		t.Errorf("Esc: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
 	}
+	// Enter on an empty line opens $EDITOR; leaving it empty posts nothing
+	t.Setenv("EDITOR", "true")
+	var edited bool
+	h.m.tp.RunExternal = func([]string) error { edited = true; return nil }
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "   ", true }
-	h.key('c')
+	h.key('C')
+	if !edited {
+		t.Error("Enter on an empty line does not open $EDITOR")
+	}
 	if h.m.status != "comment cancelled (empty)" || len(h.gh.CommentsPosted) != 0 {
 		t.Errorf("blank: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
 	}
