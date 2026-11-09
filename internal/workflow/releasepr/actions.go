@@ -223,7 +223,7 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 // The review choices a offers beside approve and NOW.
 const (
 	changesLabel = "request changes — takes it out of the window, with a reason"
-	dismissLabel = "dismiss my approval — takes it out of the queue; a approves it again to re-queue"
+	dismissLabel = "dismiss my approval — takes it out of the queue; A approves it again to re-queue"
 )
 
 // ago is a short duration ("3m", "1h05m").

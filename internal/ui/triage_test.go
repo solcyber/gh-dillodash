@@ -81,7 +81,7 @@ func TestTriageAssign(t *testing.T) {
 	h.openIssue("7")
 	var seen []string
 	h.m.tp.Pick = pickEnding(t, "Bob", &seen)
-	h.key('s')
+	h.key('S')
 	if c := h.gh.CallsFor("add_assignees"); len(c) != 1 || c[0].Names[0] != "bob" {
 		t.Fatalf("add_assignees = %+v (status %q)", c, h.m.status)
 	}
@@ -89,7 +89,7 @@ func TestTriageAssign(t *testing.T) {
 		seen = labels
 		return 0 // the current assignee comes first, marked
 	}
-	h.key('s')
+	h.key('S')
 	if !strings.HasPrefix(seen[0], "[x] @bob") {
 		t.Errorf("the assignee is listed first and marked: %q", seen)
 	}
@@ -99,7 +99,7 @@ func TestTriageAssign(t *testing.T) {
 
 	h.key('q')
 	h.named("enter") // the PR
-	h.key('s')
+	h.key('S')
 	h.key('Z')
 	if n := len(h.gh.Calls); n != 2 {
 		t.Errorf("s and Z on a PR write nothing: %+v", h.gh.Calls)
@@ -112,7 +112,12 @@ func TestTriageCloseReopen(t *testing.T) {
 	h.load()
 	h.openIssue("7")
 	h.m.tp.Pick = func(string, []string) int { return 1 }
+	var closeQ string
+	h.m.tp.Confirm = func(q string) bool { closeQ = q; return true }
 	h.key('Z')
+	if closeQ != "close infra#7 as not planned, as alice?" && !strings.Contains(closeQ, "as not planned, as alice?") {
+		t.Errorf("Z asks y/N after its pick: %q", closeQ)
+	}
 	c := h.gh.CallsFor("set_state")
 	if len(c) != 1 || c[0].State != "closed" || c[0].Reason != "not_planned" {
 		t.Fatalf("close = %+v (status %q)", c, h.m.status)
@@ -141,7 +146,7 @@ func TestTriageHandoff(t *testing.T) {
 	}
 	h.m.cfg.Agent.HandoffLabel = "agent"
 	h.m.cfg.Agent.HandoffComment = "over to the agent"
-	if !strings.Contains(h.screen(), "H  to agent") {
+	if !strings.Contains(h.screen(), "H  to the agent") {
 		t.Errorf("the bar shows H once a label is set:\n%s", h.screen())
 	}
 	var asked string
@@ -180,7 +185,7 @@ func TestAllowedReposRefusesWrites(t *testing.T) {
 	h.openIssue("infra#7") // listed, but not allowed
 	asked = 0
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { asked++; return "x", true }
-	for _, k := range []rune{'c', 't', 'L', 's', 'Z', 'H'} {
+	for _, k := range []rune{'C', 'T', 'L', 'S', 'Z', 'H'} {
 		h.key(k)
 		if !strings.Contains(h.m.status, "allowed_repos") {
 			t.Errorf("%c: status %q", k, h.m.status)
@@ -192,7 +197,7 @@ func TestAllowedReposRefusesWrites(t *testing.T) {
 
 	h.key('q')
 	h.named("enter") // the first row: infra#101, a PR
-	for _, k := range []rune{'a', 'M', 'D'} {
+	for _, k := range []rune{'A', 'M', 'D'} {
 		h.key(k)
 		if !strings.Contains(h.m.status, "allowed_repos") {
 			t.Errorf("%c on a PR: status %q", k, h.m.status)
@@ -215,7 +220,7 @@ func TestAllowedReposRefusesWrites(t *testing.T) {
 	h.key('q')
 	h.openIssue("other#7") // the allowed repo, reached with ':'
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "hello", true }
-	h.key('c')
+	h.key('C')
 	if len(h.gh.CommentsPosted) != 1 || h.gh.CommentsPosted[0].Repo != other {
 		t.Errorf("a comment on the allowed repo posts: %+v (status %q)", h.gh.CommentsPosted, h.m.status)
 	}

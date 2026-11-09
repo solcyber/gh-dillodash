@@ -242,10 +242,10 @@ func TestSwapInWindows(t *testing.T) {
 
 func TestPendingRestart(t *testing.T) {
 	st := Status{Running: "v1.5.2", Latest: "v1.5.4", Installed: "v1.5.4", Self: Install{Kind: KindExtension}}
-	if st.Banner() != "dillodash v1.5.4 installed — R: restart now (keeps your place)" {
+	if st.Banner() != "dillodash v1.5.4 installed — U: restart now (keeps your place)" {
 		t.Errorf("banner %q", st.Banner())
 	}
-	if g := st.Gate("approve"); !strings.Contains(g, "R restarts into it") {
+	if g := st.Gate("approve"); !strings.Contains(g, "U restarts into it") {
 		t.Errorf("gate %q", g)
 	}
 }

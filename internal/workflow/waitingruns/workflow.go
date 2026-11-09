@@ -649,7 +649,7 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 // HelpRows are the workflow's help lines.
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
-		{"runs", "D  on a waiting run: approve the environments you review   x  reject, cancel or read its log   o  open the run on GitHub"},
+		{"runs", "D  on a waiting run: approve the environments you review   X  reject or cancel it   x  read its log   o  open the run on GitHub"},
 	}
 }
 

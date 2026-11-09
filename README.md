@@ -128,13 +128,21 @@ fast reviewer.
 
 ## Keys
 
-The essentials: `enter` opens, `a` approves, `c` comments, `M` merges,
-`D` approves deployments, `/` filters or searches, `d` is fortress mode,
-`W` steps out of the room in the release window (and back in),
-`?` is the help with every key and the glyph legend, `q` quits (`Esc`
-clears the filter instead). Every key, per view, is in
-[docs/keys.md](docs/keys.md), which is generated from the key table the
-dashboard itself runs on.
+**Shift acts, lowercase looks.** Every key that changes something (on
+GitHub, your install or your config) is a capital and asks first; the
+lowercase keys only move, open and show. The key bar leads with what you
+can do to the selected row, in gold and labelled with what it does there
+(`A release NOW`, `A /approve plan-set`, `P open the promotion PR`), and
+the line above it says what the row is waiting on.
+
+The essentials: `enter` opens, `A` approves, `C` comments, `M` merges,
+`D` approves deployments, `X` re-runs or cancels a run, `W` posts
+`/attend` or `/release` in a maintenance window, `U` restarts into an
+update, `/` filters or searches, `d` is fortress mode, `w` steps out of
+the room in the release window (and back in), `?` is the help with every
+key and the glyph legend, `q` quits (`Esc` clears the filter instead).
+Every key, per view, is in [docs/keys.md](docs/keys.md), which is
+generated from the key table the dashboard itself runs on.
 
 ## More
 

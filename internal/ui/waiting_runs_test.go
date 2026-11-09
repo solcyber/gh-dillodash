@@ -34,7 +34,7 @@ func TestDOnAWaitingRun(t *testing.T) {
 	h.gh.Pending = map[int64][]model.PendingDeployment{4242: {prod}}
 	h.load()
 	s := h.screen()
-	for _, want := range []string{"waiting approvals  1", "  #17  [approve: prod] deploy main @ddddddd bob ", "deploy web-portal to prod", " D  deploys ", "1 run waiting, 1 on you (D)"} {
+	for _, want := range []string{"waiting approvals  1", "  #17  [approve: prod] deploy main @ddddddd bob ", "deploy web-portal to prod", "1 run waiting, 1 on you (D)"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("screen lacks %q:\n%s", want, s)
 		}
@@ -43,6 +43,9 @@ func TestDOnAWaitingRun(t *testing.T) {
 		if r.Kind == waitingruns.RowRun {
 			h.m.selected = i
 		}
+	}
+	if s := h.screen(); !strings.Contains(s, " D  approve deploys ") {
+		t.Errorf("a waiting run selected: the bar lacks D:\n%s", s)
 	}
 	var asked []string
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return true }

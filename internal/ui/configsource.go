@@ -80,7 +80,7 @@ func (m *Model) configBanner() string {
 	if m.cfgNewer == "" {
 		return ""
 	}
-	return fmt.Sprintf("config outdated: %s has a newer %s (P pulls it and restarts)", m.cfgSource.Repo, m.cfgSource.Path)
+	return fmt.Sprintf("config outdated: %s has a newer %s (U pulls it and restarts)", m.cfgSource.Repo, m.cfgSource.Path)
 }
 
 // doConfigPull is the P key: fetch the source again, refuse one that

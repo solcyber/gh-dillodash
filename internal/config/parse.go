@@ -495,6 +495,7 @@ func (p *parser) parseAgent(top *table, cfg *Config) {
 	t, _ := top.sub("agent")
 	cfg.Agent.HandoffLabel = strings.TrimSpace(t.str("handoff_label", ""))
 	cfg.Agent.HandoffComment = strings.TrimSpace(t.str("handoff_comment", ""))
+	cfg.Agent.Name = strings.TrimSpace(t.str("name", ""))
 	if cfg.Agent.HandoffComment != "" && cfg.Agent.HandoffLabel == "" {
 		t.warnf("handoff_comment", "has no effect without handoff_label")
 	}

@@ -92,9 +92,9 @@ func (m *Model) roomChipFits() bool {
 // roomSign is the plaque's text.
 func roomSign() string {
 	if glyphs.Active() == glyphs.ASCII {
-		return "W: back to work"
+		return "w: back to work"
 	}
-	return "W · back to work"
+	return "w · back to work"
 }
 
 // drawRoom paints the room with the dashboard behind its glass; false
@@ -131,7 +131,7 @@ func doRoom(m *Model, _ widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 	m.roomWanted() // settle the window's state before flipping
 	m.roomFlip = !m.roomFlip
 	if !m.roomWanted() {
-		m.setStatus("back to work — W steps back into the room")
+		m.setStatus("back to work — w steps back into the room")
 		return nil
 	}
 	if _, ok := scenes.RoomFit(m.h, m.w); !ok {

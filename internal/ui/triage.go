@@ -162,7 +162,7 @@ func (m *Model) doAssign(app *lockedApp) {
 	}
 	where := m.where(t.repo, t.number)
 	if !t.isIssue {
-		app.Notice(fmt.Sprintf("%s is a pull request — s assigns issues; L labels and H hands either to the agent", where))
+		app.Notice(fmt.Sprintf("%s is a pull request — S assigns issues; L labels and H hands either to the agent", where))
 		return
 	}
 	if m.writeRefused(app, t.repo, "assigning "+where) {
@@ -264,6 +264,12 @@ func (m *Model) doIssueState(app *lockedApp) {
 		case 1:
 			state, reason, did = "closed", "not_planned", "closed %s as not planned"
 		default:
+			app.Notice("close cancelled")
+			return
+		}
+		// the pick answers which close; a y/N says whether, so a stray
+		// Enter after Z never closes an issue
+		if !app.Confirm(fmt.Sprintf("close %s as %s, as %s?", where, strings.ReplaceAll(reason, "_", " "), m.me)) {
 			app.Notice("close cancelled")
 			return
 		}

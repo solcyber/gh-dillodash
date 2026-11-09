@@ -181,7 +181,7 @@ Everything an approver does on a night of manual releases happens in
 dillodash, with no GitHub page and no CLI. `gh dillodash --demo-night`
 replays one offline; these shots are its steps.
 
-![A release night after the freeze: the approved release the window bumped says a: release NOW, the migration holds its slot nine minutes into the window](../shots/night-1-bumped.png)
+![A release night after the freeze: the approved release the window bumped says A: release NOW, the migration holds its slot nine minutes into the window](../shots/night-1-bumped.png)
 
 - **`a` on a release row** in the list is the detail's `a`: no need to
   open it first. A release the freeze bumped keeps its approval, so `a`

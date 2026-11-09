@@ -88,7 +88,7 @@ const (
 	runLogs        = "read a job's log in $PAGER"
 )
 
-// runActions is what x offers on a run in its state.
+// runActions is what X offers on a run in its state (the log is x's).
 func runActions(r model.WorkflowRun) []string {
 	var out []string
 	switch r.Status {
@@ -103,28 +103,55 @@ func runActions(r model.WorkflowRun) []string {
 	default: // queued, in_progress, requested, pending
 		out = append(out, runCancel)
 	}
-	return append(out, runLogs)
+	return out
 }
 
-// doRuns is the x key.
-func (m *Model) doRuns(app *lockedApp) {
+// runDispatch is X's entry for the config's listed workflows.
+const runDispatch = "run a listed workflow…"
+
+// doRuns is x (act false: read a job's log) and X (act true: re-run,
+// cancel or reject a run, or run a workflow the config lists).
+func (m *Model) doRuns(app *lockedApp, act bool) {
 	targets := m.runTargets(app)
+	dispatch := act && m.hasDispatches()
 	if len(targets) == 0 {
-		app.Notice("x acts on Actions runs: select or open a PR, a release or a waiting run that has some")
+		switch {
+		case dispatch:
+			m.doDispatch(app)
+		case act:
+			app.Notice("X acts on Actions runs: select or open a PR, a release or a waiting run that has some")
+		default:
+			app.Notice("x reads Actions runs: select or open a PR, a release or a waiting run that has some")
+		}
 		return
 	}
+	labels := make([]string, len(targets))
+	for i, tt := range targets {
+		labels[i] = runLabel(tt)
+	}
+	if dispatch {
+		labels = append(labels, runDispatch)
+	}
 	t := targets[0]
-	if len(targets) > 1 {
-		labels := make([]string, len(targets))
-		for i, tt := range targets {
-			labels[i] = runLabel(tt)
+	if len(labels) > 1 {
+		title := "which run's log?"
+		if act {
+			title = "act on which run?"
 		}
-		i := app.Pick("which run?", labels)
-		if i < 0 || i >= len(targets) {
+		i := app.Pick(title, labels)
+		if i < 0 || i >= len(labels) {
 			app.Notice("cancelled")
 			return
 		}
+		if i == len(targets) {
+			m.doDispatch(app)
+			return
+		}
 		t = targets[i]
+	}
+	if !act {
+		m.runLogs(app, t)
+		return
 	}
 	acts := runActions(t.Run)
 	i := app.Pick(runLabel(t), acts)
@@ -133,11 +160,6 @@ func (m *Model) doRuns(app *lockedApp) {
 		return
 	}
 	what := fmt.Sprintf("run %d (%s) in %s", t.Run.ID, text.OrQ(t.Run.Name), t.Repo)
-	switch acts[i] {
-	case runLogs:
-		m.runLogs(app, t)
-		return
-	}
 	if m.writeRefused(app, t.Repo, acts[i]+" of "+what) {
 		return
 	}

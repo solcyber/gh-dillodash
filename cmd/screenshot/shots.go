@@ -40,9 +40,9 @@ var shots = []shot{
 	{Name: "filter", Steps: []string{"/", "infra"}},
 	{Name: "goto", Steps: []string{":", "91"}},
 	{Name: "terraform-approve", Steps: []string{"j", "j", "enter"}, Expect: []string{"infra#41", "plans"}},
-	{Name: "terraform-approve-menu", Steps: []string{"j", "j", "enter", "a"}, Expect: []string{"for which plan"}},
-	{Name: "approve-menu", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "a"}, Expect: []string{"web-portal#91", "release NOW"}},
-	{Name: "release-now-prompt", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "a", "2", "the referral fix is holding up signups"}, Expect: []string{"web-portal#91", "/release-now"}},
+	{Name: "terraform-approve-menu", Steps: []string{"j", "j", "enter", "A"}, Expect: []string{"for which plan"}},
+	{Name: "approve-menu", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "A"}, Expect: []string{"web-portal#91", "release NOW"}},
+	{Name: "release-now-prompt", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "A", "2", "the referral fix is holding up signups"}, Expect: []string{"web-portal#91", "/release-now"}},
 	{Name: "release-rail", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"deploying 2/3"}},
 	{Name: "release-card", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "enter"}, Expect: []string{"web-portal#90", "T+"}},
 	{Name: "release-launch", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"},
@@ -51,7 +51,7 @@ var shots = []shot{
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 2.05}}}},
 	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j"}, Expect: []string{"waiting approvals", "approve: prod"}},
 	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
-	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "p"}, Expect: []string{"#910 on stage", "go/910"}},
+	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "P"}, Expect: []string{"#910 on stage", "go/910"}},
 	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy run 7101"}},
 	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},
@@ -62,7 +62,7 @@ var shots = []shot{
 	// a manual release night (--demo-night), each shot one step further:
 	// the first refresh after the splash brings the manifest in (r), the
 	// bumped release is the last row (G)
-	{Name: "night-1-bumped", Night: true, Steps: nightSteps(1), Expect: []string{"#212", "bumped — a: release NOW", "scheduled 16:09"}},
+	{Name: "night-1-bumped", Night: true, Steps: nightSteps(1), Expect: []string{"#212", "bumped — A: release NOW", "scheduled 16:09"}},
 	{Name: "night-2-now", Night: true, Steps: nightSteps(2), Expect: []string{"already approved by you", "release NOW (/release-now)"}},
 	{Name: "night-3-released", Night: true, Steps: nightSteps(3), Expect: []string{"web-portal#212 released", "next in lane: db-migrations#64"}},
 	{Name: "night-4-cancel", Night: true, Steps: nightSteps(4), Expect: []string{"16:09 slot on manifest #20", "/window-cancel rel:db-migrations#64"}},
@@ -72,7 +72,7 @@ var shots = []shot{
 	// it; W steps out of the room to the plain dashboard
 	{Name: "room", Night: true, Cols: 160, Rows: 48, Steps: nightSteps(1), Expect: []string{"back to work", "#212"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 1.3}},
-	{Name: "room-off", Night: true, Cols: 160, Rows: 48, Steps: append(nightSteps(1), "W"), Expect: []string{"#212", "steps back into the room"}},
+	{Name: "room-off", Night: true, Cols: 160, Rows: 48, Steps: append(nightSteps(1), "w"), Expect: []string{"#212", "steps back into the room"}},
 	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
 	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
 	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},
@@ -115,9 +115,9 @@ func (s shot) glyphSet() string {
 func nightSteps(n int) []string {
 	steps := [][]string{
 		{"G"}, // the bumped release, approved: tonight's slots show from the first refresh
-		{"a"}, // release NOW only: the approval stands
+		{"A"}, // release NOW only: the approval stands
 		{"enter", "bumped from the window for time; the fix is waiting", "enter", "y", "r"}, // posted; released, next in lane
-		{"G", "a", "enter", "next in the lane after the portal release", "enter", "y"},      // NOW on the migration; its slot
+		{"G", "A", "enter", "next in the lane after the portal release", "enter", "y"},      // NOW on the migration; its slot
 		{"y", "D"},      // the slot cancelled; the migration waits on stg
 		{"y", "D", "y"}, // stg, then prod: released
 	}

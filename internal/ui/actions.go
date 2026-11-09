@@ -75,7 +75,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	pr, ok := d.(*model.PR)
 	if !ok {
 		if i, ok := d.(*model.Issue); ok {
-			app.Notice(fmt.Sprintf("%s is an issue — nothing to approve; c comments, t tags someone", m.where(m.repoOf(i), i.Number)))
+			app.Notice(fmt.Sprintf("%s is an issue — nothing to approve; C comments, T tags someone", m.where(m.repoOf(i), i.Number)))
 		}
 		return
 	}
@@ -154,6 +154,18 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 		return
 	}
 	var body string
+	if !useEditor && seed == "" {
+		// one line here; Enter on an empty line opens $EDITOR for more
+		t, ok := app.Prompt(fmt.Sprintf("comment on %s as %s (Enter posts; Enter on an empty line opens $EDITOR; Esc cancels):", where, m.me), workflow.PromptOpts{})
+		if !ok {
+			app.Notice("comment cancelled")
+			return
+		}
+		if strings.TrimSpace(t) == "" {
+			useEditor = true
+		}
+		body = t
+	}
 	if useEditor || seed != "" {
 		argv, err := external.EditorCommand()
 		if err != nil {
@@ -176,13 +188,6 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 			return
 		}
 		body = txt
-	} else {
-		t, ok := app.Prompt(fmt.Sprintf("comment on %s (Enter posts, Esc cancels):", where), workflow.PromptOpts{})
-		if !ok {
-			app.Notice("comment cancelled")
-			return
-		}
-		body = t
 	}
 	if strings.TrimSpace(body) == "" {
 		app.Notice("comment cancelled (empty)")
@@ -283,7 +288,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice(where + " is a draft")
 		return
 	case pr.ReviewDecision != "APPROVED" && !app.LocalApproved(pr):
-		app.Notice(where + " is not approved yet (a approves)")
+		app.Notice(where + " is not approved yet (A approves)")
 		return
 	case !mergeable[pr.MergeStateStatus]:
 		app.Notice(fmt.Sprintf("%s is not mergeable: GitHub says %s", where, strings.ToLower(pr.MergeStateStatus)))

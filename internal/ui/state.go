@@ -176,6 +176,7 @@ type Model struct {
 	hitsKey   string
 
 	overlay   string // "help" while ? is up
+	msgTitle  string // the message overlay's title ("" = last message)
 	modal     widgets.Modal
 	modalDone chan struct{}
 	users     map[model.Repo][]model.Actor
@@ -258,6 +259,9 @@ type Options struct {
 	Updater Updater
 	// Restore is where a restart left off (nil on a fresh start).
 	Restore *Restore
+	// WhatsNew, when set, opens over the dashboard once at start (the
+	// first run of a release that changes how it is used).
+	WhatsNew string
 }
 
 // New makes the model; Run starts it.
@@ -302,6 +306,9 @@ func New(ctx context.Context, o Options) *Model {
 	}
 	if o.Config.Display.Clock {
 		m.clockLoc = o.Config.Display.ClockLocal()
+	}
+	if o.WhatsNew != "" {
+		m.lastMsg, m.overlay, m.helpTop, m.msgTitle = o.WhatsNew, "message", 0, "what's new"
 	}
 	return m
 }

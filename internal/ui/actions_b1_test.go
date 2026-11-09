@@ -66,11 +66,11 @@ func TestRunsKey(t *testing.T) {
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return true }
 
 	pickRun(11, runRerunFailed)
-	h.key('x')
+	h.key('X')
 	pickRun(11, runRerunAll)
-	h.key('x')
+	h.key('X')
 	pickRun(12, runCancel)
-	h.key('x')
+	h.key('X')
 	got := h.gh.RunActions
 	if len(got) != 3 || got[0].Op != "rerun_failed" || got[0].RunID != 11 || got[1].Op != "rerun" || got[2].Op != "cancel_run" || got[2].RunID != 12 {
 		t.Fatalf("run actions: %+v (status %q)", got, h.m.status)
@@ -82,7 +82,7 @@ func TestRunsKey(t *testing.T) {
 	// reject: its own prompt and confirm; never an approval
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "wrong cut", true }
 	pickRun(13, runReject)
-	h.key('x')
+	h.key('X')
 	if r := h.gh.CallsFor("reject_deployments"); len(r) != 1 || r[0].RunID != 13 || r[0].EnvIDs[0] != 4 || r[0].Body != "wrong cut" {
 		t.Errorf("rejected prod of run 13: %+v (status %q)", r, h.m.status)
 	}
@@ -96,7 +96,7 @@ func TestRunsKey(t *testing.T) {
 	// a cancelled confirm sends nothing
 	h.m.tp.Confirm = func(string) bool { return false }
 	pickRun(12, runCancel)
-	h.key('x')
+	h.key('X')
 	if len(h.gh.RunActions) != 3 {
 		t.Errorf("a no sends nothing: %+v", h.gh.RunActions)
 	}
@@ -143,7 +143,7 @@ func TestDispatchKey(t *testing.T) {
 	}
 	h.m.tp.Pick = func(string, []string) int { t.Fatal("a menu with nothing listed"); return -1 }
 	h.key('X')
-	if !strings.Contains(h.m.status, "none is listed") || len(h.gh.Dispatches) != 0 {
+	if !strings.Contains(h.m.status, "X acts on Actions runs") || len(h.gh.Dispatches) != 0 {
 		t.Fatalf("nothing listed: %q", h.m.status)
 	}
 
@@ -233,7 +233,7 @@ func TestConfigStaleAndPull(t *testing.T) {
 		t.Fatalf("stale: %v %q", h.m.configStale(), h.m.configBanner())
 	}
 	h.m.tp.Confirm = func(string) bool { return true }
-	h.key('P')
+	h.key('U')
 	got, _ := os.ReadFile(path)
 	if !strings.Contains(string(got), "acme/web-portal") || !strings.HasPrefix(string(got), "# dillodash: pulled from acme/dashboard-config:config.toml @ ") {
 		t.Errorf("installed and stamped:\n%s", got)

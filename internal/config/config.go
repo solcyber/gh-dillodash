@@ -86,6 +86,9 @@ type AgentConfig struct {
 	// HandoffComment, when set, is posted with the label (the agent's
 	// first instruction, a note for the humans watching).
 	HandoffComment string
+	// Name is what the dashboard calls the agent ("hand #6 to <name>?");
+	// "" = "the agent".
+	Name string
 }
 
 // ReviewsConfig is [reviews].

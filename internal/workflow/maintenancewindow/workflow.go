@@ -585,8 +585,8 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 // Keys binds w in the list and the detail view.
 func (w *Workflow) Keys() []workflow.Key {
 	return []workflow.Key{
-		{View: "list", Ch: "w", Label: "window", Priority: 50, Handler: w.DoWindow},
-		{View: "detail", Ch: "w", Label: "window", Priority: 50, Handler: w.DoWindow},
+		{View: "list", Ch: "W", Label: "window", Priority: 50, Handler: w.DoWindow, Offer: w.offerWindow},
+		{View: "detail", Ch: "W", Label: "window", Priority: 50, Handler: w.DoWindow, Offer: w.offerWindow},
 	}
 }
 
@@ -768,9 +768,9 @@ func (w *Workflow) DoWindow(app workflow.App) {
 
 // ---- help, legend ----
 
-// HelpRows describes the w key.
+// HelpRows describes the W key.
 func (w *Workflow) HelpRows() [][2]string {
-	return [][2]string{{"window", fmt.Sprintf("w  %s, %s or %s on the night's manifest (list or a PR)",
+	return [][2]string{{"window", fmt.Sprintf("W  %s, %s or %s on the night's manifest (list or a PR)",
 		w.cfg.AttendCommand, w.cfg.ReleaseCommand, w.cfg.CancelCommand)}}
 }
 
@@ -786,4 +786,34 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	row = append(row, sp, text.S(glyphs.Ico("rev")+"revertible", "rev.ok"), sp,
 		text.S(glyphs.Ico("attend")+"attended night needed", "rev.attend"))
 	return [][]text.Seg{row, w.stripLegend()}
+}
+
+// offerWindow: W is offered where the window's commands are the next
+// step: on a row of the window's section (a queued PR, a night's
+// manifest), on a release or PR queued for a night, and on any row
+// while the release window is open. A night needs a manifest to post on.
+func (w *Workflow) offerWindow(f workflow.Focus) (string, bool) {
+	if f.State == nil {
+		return "", false
+	}
+	st, _ := f.State(Name).(*State)
+	if st == nil || len(st.Nights) == 0 {
+		return "", false
+	}
+	label := "window: /attend, /release"
+	if InReleaseWindow(f.Now, w.cfg) {
+		return label, true
+	}
+	if f.View == "list" && f.HasRow {
+		if f.Row.Kind == RowKind {
+			return label, true
+		}
+		if _, ok := f.Row.Meta[workflow.NightRow].(string); ok {
+			return label, true
+		}
+	}
+	if pr, ok := f.Item().(*model.PR); ok && pr != nil && IsQueued(pr, w.cfg) {
+		return label, true
+	}
+	return "", false
 }

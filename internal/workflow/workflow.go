@@ -87,12 +87,51 @@ type RowKind struct {
 // Key is a key binding a workflow adds.
 type Key struct {
 	View     string // "list" | "detail" | "issue" | "any"
-	Ch       string // the key, e.g. "w", "M", "D"
+	Ch       string // the key, e.g. "W", "M", "D": a key that acts is a capital
 	Label    string // key-bar label
 	Priority int    // key-bar order; lower is kept longer when narrow
 	// Handler runs on the action goroutine: it may block on prompts and
 	// GitHub calls.
 	Handler func(app App)
+	// Offer, when set, says whether the key acts on the focus and what it
+	// would do there ("release NOW", "open the promotion PR"): the key
+	// bar shows the chip only then, under that label, and the hint line
+	// names it. nil: always offered, under Label.
+	Offer func(f Focus) (label string, ok bool)
+}
+
+// Focus is what the key bar knows when it is drawn: the view, the
+// selected list row or the open item, and the workflows' states. It is
+// read while the dashboard holds its lock, so an Offer reads it and
+// never calls back into the App.
+type Focus struct {
+	View   string // "list", "detail", "issue", ...
+	Row    Row    // the selected list row (HasRow)
+	HasRow bool
+	Detail any       // the open *model.PR or *model.Issue (detail views)
+	Listed *model.PR // the open PR's list row, when it has one
+	Me     string
+	Now    time.Time
+	State  func(name string) any // a workflow's last state (App.State)
+}
+
+// Item is the focus's PR or issue: the selected row's in the list, the
+// open one in a detail view.
+func (f Focus) Item() any {
+	if f.View == "list" {
+		if f.HasRow {
+			return f.Row.Item
+		}
+		return nil
+	}
+	return f.Detail
+}
+
+// ApproveOfferer is a workflow that takes over A on the focused PR and
+// says what A will post there ("/approve plan-set", "release NOW"); ok
+// false leaves A to the next workflow, then to a plain review.
+type ApproveOfferer interface {
+	ApproveOffer(f Focus) (label string, ok bool)
 }
 
 // InlinePattern is a markdown inline highlighter: a regexp matched

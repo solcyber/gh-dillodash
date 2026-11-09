@@ -36,7 +36,7 @@ func short(sha string) string {
 func (w *Workflow) doPromote(app workflow.App) {
 	c, ok := selected(app)
 	if !ok {
-		app.Notice("p promotes a change: select a row in the promote section")
+		app.Notice("P promotes a change: select a row in the promote section")
 		return
 	}
 	what := fmt.Sprintf("promoting %s #%d", c.Repo.Name, c.Number())
@@ -322,7 +322,7 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		app.Fail(fmt.Sprintf("GitHub did not merge #%d: %s", n, text.OrQ(res.Message)))
 		return
 	}
-	app.OK(fmt.Sprintf("merged #%d into %s — once its deploy is green, p tags it go", n, w.cfg.Stage()))
+	app.OK(fmt.Sprintf("merged #%d into %s — once its deploy is green, P tags it go", n, w.cfg.Stage()))
 	app.Celebrate(false)
 	app.Refresh(true)
 }
@@ -428,7 +428,7 @@ func (w *Workflow) releaseNote(app workflow.App, c *Change) string {
 		}
 		sort.Slice(open, func(i, j int) bool { return open[i].Number < open[j].Number })
 		if len(open) > 0 {
-			return fmt.Sprintf("release PR #%d into %s is open (a approves it there)", open[0].Number, w.cfg.Prod())
+			return fmt.Sprintf("release PR #%d into %s is open (A approves it there)", open[0].Number, w.cfg.Prod())
 		}
 	}
 	return "it rides the next release cut into " + w.cfg.Prod()
