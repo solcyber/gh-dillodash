@@ -409,7 +409,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		return
 	}
 	m.mu.Lock()
-	pr.Set("deploy", st)
+	pr.SetShared("deploy", st) // the release workflow's refresh may be cloning this row
 	m.detailVer++
 	m.mu.Unlock()
 	var mine []deploys.Wait

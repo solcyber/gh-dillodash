@@ -76,3 +76,43 @@ func TestRefreshInterval(t *testing.T) {
 		t.Error("RefreshInterval")
 	}
 }
+
+// TestStuckIsIdleNotAge: a run that waited a night for an approval and
+// started a minute ago is running, not stuck; a re-run's age is its own.
+func TestStuckIsIdleNotAge(t *testing.T) {
+	now := time.Date(2026, 11, 9, 14, 0, 0, 0, time.UTC)
+	run := model.WorkflowRun{ID: 1, Name: "deploy", Status: "in_progress",
+		CreatedAt: now.Add(-9 * time.Hour), UpdatedAt: now.Add(-time.Minute)}
+	if st := ComputeWith([]model.WorkflowRun{run}, nil, now, 0); st.Phase != "running" {
+		t.Errorf("approved a minute ago: phase %q (%s), want running", st.Phase, st.Text)
+	}
+	run.UpdatedAt = now.Add(-2 * time.Hour)
+	if st := ComputeWith([]model.WorkflowRun{run}, nil, now, 0); st.Phase != "stuck" {
+		t.Errorf("no change for 2h: phase %q, want stuck", st.Phase)
+	}
+	run.RunStartedAt, run.UpdatedAt = now.Add(-5*time.Minute), time.Time{}
+	if st := ComputeWith([]model.WorkflowRun{run}, nil, now, 0); st.Phase != "running" {
+		t.Errorf("a re-run started 5m ago: phase %q, want running", st.Phase)
+	}
+}
+
+// TestFailedRunDoesNotEndARunningDeploy: a failed lint on the merge
+// commit next to a running deploy reads deploying; code scanning's own
+// runs are not deploys at all.
+func TestFailedRunDoesNotEndARunningDeploy(t *testing.T) {
+	now := time.Date(2026, 11, 9, 14, 0, 0, 0, time.UTC)
+	runs := []model.WorkflowRun{
+		{ID: 1, Name: "deploy", Status: "in_progress", CreatedAt: now.Add(-3 * time.Minute)},
+		{ID: 2, Name: "lint", Status: "completed", Conclusion: "failure", CreatedAt: now.Add(-3 * time.Minute)},
+	}
+	if st := ComputeWith(runs, nil, now, 0); st.Phase != "running" || st.Text != "deploying · a run failed" {
+		t.Errorf("phase %q text %q", st.Phase, st.Text)
+	}
+	runs = []model.WorkflowRun{
+		{ID: 1, Name: "deploy", Status: "completed", Conclusion: "success", CreatedAt: now.Add(-3 * time.Minute)},
+		{ID: 3, Name: "CodeQL", Event: "dynamic", Status: "completed", Conclusion: "failure", CreatedAt: now.Add(-3 * time.Minute)},
+	}
+	if st := ComputeWith(runs, nil, now, 0); st.Phase != "done" {
+		t.Errorf("a dynamic run failed: phase %q, want done", st.Phase)
+	}
+}

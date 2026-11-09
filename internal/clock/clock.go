@@ -107,6 +107,12 @@ func (l *Local) Today(now time.Time) time.Time {
 // override the abbreviation in force at Now() is used.
 func (l *Local) T(hm HM) string { return hm.String() + " " + l.LabelAt(Now()) }
 
+// TOn writes hm on day's date with the label in force then: 23:00 on
+// the Sunday after a fall-back reads EST even while today reads EDT.
+func (l *Local) TOn(day time.Time, hm HM) string {
+	return hm.String() + " " + l.LabelAt(l.WallToUTC(day, hm))
+}
+
 // TAt writes an instant's local wall clock with its label: "23:04 ET".
 func (l *Local) TAt(t time.Time) string {
 	lt := t.In(l.Loc)

@@ -420,6 +420,9 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		if info.Archived {
 			continue
 		}
+		if info.Unlisted > 0 {
+			warns = append(warns, fmt.Sprintf("%s: %d more open PRs into %s than one read lists (the oldest-updated are not shown)", repo.Name, info.Unlisted, w.cfg.ProductionBranch))
+		}
 		var rows []*model.PR
 		for _, pr := range info.PRs {
 			if pr.State == "MERGED" && !MergedRecently(pr, now, w.keep()) {

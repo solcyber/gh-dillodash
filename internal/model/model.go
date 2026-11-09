@@ -286,6 +286,20 @@ func (p *PR) Get(key string) any {
 	return p.Ext[key]
 }
 
+// SetShared writes an annotation on a PR other goroutines may be reading
+// (a row on screen, a workflow's last-good copy): it swaps in a new map
+// rather than writing the shared one, since a Go map written while it
+// is read aborts the process. The caller holds the lock that guards the
+// PR value itself.
+func (p *PR) SetShared(key string, v any) {
+	ext := make(map[string]any, len(p.Ext)+1)
+	for k, x := range p.Ext {
+		ext[k] = x
+	}
+	ext[key] = v
+	p.Ext = ext
+}
+
 // Set writes a workflow annotation.
 func (p *PR) Set(key string, v any) {
 	if p.Ext == nil {
@@ -355,8 +369,11 @@ type WorkflowRun struct {
 	HTMLURL    string    `json:"html_url"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
-	RunAttempt int       `json:"run_attempt"`
-	Event      string    `json:"event"`
+	// RunStartedAt is when the latest attempt started (a re-run resets
+	// it; CreatedAt keeps the first attempt's time).
+	RunStartedAt time.Time `json:"run_started_at"`
+	RunAttempt   int       `json:"run_attempt"`
+	Event        string    `json:"event"`
 	// DisplayTitle is the run's title as the Actions page shows it (a
 	// workflow's run-name, else the commit headline).
 	DisplayTitle string `json:"display_title"`

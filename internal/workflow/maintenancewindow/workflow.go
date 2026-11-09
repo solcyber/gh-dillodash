@@ -199,6 +199,26 @@ func (w *Workflow) AfterApply(app workflow.App) {
 	w.relQueued.Store(want)
 }
 
+// markMine records the viewer's posted command on night without writing
+// the State the UI is drawing: a copy with the new night goes back
+// through SetState, which takes the app's lock.
+func (w *Workflow) markMine(app workflow.App, night, cmd string) {
+	old := w.state(app)
+	n, ok := old.Nights[night]
+	if !ok || n == nil {
+		return
+	}
+	nn := *n
+	nn.Mine.set(cmd, StatePosted)
+	st := *old
+	st.Nights = make(map[string]*Night, len(old.Nights))
+	for k, v := range old.Nights {
+		st.Nights[k] = v
+	}
+	st.Nights[night] = &nn
+	app.SetState(Name, &st)
+}
+
 func (w *Workflow) state(app workflow.App) *State {
 	st, _ := app.State(Name).(*State)
 	if st == nil {
@@ -732,7 +752,7 @@ func (w *Workflow) DoWindow(app workflow.App) {
 		return
 	}
 	if c.name != CmdCancel {
-		info.Mine.set(c.name, StatePosted)
+		w.markMine(app, night, c.name)
 	}
 	app.OK(fmt.Sprintf("posted %s on #%d; the conductor replies there within a minute", c.text, info.Issue))
 	if c.name == CmdRelease {

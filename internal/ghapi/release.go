@@ -98,6 +98,9 @@ func (c *GitHub) releaseRepo(ctx context.Context, repo model.Repo, prod, stage s
 		return ReleaseRepo{Err: err}, nil
 	}
 	rr := ReleaseRepo{Name: node.NameWithOwner, Archived: node.IsArchived}
+	if n := node.Open.TotalCount - len(node.Open.Nodes); n > 0 {
+		rr.Unlisted = n
+	}
 	if node.Prod != nil {
 		rr.ProdOid = node.Prod.Target.Oid
 	}

@@ -114,13 +114,23 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	phases := map[string]bool{}
 	var stuckFor time.Duration
 	for _, r := range sorted {
+		if r.Event == "dynamic" {
+			// GitHub's own runs (code scanning default setup, Dependabot)
+			// ride the merge commit but deploy nothing
+			continue
+		}
 		name := r.Name
 		if name == "" {
 			name = "?"
 		}
-		age := time.Duration(0)
-		if !r.CreatedAt.IsZero() {
-			age = now.Sub(r.CreatedAt)
+		// age is this attempt's (a re-run resets it); idle is the time
+		// since the run last changed, so a run that waited a night for
+		// an approval and started a minute ago is not "stuck"
+		start := latest(r.CreatedAt, r.RunStartedAt)
+		age, idle := time.Duration(0), time.Duration(0)
+		if !start.IsZero() {
+			age = now.Sub(start)
+			idle = now.Sub(latest(start, r.UpdatedAt))
 		}
 		switch {
 		case r.Status == "waiting":
@@ -141,10 +151,10 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 			st.Runs = append(st.Runs, Row{name, what, "chip.await", r.ID})
 		case r.Status == "queued" || r.Status == "in_progress" || r.Status == "requested" || r.Status == "pending":
 			status := strings.ReplaceAll(r.Status, "_", " ")
-			if age > stuckAfter {
+			if idle > stuckAfter {
 				phases["stuck"] = true
-				if age > stuckFor {
-					stuckFor = age
+				if idle > stuckFor {
+					stuckFor = idle
 				}
 				st.Runs = append(st.Runs, Row{name, fmt.Sprintf("%s %s - stuck?", status, FmtSecs(age)), Chip["stuck"], r.ID})
 			} else {
@@ -177,12 +187,21 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 		} else {
 			st.Text = "waits: " + strings.Join(st.Envs(), ", ")
 		}
-	case phases["failed"]:
-		st.Phase, st.Text = "failed", "deploy failed"
 	case phases["stuck"]:
 		st.Phase, st.Text = "stuck", "stuck? "+FmtSecs(stuckFor)
+		if phases["failed"] {
+			st.Text += " · a run failed"
+		}
 	case phases["running"]:
+		// a run still going outranks a failed one: the release is not
+		// over (a failed lint on the merge commit must not read as a
+		// failed release while the deploy runs); the text says both
 		st.Phase, st.Text = "running", "deploying"
+		if phases["failed"] {
+			st.Text = "deploying · a run failed"
+		}
+	case phases["failed"]:
+		st.Phase, st.Text = "failed", "deploy failed"
 	case phases["done"]:
 		st.Phase, st.Text = "done", "deployed"
 	case phases["cancelled"]:
@@ -289,4 +308,12 @@ func TokenHint(err error, perm string, repo model.Repo) string {
 		return fmt.Sprintf(" - your token needs %s: Read and write on %s", perm, repo.Name)
 	}
 	return ""
+}
+
+// latest is the later of two times (a zero time loses).
+func latest(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
