@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -139,18 +140,29 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.R
 			st.Manifests = ParseManifests(labelled, w.cfg)
 		}
 	}
-	for _, p := range queued {
-		comments, err := gh.PRComments(ctx, p.Repo, p.Number)
-		if err != nil {
+	// the queued PRs' comments side by side, read in list order
+	comments := make([][]model.Comment, len(queued))
+	errs := make([]error, len(queued))
+	var wg sync.WaitGroup
+	for i, p := range queued {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			comments[i], errs[i] = gh.PRComments(ctx, p.Repo, p.Number)
+		}()
+	}
+	wg.Wait()
+	for i, p := range queued {
+		if err := errs[i]; err != nil {
 			if ghapi.IsRateLimit(err) {
 				return st, warns, err
 			}
 			warns = append(warns, fmt.Sprintf("maintenance window: %s#%d comments not read: %s", p.Repo.Name, p.Number, err))
 			continue
 		}
-		marker := ParseMarker(comments, w.cfg)
-		fate := QueuedPlanState(marker, comments, p, w.ta)
-		st.infos[p.Ident()] = &Info{Marker: marker, Stack: LatestPlanStack(comments, marker),
+		marker := ParseMarker(comments[i], w.cfg)
+		fate := QueuedPlanState(marker, comments[i], p, w.ta)
+		st.infos[p.Ident()] = &Info{Marker: marker, Stack: LatestPlanStack(comments[i], marker),
 			Stale: fate != FateQueued, Reapprove: fate == FateReplanned}
 	}
 	return st, warns, nil
