@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -125,26 +126,117 @@ func (s *Set) Names() []string {
 // Empty reports no workflows.
 func (s *Set) Empty() bool { return s == nil || len(s.Items) == 0 }
 
-// RefreshAll runs every workflow's Refresh; states keyed by name. The
-// first rate limit a workflow meets is returned and the workflows after
-// it are skipped (they would only hit the same wall); the states
-// gathered so far still come back.
-func (s *Set) RefreshAll(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (map[string]State, []string, error) {
-	states := map[string]State{}
-	var warns []string
+// ListFree is a workflow whose Refresh reads neither the listed PRs
+// nor the issues (it reads its own repos): the refresh starts it beside
+// the list reads instead of after them.
+type ListFree interface{ ListFree() bool }
+
+// Refreshing is a set refresh in flight: Start set off the list-free
+// workflows, Finish runs the rest and gathers everything.
+type Refreshing struct {
+	s      *Set
+	ctx    context.Context
+	cancel context.CancelFunc
+	gh     ghapi.Client
+	repos  []model.Repo
+	runs   []*wfRun // by Items index; nil until started
+	// limited is set by the first workflow to meet a rate limit: the
+	// others are cancelled, and a workflow that ends after it gives no
+	// state (it would only show the wall), as one skipped would
+	limited atomic.Bool
+}
+
+type wfRun struct {
+	done  chan struct{}
+	st    State
+	warns []string
+	err   error
+	late  bool // ended after another workflow met a rate limit
+}
+
+// Start sets off the list-free workflows (ListFree); the others wait for
+// Finish, which needs the list.
+func (s *Set) Start(ctx context.Context, gh ghapi.Client, repos []model.Repo) *Refreshing {
+	r := &Refreshing{s: s, gh: gh, repos: repos}
+	r.ctx, r.cancel = context.WithCancel(ctx)
 	if s == nil {
-		return states, nil, nil
+		return r
 	}
-	for _, w := range s.Items {
-		st, ws, err := w.Refresh(ctx, gh, repos, prs, issues)
-		states[w.Name()] = st
-		warns = append(warns, ws...)
-		w.Annotate(prs, issues, st)
-		if err != nil {
-			return states, warns, err
+	r.runs = make([]*wfRun, len(s.Items))
+	for i, w := range s.Items {
+		if lf, ok := w.(ListFree); ok && lf.ListFree() {
+			r.runs[i] = r.start(w, nil, nil)
 		}
 	}
-	return states, warns, nil
+	return r
+}
+
+func (r *Refreshing) start(w Workflow, prs []*model.PR, issues []*model.Issue) *wfRun {
+	run := &wfRun{done: make(chan struct{})}
+	go func() {
+		defer close(run.done)
+		run.st, run.warns, run.err = w.Refresh(r.ctx, r.gh, r.repos, prs, issues)
+		if ghapi.IsRateLimit(run.err) {
+			if r.limited.CompareAndSwap(false, true) {
+				r.cancel()
+				return
+			}
+		}
+		run.late = r.limited.Load()
+	}()
+	return run
+}
+
+// Abort ends a refresh that will not reach Finish (the list failed):
+// the started workflows are cancelled and waited for, so the next
+// refresh never runs a workflow's Refresh beside a stale one.
+func (r *Refreshing) Abort() {
+	r.cancel()
+	for _, run := range r.runs {
+		if run != nil {
+			<-run.done
+		}
+	}
+}
+
+// Finish runs the workflows Start left (side by side, with the list),
+// waits for all of them, and annotates in workflow order, one at a time
+// (Annotate writes the PRs' Ext maps). States are keyed by name; the
+// first rate limit met is returned, and a workflow that ended after it
+// has no state (the last one stays on screen).
+func (r *Refreshing) Finish(prs []*model.PR, issues []*model.Issue) (map[string]State, []string, error) {
+	defer r.cancel()
+	states := map[string]State{}
+	if r.s == nil {
+		return states, nil, nil
+	}
+	for i, w := range r.s.Items {
+		if r.runs[i] == nil {
+			r.runs[i] = r.start(w, prs, issues)
+		}
+	}
+	var warns []string
+	var limit error
+	for i, w := range r.s.Items {
+		run := r.runs[i]
+		<-run.done
+		if run.late && !ghapi.IsRateLimit(run.err) {
+			continue
+		}
+		states[w.Name()] = run.st
+		warns = append(warns, run.warns...)
+		w.Annotate(prs, issues, run.st)
+		if run.err != nil && limit == nil {
+			limit = run.err
+		}
+	}
+	return states, warns, limit
+}
+
+// RefreshAll runs every workflow's Refresh side by side (Start, then
+// Finish): states keyed by name, the first rate limit returned.
+func (s *Set) RefreshAll(ctx context.Context, gh ghapi.Client, repos []model.Repo, prs []*model.PR, issues []*model.Issue) (map[string]State, []string, error) {
+	return s.Start(ctx, gh, repos).Finish(prs, issues)
 }
 
 // CIPRs collects the PRs the workflow states contribute to the core's CI

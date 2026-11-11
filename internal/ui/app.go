@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -206,6 +207,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.restartNow()
 		}
 		return m, m.tick()
+	case refreshListMsg:
+		m.applyList(msg)
 	case refreshDoneMsg:
 		m.applyRefresh(msg.out)
 	case pollDoneMsg:
@@ -312,6 +315,11 @@ func (m *Model) overlayKey(k widgets.Key) {
 	}
 }
 
+// workflowsLoading is the notice for a key that acts while the first
+// load shows only the list: a workflow may own the key, and it has not
+// read its state yet.
+const workflowsLoading = "still reading the workflows — press it again in a moment"
+
 func isEnter(k widgets.Key) bool { return k.Name == "enter" }
 func isEsc(k widgets.Key) bool   { return k.Name == "esc" }
 
@@ -361,9 +369,17 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	page := max(1, m.layoutH()-4)
 	app := &lockedApp{m}
 	if b := lookup(view, k); b != nil && b.Do != nil {
+		if b.Acts && m.listOnly && k.Rune != 'U' {
+			m.notice(workflowsLoading)
+			return nil
+		}
 		return b.Do(m, k, page, app)
 	}
 	if wk, ok := m.wf.Key(view, string(k.Rune)); ok && k.Rune != 0 {
+		if m.listOnly && unicode.IsUpper(k.Rune) {
+			m.notice(workflowsLoading) // a capital acts
+			return nil
+		}
 		m.runAction(func() { wk.Handler(app) })
 		return nil
 	}

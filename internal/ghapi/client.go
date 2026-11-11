@@ -286,6 +286,10 @@ type GitHub struct {
 	restBase    string // with trailing slash
 	graphqlURL  string
 	lastRate    atomic.Pointer[model.RateLimit]
+	// slots caps the requests in flight (maxInFlight); nil: no cap
+	slots chan struct{}
+	// etags remembers REST GETs for conditional requests
+	etags etagCache
 }
 
 var _ Client = (*GitHub)(nil)
@@ -341,6 +345,7 @@ func New(opts Options) (*GitHub, error) {
 		http:        hc,
 		restBase:    restBase(host),
 		graphqlURL:  graphQLURL(host),
+		slots:       make(chan struct{}, maxInFlight),
 	}
 	if opts.BaseURL != "" {
 		base := strings.TrimRight(opts.BaseURL, "/")
@@ -422,6 +427,10 @@ func (c *GitHub) doH(ctx context.Context, method, rawURL string, payload any, ac
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
+	if err := c.acquire(ctx); err != nil {
+		return nil, nil, &Error{Method: method, URL: rawURL, Message: "network error: " + netErrorText(err)}
+	}
+	defer c.release()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, nil, &Error{Method: method, URL: rawURL, Message: "network error: " + netErrorText(err)}
@@ -480,7 +489,14 @@ func netErrorText(err error) string {
 // (nil to discard). An empty body is fine when out is nil.
 func (c *GitHub) restJSON(ctx context.Context, method, path string, payload, out any) error {
 	rawURL := c.restURL(path)
-	body, _, err := c.do(ctx, method, rawURL, payload, acceptJSON)
+	var body []byte
+	var err error
+	if method == http.MethodGet && payload == nil {
+		// a read: shared within a refresh, conditional across them
+		body, err = c.getShared(ctx, rawURL, acceptJSON)
+	} else {
+		body, _, err = c.do(ctx, method, rawURL, payload, acceptJSON)
+	}
 	if err != nil {
 		return err
 	}

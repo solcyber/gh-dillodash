@@ -121,18 +121,25 @@ in a promotion PR, `D` says that its checks are on the PR.
 
 Each refresh, for each repo, costs:
 
-- **One GraphQL request** of four searches: PRs merged into the first
+- **Four GraphQL searches**, sent side by side: PRs merged into the first
   tier since `lookback_days`, PRs merged into staging and into production
-  since then, and open PRs into staging. A search that hits its page of
-  50 is a warning. A first-tier change that no staging PR carried but a
-  production PR names (`#N`: a hotfix cherry-picked straight to
-  production) counts as released and is not listed.
+  since then, and open PRs into staging. Each reads 100 a page, up to 200;
+  a search with more is a warning. A first-tier change that no staging PR
+  carried but a production PR names (`#N`: a hotfix cherry-picked straight
+  to production) counts as released and is not listed.
 - **One compare** of production and staging.
-- **Two tag listings.**
+- **Two tag listings.** The compare and the tags are shared with the
+  releases workflow within one refresh, and sent with the last ETag: an
+  unchanged answer costs no rate limit.
 - **The runs on each listed change's tier commit.** A commit whose runs
   have all finished is read once, then cached.
 - **An ancestry compare** for each first-tier PR that only a whole-tier
-  promotion can carry, once per pair (the answer never changes).
+  promotion can carry, once per pair (the answer never changes), all of a
+  refresh's new pairs at once.
+
+The repos are read side by side, and the workflow starts beside the
+dashboard's list rather than after it. A shorter `lookback_days` means
+fewer search pages.
 
 A repo that can't be read keeps its last rows, with a warning. A rate
 limit pauses the workflow with the rest of the dashboard.

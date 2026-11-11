@@ -203,16 +203,35 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 		st.Warnings = warns
 		return st, warns, err
 	}
-	for _, repo := range w.cfg.Repos {
-		runs, err := gh.RepoWaitingRuns(ctx, repo)
-		if err != nil {
+	// every repo's waiting runs side by side, then every run's pending
+	// environments side by side; warnings and items keep repo order
+	runsOf := make([][]model.WorkflowRun, len(w.cfg.Repos))
+	runErrs := make([]error, len(w.cfg.Repos))
+	var wg sync.WaitGroup
+	for i, repo := range w.cfg.Repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runsOf[i], runErrs[i] = gh.RepoWaitingRuns(ctx, repo)
+		}()
+	}
+	wg.Wait()
+	type want struct {
+		repo model.Repo
+		run  model.WorkflowRun
+		pend []model.PendingDeployment
+		err  error
+	}
+	var wants []*want
+	for i, repo := range w.cfg.Repos {
+		if err := runErrs[i]; err != nil {
 			if ghapi.IsRateLimit(err) {
 				return limited(err)
 			}
 			warns = append(warns, fmt.Sprintf("waiting runs in %s: %s%s", repo.Name, err, tokenHint(err, "Actions: Read", repo)))
 			continue
 		}
-		for _, r := range runs {
+		for _, r := range runsOf[i] {
 			if r.Status != "" && r.Status != "waiting" {
 				continue
 			}
@@ -221,17 +240,28 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 			if listed.covers(repo, r) {
 				continue
 			}
-			pend, err := gh.PendingDeployments(ctx, repo, r.ID)
-			if err != nil {
-				if ghapi.IsRateLimit(err) {
-					return limited(err)
-				}
-				// still listed: D reads the environments again anyway
-				warns = append(warns, fmt.Sprintf("waiting runs in %s: run %d's environments: %s%s", repo.Name, r.ID, err, tokenHint(err, "Actions: Read", repo)))
-			}
-			sort.SliceStable(pend, func(i, j int) bool { return envName(pend[i]) < envName(pend[j]) })
-			st.Items = append(st.Items, &Item{Repo: repo, Run: r, Pending: pend})
+			wants = append(wants, &want{repo: repo, run: r})
 		}
+	}
+	for _, x := range wants {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			x.pend, x.err = gh.PendingDeployments(ctx, x.repo, x.run.ID)
+		}()
+	}
+	wg.Wait()
+	for _, x := range wants {
+		repo, r, pend, err := x.repo, x.run, x.pend, x.err
+		if err != nil {
+			if ghapi.IsRateLimit(err) {
+				return limited(err)
+			}
+			// still listed: D reads the environments again anyway
+			warns = append(warns, fmt.Sprintf("waiting runs in %s: run %d's environments: %s%s", repo.Name, r.ID, err, tokenHint(err, "Actions: Read", repo)))
+		}
+		sort.SliceStable(pend, func(i, j int) bool { return envName(pend[i]) < envName(pend[j]) })
+		st.Items = append(st.Items, &Item{Repo: repo, Run: r, Pending: pend})
 	}
 	sortItems(st.Items)
 	st.Warnings = warns

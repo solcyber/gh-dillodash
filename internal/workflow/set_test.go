@@ -197,3 +197,117 @@ func TestPollersAggregate(t *testing.T) {
 		t.Error("RowKind.Live")
 	}
 }
+
+// timed is a workflow whose Refresh reports when it ran and what list
+// it was handed; free makes it ListFree.
+type timed struct {
+	Base
+	name      string
+	free      bool
+	started   chan struct{}
+	release   chan struct{} // nil: return at once
+	err       error
+	gotPRs    int
+	annotated *[]string
+}
+
+func (w *timed) Name() string   { return w.name }
+func (w *timed) ListFree() bool { return w.free }
+func (w *timed) Refresh(ctx context.Context, _ ghapi.Client, _ []model.Repo, prs []*model.PR, _ []*model.Issue) (State, []string, error) {
+	w.gotPRs = len(prs)
+	close(w.started)
+	if w.release != nil {
+		select {
+		case <-w.release:
+		case <-ctx.Done():
+			return w.name + " cancelled", nil, nil
+		}
+	}
+	return w.name + " state", []string{w.name + " warn"}, w.err
+}
+func (w *timed) Annotate([]*model.PR, []*model.Issue, State) {
+	*w.annotated = append(*w.annotated, w.name)
+}
+
+// TestRefreshingStartsListFreeFirst: Start sets off only the list-free
+// workflows (they never see the list); Finish runs the rest with the
+// list, side by side, and annotates in workflow order.
+func TestRefreshingStartsListFreeFirst(t *testing.T) {
+	var annotated []string
+	free := &timed{name: "a", free: true, started: make(chan struct{}), release: make(chan struct{}), annotated: &annotated}
+	late := &timed{name: "b", started: make(chan struct{}), annotated: &annotated}
+	s, err := NewSet(nil, free, late)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := s.Start(context.Background(), nil, nil)
+	select {
+	case <-free.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the list-free workflow did not start before Finish")
+	}
+	select {
+	case <-late.started:
+		t.Fatal("a workflow that reads the list started before it was read")
+	default:
+	}
+	go func() { <-late.started; close(free.release) }() // b runs while a still waits
+	prs := []*model.PR{{Number: 1}, {Number: 2}}
+	states, warns, err := r.Finish(prs, nil)
+	if err != nil || states["a"] != "a state" || states["b"] != "b state" || len(warns) != 2 || warns[0] != "a warn" {
+		t.Fatalf("states %v warns %v err %v", states, warns, err)
+	}
+	if free.gotPRs != 0 || late.gotPRs != 2 {
+		t.Errorf("list handed: free %d late %d", free.gotPRs, late.gotPRs)
+	}
+	if strings.Join(annotated, ",") != "a,b" {
+		t.Errorf("annotate order %v", annotated)
+	}
+}
+
+// TestRefreshingRateLimit: the first rate limit is returned and cancels
+// the others; a workflow that ended after it gives no state, as one the
+// old serial loop skipped.
+func TestRefreshingRateLimit(t *testing.T) {
+	var annotated []string
+	limit := &ghapi.Error{Status: 403, Message: "API rate limit exceeded", RetryAt: time.Now().Add(time.Minute)}
+	slow := &timed{name: "a", free: true, started: make(chan struct{}), release: make(chan struct{}), annotated: &annotated}
+	walled := &timed{name: "b", started: make(chan struct{}), err: limit, annotated: &annotated}
+	s, err := NewSet(nil, slow, walled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, _, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
+	if !ghapi.IsRateLimit(err) {
+		t.Fatalf("err %v", err)
+	}
+	if _, ok := states["a"]; ok {
+		t.Errorf("the cancelled workflow kept a state: %v", states)
+	}
+	if states["b"] != "b state" {
+		t.Errorf("the walled workflow's state is lost: %v", states)
+	}
+}
+
+// TestRefreshingAbort: Abort cancels the list-free workflows and waits
+// for them, so no Refresh outlives its refresh.
+func TestRefreshingAbort(t *testing.T) {
+	var annotated []string
+	w := &timed{name: "a", free: true, started: make(chan struct{}), release: make(chan struct{}), annotated: &annotated}
+	s, err := NewSet(nil, w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := s.Start(context.Background(), nil, nil)
+	<-w.started
+	done := make(chan struct{})
+	go func() { r.Abort(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Abort did not end the running workflow")
+	}
+	if len(annotated) != 0 {
+		t.Errorf("an aborted refresh annotated: %v", annotated)
+	}
+}
