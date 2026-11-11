@@ -142,7 +142,12 @@ type Model struct {
 	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
 	ci              *ghapi.CIFallback
 	ahead           *aheadCache // commits a head is ahead of a stale approval
-	ciClusters      map[model.Ident]model.CICluster
+	// listOnly: the first load's list is on screen but the rest of that
+	// refresh (workflows, CI) has not landed; the keys that act wait
+	listOnly bool
+	// sigQuiet: the next noteDeltas takes the baseline without effects
+	sigQuiet   bool
+	ciClusters map[model.Ident]model.CICluster
 
 	approvedByMe map[model.Ident]string // ident -> head SHA at the time
 
