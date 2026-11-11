@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.1.0]
+
+**A faster refresh.** Measured on one real configuration (five workflows,
+five repos), a refresh that took 70 s cold and 39 s warm now takes about
+10 s and 6 s, and the first list shows in about 3 s.
+
+### Changed
+
+- **Reads run side by side.** The list, your review requests and the open
+  first-tier PRs are read at once. Workflows that read their own repos
+  (promote, releases) start beside the list; the others run together once
+  it lands. Inside each workflow, repos and their reads run at once. A
+  client-wide cap of eight requests in flight keeps GitHub's secondary
+  limits happy, and the first rate limit still stops the rest.
+- **Promote's searches are four requests, not one.** GitHub answers four
+  aliased searches about as slowly as four in a row, so each search is
+  its own request, 100 results a page instead of 50. The ancestry checks
+  that place whole-tier promotions are fetched together.
+- **The first load shows the list first.** The PRs and issues appear as
+  soon as they are read; workflow sections and CI follow. Until they land,
+  a key that acts says "still reading the workflows" instead of acting
+  without them.
+
+### Added
+
+- **Reads shared within a refresh.** Two workflows reading the same
+  compare or tags cost one request.
+- **Conditional requests.** REST reads send the last ETag; an unchanged
+  answer (304) is served from memory and costs no rate limit.
+
 ## [2.0.0]
 
 **Shift acts, lowercase looks.** Every key that changes something is now a
