@@ -119,6 +119,10 @@ func TestPrimeHead(t *testing.T) {
 	if !workflow.HeadStill(app, shown, "approval") {
 		t.Errorf("a stale primed read is read again: %q", app.Log)
 	}
+	// the stale primed read may still be on its way; it is not waited for
+	for end := time.Now().Add(2 * time.Second); heads.Load() < 2 && time.Now().Before(end); {
+		time.Sleep(time.Millisecond)
+	}
 	if n := heads.Load(); n != 2 {
 		t.Errorf("head reads = %d, want 2 (the stale primed one, then a fresh one)", n)
 	}

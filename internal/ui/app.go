@@ -184,12 +184,21 @@ func (m *Model) idleWakeMS() int {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	cmd := m.update(msg)
+	if pf := m.schedulePrefetch(); pf != nil {
+		cmd = tea.Batch(cmd, pf)
+	}
+	return m, cmd
+}
+
+// update is Update with the lock held.
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 	case tickMsg:
 		if msg.gen != m.tickGen {
-			return m, nil // orphaned by a retick
+			return nil // orphaned by a retick
 		}
 		if m.refreshDue() {
 			m.refresh(false) // no-ops while rate-limited
@@ -204,13 +213,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.checkConfig()
 		}
 		if m.restartQueued && m.modal == nil && !m.action {
-			return m, m.restartNow()
+			return m.restartNow()
 		}
-		return m, m.tick()
+		return m.tick()
 	case refreshListMsg:
 		m.applyList(msg)
 	case refreshDoneMsg:
 		m.applyRefresh(msg.out)
+	case detailLoadedMsg:
+		m.applyDetailLoaded(msg)
+	case prefetchMsg:
+		m.prefetch(msg)
+		return nil
 	case pollDoneMsg:
 		m.applyPoll(msg.out)
 	case buildCheckMsg:
@@ -227,7 +241,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case redrawMsg:
 	case execMsg:
-		return m, m.handleExec(msg)
+		return m.handleExec(msg)
 	case execDoneMsg:
 		msg.done <- msg.err
 	case actionDoneMsg:
@@ -238,17 +252,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fail(msg.panic)
 		}
 	case tea.KeyPressMsg:
-		return m, tea.Batch(m.handleKey(toKey(msg)), m.retick())
+		return tea.Batch(m.handleKey(toKey(msg)), m.retick())
 	case tea.PasteMsg:
-		return m, tea.Batch(m.handleKey(widgets.T(msg.Content)), m.retick())
+		return tea.Batch(m.handleKey(widgets.T(msg.Content)), m.retick())
 	case tea.PasteStartMsg, tea.PasteEndMsg:
-		return m, nil
+		return nil
 	default:
-		return m, nil
+		return nil
 	}
 	// something changed: wake the clock so the next frame is drawn
 	// from the new state, not after an idle sleep
-	return m, m.retick()
+	return m.retick()
 }
 
 // View paints the frame.
@@ -380,11 +394,19 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 			m.notice(workflowsLoading)
 			return nil
 		}
+		if why := m.heldForRead(); b.Acts && why != "" && k.Rune != 'U' {
+			m.notice(why)
+			return nil
+		}
 		return b.Do(m, k, page, app)
 	}
 	if wk, ok := m.wf.Key(view, string(k.Rune)); ok && k.Rune != 0 {
 		if m.listOnly && unicode.IsUpper(k.Rune) {
 			m.notice(workflowsLoading) // a capital acts
+			return nil
+		}
+		if why := m.heldForRead(); why != "" && unicode.IsUpper(k.Rune) {
+			m.notice(why)
 			return nil
 		}
 		m.runAction(func() { wk.Handler(app) })
@@ -499,11 +521,9 @@ func doOpen(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	m.detailFrom = ViewList
 	switch v := row.Item.(type) {
 	case *model.PR:
-		repo, n := m.repoOf(v), v.Number
-		m.runAction(func() { m.openDetail(app, repo, n, "pr", v) })
+		m.openItem(m.repoOf(v), v.Number, "pr", v)
 	case *model.Issue:
-		repo, n := m.repoOf(v), v.Number
-		m.runAction(func() { m.openDetail(app, repo, n, "issue", nil) })
+		m.openItem(m.repoOf(v), v.Number, "issue", nil)
 	}
 	return nil
 }
@@ -530,6 +550,8 @@ func doBack(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 		m.detailFrom = ViewList
 		m.detail = nil
 		m.detailListed = nil
+		m.detailPartial = false
+		m.openSeq++ // a read still on its way only fills the cache
 		m.searchQ = ""
 	}
 	return nil

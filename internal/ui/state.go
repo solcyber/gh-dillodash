@@ -163,8 +163,17 @@ type Model struct {
 	// any other change to the detail clears it.
 	mdMemo         map[mdKey][]text.Line
 	detailLoadedAt float64
-	scroll         int
-	raw            bool
+	// detailPartial: the open detail is the list's copy, its full read
+	// in flight; keys that act wait for it (detailread.go)
+	detailPartial bool
+	dcache        detailCache
+	openSeq       int // the latest open; an older open's read only fills dcache
+	reading       int // detail reads in flight
+	prefetchFor   model.Ident
+	prefetchGen   int
+	prefetching   bool
+	scroll        int
+	raw           bool
 
 	// files / patch
 	files       []model.PRFile

@@ -118,8 +118,7 @@ func (m *Model) OpenDetail(repo model.Repo, number int, kind string, listed any)
 	if p, ok := listed.(*model.PR); ok {
 		lp = p
 	}
-	app := &lockedApp{m}
-	m.runAction(func() { m.openDetail(app, repo, number, kind, lp) })
+	m.openItem(repo, number, kind, lp)
 }
 
 // lockedApp is the action goroutine's view of the model.
@@ -199,5 +198,6 @@ func (a *lockedApp) OpenDetail(repo model.Repo, number int, kind string, listed 
 	if p, ok := listed.(*model.PR); ok {
 		lp = p
 	}
-	a.m.openDetail(a, repo, number, kind, lp)
+	defer a.lock()()
+	a.m.openItem(repo, number, kind, lp)
 }

@@ -376,8 +376,15 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		}
 		// only when this refresh set off AFTER the detail was last fetched
 		// by hand: an older result must not replace newer data
+		if out.detail != nil {
+			if id, ok := m.identOf(out.detail); ok {
+				m.dcache.put(id, out.detail, out.started)
+			}
+		}
 		if out.detail != nil && m.detail != nil && sameItem(out.detail, m.detail) && out.started >= m.detailLoadedAt {
 			m.detail = out.detail
+			m.detailLoadedAt = out.started
+			m.detailPartial = false
 			m.detailVer++
 		}
 		if out.detailErr != "" && m.detail != nil {

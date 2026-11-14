@@ -26,30 +26,6 @@ import (
 // refuses a blocked PR).
 var mergeable = map[string]bool{"CLEAN": true, "HAS_HOOKS": true, "UNSTABLE": true, "UNKNOWN": true, "": true}
 
-// openDetail fetches an item and shows it.
-func (m *Model) openDetail(app *lockedApp, repo model.Repo, number int, kind string, listed *model.PR) {
-	app.Flash(fmt.Sprintf("opening %s...", m.where(repo, number)))
-	started := fx.Now()
-	var detail any
-	var err error
-	if kind == "issue" {
-		detail, err = m.gh.IssueDetail(m.ctx, repo, number)
-		if i, ok := detail.(*model.Issue); ok && i != nil {
-			i.Repo = repo
-		}
-	} else {
-		detail, err = m.fetchPRDetail(m.ctx, repo, number, listed)
-		kind = "pr"
-	}
-	if err != nil {
-		app.Fail(err.Error())
-		return
-	}
-	m.mu.Lock()
-	m.showDetail(detail, kind, started, listed)
-	m.mu.Unlock()
-}
-
 // showDetail switches to the detail view (lock held).
 func (m *Model) showDetail(detail any, kind string, started float64, listed *model.PR) {
 	if m.status != "" && m.statusKind == "spin" {
@@ -57,6 +33,7 @@ func (m *Model) showDetail(detail any, kind string, started float64, listed *mod
 	}
 	m.detailKind = kind
 	m.detail = detail
+	m.detailPartial = false // openItem marks a partial one after
 	m.detailListed = listed
 	m.detailLoadedAt = started
 	m.detailVer++
@@ -612,11 +589,24 @@ func (m *Model) doGoto(app *lockedApp) {
 			return
 		}
 	}
+	m.mu.Lock()
+	if p, i := m.listedCopy(model.Ident{Repo: repo, Number: n}); p != nil || i != nil {
+		// listed: it opens on this frame, its full read behind it
+		kind := "pr"
+		if i != nil {
+			kind = "issue"
+		}
+		m.openItem(repo, n, kind, listed)
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Unlock()
 	app.Flash(fmt.Sprintf("opening %s...", m.where(repo, n)))
 	started := fx.Now()
 	pr, err := m.fetchPRDetail(m.ctx, repo, n, listed)
 	if err == nil {
 		m.mu.Lock()
+		m.dcache.put(pr.Ident(), pr, started)
 		m.showDetail(pr, "pr", started, listed)
 		m.mu.Unlock()
 		return
