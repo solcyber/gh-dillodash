@@ -1,5 +1,51 @@
 # Changelog
 
+## [2.2.0]
+
+**Snappy.** The keys never wait on GitHub to say they were heard. Measured
+on one real configuration: opening a PR showed a spinner for 0.6–1.2 s and
+dropped every key meanwhile; it now paints on the next frame, and complete
+when the cursor rested on the row first. The check before an approval
+posts took 0.6–0.9 s after the `y`; it now reads only the head (0.2–0.4 s)
+while the question is still on screen.
+
+### Changed
+
+- **Enter opens at once.** The detail switches on the keypress: to a read
+  kept from a moment ago when it is as new as the list row, else to the
+  list's copy with the description and timeline marked as reading, while
+  the full read runs beside the UI. Keys that act wait for it (`still
+  reading #N`), so nothing posts on half the picture; looking, scrolling
+  and Esc work meanwhile, never "busy". A read that lands after Esc or
+  another open is kept, never shown.
+- **Every answer is acknowledged on the same frame.** A `y`, a pick or a
+  prompt answered while an action runs puts a spinner on the status line
+  at once, and every write says what it is sending (`approving #N…`,
+  `merging #N…`, `posting /approve on #N…`, `telling the manifest repo…`)
+  before its round trip. The status spinner turns at its own pace instead
+  of the idle loop's.
+- **The head check reads while you read the confirm.** It starts when the
+  last question opens and asks only for the head commit; a read older than
+  5 s by the answer is taken again. The approvers-team check is read ahead
+  the same way where it runs after a confirm.
+- **Writes show on the spot.** A merge flips the list row to `merged`;
+  labels, assignees and an issue's state change on the list as well as the
+  detail; a posted comment appears in the timeline when the post returns.
+  A refresh already in flight when the write went out can no longer put
+  the old state back for a few seconds. After an approval, a merge or a
+  comment the open detail alone is read again, so reviews and the timeline
+  settle in one round trip instead of with the next whole refresh.
+
+### Added
+
+- **Read-ahead.** Resting the cursor on a row for a quarter second reads
+  its detail ahead (one read at a time, never while rate-limited); an open
+  while that read is out takes its answer instead of asking twice. The
+  last 32 reads are kept.
+- A render benchmark (`go test -bench BenchmarkView ./internal/ui`): one
+  frame of the list, the detail or the help takes 0.5–3 ms at 120x40 and
+  240x70, well inside the 33 ms frame.
+
 ## [2.1.0]
 
 **A faster refresh.** Measured on one real configuration (five workflows,
