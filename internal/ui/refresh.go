@@ -94,7 +94,12 @@ func (m *Model) refresh(again bool) {
 	switch d := m.detail.(type) {
 	case *model.PR:
 		detailRepo, detailNumber = m.repoOf(d), d.Number
-		detailListed = m.detailListed
+		if l := m.detailListed; l != nil {
+			// the worker's own copy: a pending write may edit the row
+			c := *l
+			c.Ext = maps.Clone(l.Ext)
+			detailListed = &c
+		}
 	case *model.Issue:
 		detailRepo, detailNumber = m.repoOf(d), d.Number
 	}
@@ -346,6 +351,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.listOnly = false
 		m.allPRs = out.allPRs
 		m.issues = out.issues
+		m.prunePending(out.started) // refilter lays the rest over the rows
 		m.ciClusters = out.ci
 		seq := m.msgSeq
 		m.wf.ApplyAll(m, out.wfStates)

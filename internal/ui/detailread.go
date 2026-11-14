@@ -209,6 +209,13 @@ func (m *Model) openItem(repo model.Repo, number int, kind string, listed *model
 func (m *Model) readDetail(id model.Ident, kind string, listed *model.PR, seq int, pending bool) {
 	m.reading++
 	msg := detailLoadedMsg{id: id, kind: kind, listed: listed, seq: seq, pending: pending, prefetch: seq == 0, started: fx.Now()}
+	if listed != nil {
+		// the worker reads its own copy: the row's may be edited under
+		// it (a pending write laid over the list)
+		c := *listed
+		c.Ext = maps.Clone(listed.Ext)
+		listed = &c
+	}
 	gh, wf, ctx := m.gh, m.wf, m.ctx
 	go func() {
 		defer func() {

@@ -86,6 +86,7 @@ func TestPrimeHead(t *testing.T) {
 	id := model.Ident{Repo: postRepo, Number: 7}
 	shown := &model.PR{Repo: postRepo, Number: 7, HeadRefOid: "aaaaaaa1"}
 	app.Fake.PRs = map[model.Ident]*model.PR{id: {Repo: postRepo, Number: 7, HeadRefOid: "bbbbbbb2"}}
+	app.PrimeHeads = true
 	var heads, details atomic.Int32
 	app.Fake.BeforeOp = func(op string) {
 		switch op {

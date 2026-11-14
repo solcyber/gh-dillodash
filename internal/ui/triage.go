@@ -59,6 +59,9 @@ func (m *Model) setDetailLabels(app *lockedApp, names []string) {
 	case *model.Issue:
 		v.Labels.Nodes = nodes
 	}
+	if id, ok := m.identOf(m.detail); ok {
+		m.noteEdit(id, func(e *pendingEdit) { e.labels = append([]string{}, names...) })
+	}
 	m.mu.Unlock()
 	app.BumpDetail()
 }
@@ -236,6 +239,7 @@ func (m *Model) setDetailAssignees(app *lockedApp, logins []string) {
 	m.mu.Lock()
 	if v, ok := m.detail.(*model.Issue); ok {
 		v.Assignees.Nodes = nodes
+		m.noteEdit(m.repoIdent(v), func(e *pendingEdit) { e.assignees = append([]string{}, logins...) })
 	}
 	m.mu.Unlock()
 	app.BumpDetail()
@@ -292,6 +296,7 @@ func (m *Model) doIssueState(app *lockedApp) {
 	m.mu.Lock()
 	if v, ok := m.detail.(*model.Issue); ok {
 		v.State = strings.ToUpper(state)
+		m.noteEdit(m.repoIdent(v), func(e *pendingEdit) { e.state = strings.ToUpper(state) })
 	}
 	m.mu.Unlock()
 	app.BumpDetail()

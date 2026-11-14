@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -183,4 +184,14 @@ func TestAnswerIsAcknowledgedAtOnce(t *testing.T) {
 	if h.m.statusKind == "spin" || !strings.Contains(h.m.status, "cancelled") {
 		t.Errorf("after n: status %q (%s)", h.m.status, h.m.statusKind)
 	}
+}
+
+// settleBriefly applies whatever has arrived, waiting a moment for more.
+func settleBriefly(h *harness) {
+	select {
+	case msg := <-h.msgs:
+		h.m.Update(msg)
+	case <-time.After(10 * time.Millisecond):
+	}
+	drain(h.m, h.msgs)
 }

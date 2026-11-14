@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -355,10 +356,14 @@ func (f *Client) PRDetail(ctx context.Context, repo model.Repo, number int) (*mo
 	if !ok {
 		return nil, &ghapi.Error{Message: fmt.Sprintf("#%d is not a pull request in %s", number, repo)}
 	}
-	if p.Repo.IsZero() {
-		p.Repo = repo
+	// a copy, as the real client's every read is a new object: the
+	// caller enriches its answer, and two reads run side by side
+	c := *p
+	c.Ext = maps.Clone(p.Ext)
+	if c.Repo.IsZero() {
+		c.Repo = repo
 	}
-	return p, nil
+	return &c, nil
 }
 
 // PRHead serves the head and state of PRs.
@@ -386,10 +391,11 @@ func (f *Client) IssueDetail(ctx context.Context, repo model.Repo, number int) (
 	if !ok {
 		return nil, &ghapi.Error{Message: fmt.Sprintf("#%d is not an issue in %s", number, repo)}
 	}
-	if i.Repo.IsZero() {
-		i.Repo = repo
+	c := *i // a new object per read, as the real client's
+	if c.Repo.IsZero() {
+		c.Repo = repo
 	}
-	return i, nil
+	return &c, nil
 }
 
 // AssignableUsers serves Users.

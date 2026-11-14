@@ -172,8 +172,11 @@ type Model struct {
 	prefetchFor   model.Ident
 	prefetchGen   int
 	prefetching   bool
-	scroll        int
-	raw           bool
+	// pending: writes this session a refresh may not have read yet,
+	// laid over the list (pending.go)
+	pending map[model.Ident]*pendingEdit
+	scroll  int
+	raw     bool
 
 	// files / patch
 	files       []model.PRFile

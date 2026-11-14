@@ -111,6 +111,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	app.MarkApproved(pr)
 	app.OK(fmt.Sprintf("review-approved %s as %s", where, m.me))
 	app.Celebrate(false)
+	app.ReloadDetail()
 	app.Refresh(true)
 }
 
@@ -179,6 +180,10 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 		app.Fail("comment not posted: " + err.Error())
 		return
 	}
+	m.mu.Lock()
+	m.appendMyComment(model.Ident{Repo: repo, Number: number}, body)
+	m.reloadDetail()
+	m.mu.Unlock()
 	app.OK("commented on " + where)
 	app.Celebrate(false)
 	app.Refresh(true)
@@ -302,6 +307,8 @@ func (m *Model) doMerge(app *lockedApp) {
 	pr.State = "MERGED"
 	pr.MergeCommit = &model.MergeCommit{Oid: res.SHA}
 	m.detailVer++
+	m.noteEdit(model.Ident{Repo: repo, Number: pr.Number}, func(e *pendingEdit) { e.state, e.mergeSHA = "MERGED", res.SHA })
+	m.reloadDetail()
 	m.mu.Unlock()
 	app.OK(fmt.Sprintf("merged %s as %s; D approves a deployment that waits on an environment", where, model.ShortSHA(res.SHA)))
 	app.Celebrate(true)

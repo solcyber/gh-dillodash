@@ -165,6 +165,9 @@ func PrimeHead(app App, pr *model.PR) {
 	if pr == nil || pr.HeadRefOid == "" {
 		return
 	}
+	if p, ok := app.(interface{ PrimesHeads() bool }); ok && !p.PrimesHeads() {
+		return // a scripted test app: HeadStill reads in line
+	}
 	r := readHead(app, pr)
 	headMu.Lock()
 	headReads[model.Ident{Repo: pr.Repo, Number: pr.Number}] = r

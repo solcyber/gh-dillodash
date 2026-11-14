@@ -184,6 +184,7 @@ func (a *lockedApp) Selected() (workflow.Row, bool) {
 func (a *lockedApp) Refresh(again bool)          { defer a.lock()(); a.m.refresh(again) }
 func (a *lockedApp) RefreshSoon(d time.Duration) { defer a.lock()(); a.m.RefreshSoon(d) }
 func (a *lockedApp) BumpDetail()                 { defer a.lock()(); a.m.detailVer++ }
+func (a *lockedApp) ReloadDetail()               { defer a.lock()(); a.m.reloadDetail() }
 func (a *lockedApp) Confirm(q string) bool       { return a.m.Confirm(q) }
 func (a *lockedApp) Prompt(p string, o workflow.PromptOpts) (string, bool) {
 	return a.m.Prompt(p, o)
