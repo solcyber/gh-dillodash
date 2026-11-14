@@ -217,3 +217,39 @@ func TestOpenAdoptsThePrefetchInFlight(t *testing.T) {
 		t.Errorf("pr_detail reads = %d, want 1 (the open adopts the prefetch)", n)
 	}
 }
+
+// TestAgingKeptReadHoldsActingKeys: a kept read past
+// detailRevalidateSecs shows whole, but keys that act wait for the
+// read behind it; a write forgets every kept read.
+func TestAgingKeptReadHoldsActingKeys(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	id := model.Ident{Repo: infra, Number: 101}
+	h.named("enter")
+	h.named("esc")
+	e, ok := h.m.dcache.get(id)
+	if !ok {
+		t.Fatal("no kept read")
+	}
+	e.started -= detailRevalidateSecs + 1
+	g := holdOp(h, "pr_detail")
+	h.press(enterKey)
+	if h.m.detailPartial || !strings.Contains(h.screen(), "looks fine") {
+		t.Fatalf("an aging kept read must still show whole:\n%s", h.screen())
+	}
+	h.m.tp.Confirm = func(string) bool { t.Error("A asked to approve on an aging read"); return false }
+	h.press(runeKey('A'))
+	if !strings.Contains(h.m.status, "still reading") {
+		t.Errorf("A on an aging read: status %q", h.m.status)
+	}
+	g.release()
+	h.pump()
+	if h.m.heldForRead() != "" {
+		t.Error("keys still held after the re-read landed")
+	}
+	h.m.tp.Confirm = func(string) bool { return true }
+	h.key('A')
+	if _, ok := h.m.dcache.get(id); ok {
+		t.Error("a kept read survived a write")
+	}
+}

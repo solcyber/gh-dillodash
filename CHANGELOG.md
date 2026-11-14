@@ -16,7 +16,9 @@ while the question is still on screen.
   list's copy with the description and timeline marked as reading, while
   the full read runs beside the UI. Keys that act wait for it (`still
   reading #N`), so nothing posts on half the picture; looking, scrolling
-  and Esc work meanwhile, never "busy". A read that lands after Esc or
+  and Esc work meanwhile, never "busy". A kept read older than 15 s shows
+  whole while it is read again, and keys that act wait for that read too;
+  any write forgets every kept read. A read that lands after Esc or
   another open is kept, never shown.
 - **Every answer is acknowledged on the same frame.** A `y`, a pick or a
   prompt answered while an action runs puts a spinner on the status line
@@ -24,9 +26,11 @@ while the question is still on screen.
   `merging #N…`, `posting /approve on #N…`, `telling the manifest repo…`)
   before its round trip. The status spinner turns at its own pace instead
   of the idle loop's.
-- **The head check reads while you read the confirm.** It starts when the
-  last question opens and asks only for the head commit; a read older than
-  5 s by the answer is taken again. The approvers-team check is read ahead
+- **The head check reads while you read the confirm.** It asks only for
+  the head commit. Before a review approval (pinned to the commit shown)
+  it starts when the question opens, and a read older than 5 s by the
+  answer is taken again; before an unpinned command (`/approve`,
+  release-now) it still reads after the answer. The approvers-team check is read ahead
   the same way where it runs after a confirm.
 - **Writes show on the spot.** A merge flips the list row to `merged`;
   labels, assignees and an issue's state change on the list as well as the

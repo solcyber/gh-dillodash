@@ -247,6 +247,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case actionDoneMsg:
 		m.action = false
 		m.clearAck()
+		// an action may have written: no kept read, nor one already on
+		// its way, may stand for the item after it
+		m.dcache.clear()
 		if msg.panic != "" {
 			m.modal = nil // a modal the action left open has nobody to answer it
 			m.fail(msg.panic)
@@ -551,6 +554,7 @@ func doBack(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 		m.detail = nil
 		m.detailListed = nil
 		m.detailPartial = false
+		m.detailHeld = false
 		m.openSeq++ // a read still on its way only fills the cache
 		m.searchQ = ""
 	}

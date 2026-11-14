@@ -23,9 +23,9 @@ import (
 const (
 	// detailCacheSize is how many full reads are kept.
 	detailCacheSize = 32
-	// detailRevalidateSecs: a kept read older than this is shown, and
-	// read again behind it.
-	detailRevalidateSecs = 60.0
+	// detailRevalidateSecs: a kept read older than this is shown, read
+	// again behind it, and the keys that act wait for that read.
+	detailRevalidateSecs = 15.0
 	// prefetchRest is how long the cursor rests on a row before its
 	// detail is read ahead.
 	prefetchRest = 250 * time.Millisecond
@@ -42,6 +42,16 @@ type detailEntry struct {
 type detailCache struct {
 	m    map[model.Ident]*detailEntry
 	tick int
+	// epoch: reads that set off before it are not kept (a write since
+	// may have changed what they read)
+	epoch float64
+}
+
+// clear forgets every kept read, and refuses the ones already on their
+// way: called when something was written.
+func (c *detailCache) clear() {
+	c.m = nil
+	c.epoch = fx.Now()
 }
 
 func (c *detailCache) get(id model.Ident) (*detailEntry, bool) {
@@ -57,6 +67,9 @@ func (c *detailCache) get(id model.Ident) (*detailEntry, bool) {
 }
 
 func (c *detailCache) put(id model.Ident, d any, started float64) {
+	if started < c.epoch {
+		return // it set off before a write: it may not show it
+	}
 	if c.m == nil {
 		c.m = map[model.Ident]*detailEntry{}
 	}
@@ -176,8 +189,10 @@ func (m *Model) openItem(repo model.Repo, number int, kind string, listed *model
 	if e, ok := m.dcache.get(id); ok && keptFresh(e, listed, listedIssue) {
 		if _, isPR := e.detail.(*model.PR); isPR == (kind == "pr") {
 			m.showDetail(e.detail, kind, e.started, listed)
-			m.detailPartial = false
 			if fx.Now()-e.started >= detailRevalidateSecs {
+				// shown whole, but a comment or a review may have come
+				// since: keys that act wait for the read behind it
+				m.detailHeld = true
 				m.readDetail(id, kind, listed, seq, false)
 			}
 			return
@@ -277,7 +292,6 @@ func (m *Model) applyDetailLoaded(msg detailLoadedMsg) {
 	}
 	if msg.pending {
 		m.showDetail(msg.detail, msg.kind, msg.started, msg.listed)
-		m.detailPartial = false
 		return
 	}
 	if m.detail != nil && sameItem(msg.detail, m.detail) && msg.started >= m.detailLoadedAt {
@@ -285,6 +299,7 @@ func (m *Model) applyDetailLoaded(msg detailLoadedMsg) {
 		m.detail = msg.detail
 		m.detailLoadedAt = msg.started
 		m.detailPartial = false
+		m.detailHeld = false
 		m.detailVer++
 	}
 }
@@ -292,7 +307,7 @@ func (m *Model) applyDetailLoaded(msg detailLoadedMsg) {
 // heldForRead is the notice for a key that acts while the open detail
 // is the list's copy ("" when it is not).
 func (m *Model) heldForRead() string {
-	if !m.detailPartial || m.detail == nil || m.view == ViewList || m.view == ViewFortress {
+	if !(m.detailPartial || m.detailHeld) || m.detail == nil || m.view == ViewList || m.view == ViewFortress {
 		return ""
 	}
 	return fmt.Sprintf("still reading %s — press it again in a moment", m.detailRef())

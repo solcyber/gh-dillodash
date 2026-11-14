@@ -391,6 +391,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 			m.detail = out.detail
 			m.detailLoadedAt = out.started
 			m.detailPartial = false
+			m.detailHeld = false
 			m.detailVer++
 		}
 		if out.detailErr != "" && m.detail != nil {

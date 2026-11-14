@@ -34,6 +34,7 @@ func (m *Model) showDetail(detail any, kind string, started float64, listed *mod
 	m.detailKind = kind
 	m.detail = detail
 	m.detailPartial = false // openItem marks a partial one after
+	m.detailHeld = false
 	m.detailListed = listed
 	m.detailLoadedAt = started
 	m.detailVer++
@@ -613,6 +614,7 @@ func (m *Model) doGoto(app *lockedApp) {
 	pr, err := m.fetchPRDetail(m.ctx, repo, n, listed)
 	if err == nil {
 		m.mu.Lock()
+		m.openSeq++ // an open still on its way must not replace this one
 		m.dcache.put(pr.Ident(), pr, started)
 		m.showDetail(pr, "pr", started, listed)
 		m.mu.Unlock()
@@ -629,6 +631,7 @@ func (m *Model) doGoto(app *lockedApp) {
 	}
 	iss.Repo = repo
 	m.mu.Lock()
+	m.openSeq++
 	m.showDetail(iss, "issue", started, nil)
 	m.mu.Unlock()
 }

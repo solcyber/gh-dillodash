@@ -37,6 +37,7 @@ func (m *Model) noteEdit(id model.Ident, edit func(e *pendingEdit)) {
 	}
 	edit(e)
 	e.at = fx.Now()
+	m.dcache.clear()
 	if d, ok := m.identOf(m.detail); ok && d == id {
 		// a refresh that set off before this write must not put the
 		// detail back as it was
@@ -61,7 +62,7 @@ func (m *Model) overlayPending() {
 	if len(m.pending) == 0 {
 		return
 	}
-	for _, r := range m.rows {
+	for i, r := range m.rows {
 		if r.Kind != "pr" && r.Kind != "issue" {
 			continue // a workflow's rows are its own state, which its poller reads
 		}
@@ -73,11 +74,16 @@ func (m *Model) overlayPending() {
 		if e == nil {
 			continue
 		}
+		// a copy: actions read the listed objects without the lock
 		switch v := r.Item.(type) {
 		case *model.PR:
-			applyEditPR(e, v)
+			c := *v
+			applyEditPR(e, &c)
+			m.rows[i].Item = &c
 		case *model.Issue:
-			applyEditIssue(e, v)
+			c := *v
+			applyEditIssue(e, &c)
+			m.rows[i].Item = &c
 		}
 	}
 }

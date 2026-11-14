@@ -464,7 +464,6 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	body := cmd + " " + cand.PlanID + outside // flags: any order
 	destroys := 0
 	var ok bool
-	workflow.PrimeHead(app, pr) // the last question is next: read the head meanwhile
 	switch {
 	case cand.Destroys == nil:
 		typed, got := app.Prompt(fmt.Sprintf("plan %s: its destroy count can't be parsed from the digest.%s\n"+

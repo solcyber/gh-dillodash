@@ -132,7 +132,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			return true
 		}
 		var ok bool
-		if body, ok = w.nowBody(app, pr, fmt.Sprintf("approve %s and post that as %s?", wh, me)); !ok {
+		if body, ok = w.nowBody(app, fmt.Sprintf("approve %s and post that as %s?", wh, me)); !ok {
 			return true
 		}
 	} else {
@@ -213,7 +213,7 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 	if !w.laneWait(app, pr) {
 		return true
 	}
-	body, ok := w.nowBody(app, pr, fmt.Sprintf("post that on %s as %s? (no second review: yours stands)", wh, me))
+	body, ok := w.nowBody(app, fmt.Sprintf("post that on %s as %s? (no second review: yours stands)", wh, me))
 	if !ok {
 		return true
 	}
@@ -240,7 +240,7 @@ func ago(d time.Duration) string {
 // nowBody asks for the release-now reason and confirms the exact
 // comment with question; ok false (and the status line says why) on a
 // cancel or a body the grammar refuses.
-func (w *Workflow) nowBody(app workflow.App, pr *model.PR, question string) (string, bool) {
+func (w *Workflow) nowBody(app workflow.App, question string) (string, bool) {
 	cmd, minLen := w.cfg.ReleaseNowCommand, w.cfg.ReleaseNowMinReason
 	reason, ok := app.Prompt(fmt.Sprintf("Why can't this wait for the window? The reason is posted on the PR with the command (at least %d characters, no double quotes); Esc cancels:", minLen),
 		workflow.PromptOpts{MinLen: minLen, Forbid: `"`, Note: "the reason is posted with " + cmd})
@@ -257,7 +257,6 @@ func (w *Workflow) nowBody(app workflow.App, pr *model.PR, question string) (str
 		app.Fail(fmt.Sprintf("approve cancelled — %q does not match the %s grammar", body, cmd))
 		return "", false
 	}
-	workflow.PrimeHead(app, pr) // read while the command is on screen
 	if !app.Confirm(body + "\n" + question) {
 		app.Notice("approve cancelled")
 		return "", false

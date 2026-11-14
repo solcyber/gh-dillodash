@@ -160,7 +160,11 @@ var (
 // PrimeHead starts HeadStill's read now, on its own goroutine, so it
 // runs while the confirm is on screen instead of after the answer: a
 // caller primes right before its last question. The next HeadStill of
-// the same PR takes it (once) when it began within HeadFresh.
+// the same PR takes it (once) when it began within HeadFresh. Prime only
+// where the post is pinned to the head anyway (a review's commit_id): a
+// push in the last seconds before the answer can slip past a primed
+// read, so an unpinned command (/approve, release-now) reads after the
+// answer.
 func PrimeHead(app App, pr *model.PR) {
 	if pr == nil || pr.HeadRefOid == "" {
 		return

@@ -166,6 +166,7 @@ type Model struct {
 	// detailPartial: the open detail is the list's copy, its full read
 	// in flight; keys that act wait for it (detailread.go)
 	detailPartial bool
+	detailHeld    bool // a kept read shown whole, its re-read in flight: acting keys wait
 	dcache        detailCache
 	openSeq       int // the latest open; an older open's read only fills dcache
 	reading       int // detail reads in flight
