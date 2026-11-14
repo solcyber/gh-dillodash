@@ -201,6 +201,13 @@ func (m *Model) openItem(repo model.Repo, number int, kind string, listed *model
 		return
 	}
 	m.detailPartial = true
+	if m.prefetching && m.prefetchID == id {
+		// the rest already set this read off: the open takes its answer
+		// instead of asking GitHub a second time
+		m.adoptSeq = seq
+		m.detailLoadedAt = m.prefetchAt
+		return
+	}
 	m.readDetail(id, kind, listed, seq, false)
 }
 
@@ -250,6 +257,10 @@ func (m *Model) applyDetailLoaded(msg detailLoadedMsg) {
 	m.reading = max(0, m.reading-1)
 	if msg.prefetch {
 		m.prefetching = false
+		if m.adoptSeq != 0 && m.adoptSeq == m.openSeq && msg.id == m.prefetchID {
+			msg.seq, msg.prefetch = m.adoptSeq, false // the open's answer now
+		}
+		m.adoptSeq = 0
 	}
 	if msg.err == nil && msg.detail != nil {
 		m.dcache.put(msg.id, msg.detail, msg.started)
@@ -330,5 +341,6 @@ func (m *Model) prefetch(msg prefetchMsg) {
 		return
 	}
 	m.prefetching = true
+	m.prefetchID, m.prefetchAt = msg.id, fx.Now()
 	m.readDetail(msg.id, kind, listed, 0, false)
 }

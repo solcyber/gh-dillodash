@@ -195,3 +195,25 @@ func settleBriefly(h *harness) {
 	}
 	drain(h.m, h.msgs)
 }
+
+// TestOpenAdoptsThePrefetchInFlight: Enter while the rest's read is out
+// shows the partial detail and takes that read's answer: one read, not two.
+func TestOpenAdoptsThePrefetchInFlight(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	id := model.Ident{Repo: infra, Number: 101}
+	g := holdOp(h, "pr_detail")
+	h.m.Update(prefetchMsg{gen: h.m.prefetchGen, id: id})
+	h.press(enterKey)
+	if !h.m.detailPartial {
+		t.Fatal("the open did not show the partial detail while the prefetch is out")
+	}
+	g.release()
+	h.pump()
+	if h.m.detailPartial || !strings.Contains(h.screen(), "looks fine") {
+		t.Errorf("the prefetch's answer did not land on the open detail:\n%s", h.screen())
+	}
+	if n := h.gh.Reads["pr_detail"]; n != 1 {
+		t.Errorf("pr_detail reads = %d, want 1 (the open adopts the prefetch)", n)
+	}
+}

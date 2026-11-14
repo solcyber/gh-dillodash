@@ -172,6 +172,9 @@ type Model struct {
 	prefetchFor   model.Ident
 	prefetchGen   int
 	prefetching   bool
+	prefetchID    model.Ident // the item the prefetch in flight reads
+	prefetchAt    float64     // when it set off
+	adoptSeq      int         // an open waiting on that prefetch instead of a read of its own
 	// pending: writes this session a refresh may not have read yet,
 	// laid over the list (pending.go)
 	pending map[model.Ident]*pendingEdit
