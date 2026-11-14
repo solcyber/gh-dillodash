@@ -65,7 +65,7 @@ var bindings = []binding{
 	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch}, Keys: []widgets.Key{K("pgdn"), K("pgup"), R(' ')}, Group: "nav",
 		Help: "pgdn/pgup  page", Doc: "a page down / up", Do: doNav},
 	{Views: []string{ViewList}, Keys: []widgets.Key{K("enter"), R('l'), K("right")}, Bar: "↵", Label: "open", Group: "list", Prio: 10,
-		Help: "enter  open", Doc: "open the PR or issue (`l` and → too)", Do: doOpen},
+		Help: "enter  open", Doc: "open the PR or issue (`l` and → too), on the keypress: the list's copy shows while the rest is read (keys that act wait for it), and a row the cursor rested on is usually read already", Do: doOpen},
 	{Views: []string{ViewFiles}, Keys: []widgets.Key{K("enter"), R('l'), K("right")}, Bar: "↵", Label: "view diff", Group: "files", Prio: 10,
 		Help: "enter  the file's diff", Doc: "that file's diff in-app (`l` and → too)", Do: doOpen},
 	// list

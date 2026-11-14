@@ -209,9 +209,8 @@ func (m *Model) applyRestore() {
 		if kind != "issue" {
 			kind = "pr"
 		}
-		app := &lockedApp{m}
 		m.detailFrom = ViewList
-		m.runAction(func() { m.openDetail(app, repo, d.Number, kind, listed) })
+		m.openItem(repo, d.Number, kind, listed)
 	}
 }
 

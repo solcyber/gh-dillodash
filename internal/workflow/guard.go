@@ -8,6 +8,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/text"
 )
 
 // The membership answers of this session, per team and login: a team's
@@ -82,6 +83,35 @@ func PostGuard(app App, what string) bool {
 	return true
 }
 
+// WarmMembership reads the approvers_team membership PostGuard needs
+// in the background, so a guard that runs after a confirm finds it
+// cached instead of reading it after the answer. A failed read is not
+// remembered: PostGuard reads again and says why.
+func WarmMembership(app App) {
+	cfg := app.Config()
+	if cfg == nil || cfg.GitHub.ApproversTeam == "" || cfg.Bots.IsBot(app.Me()) {
+		return
+	}
+	team, me := cfg.GitHub.ApproversTeam, app.Me()
+	key := strings.ToLower(team + " " + me)
+	memberMu.Lock()
+	_, ok := memberCache[key]
+	memberMu.Unlock()
+	if ok {
+		return
+	}
+	org, slug, _ := strings.Cut(team, "/")
+	gh, ctx := app.GH(), app.Context()
+	go func() {
+		defer func() { _ = recover() }()
+		if m, err := gh.TeamMember(ctx, org, slug, me); err == nil {
+			memberMu.Lock()
+			memberCache[key] = m
+			memberMu.Unlock()
+		}
+	}()
+}
+
 // tokenHint names the environment variable the token came from, when it
 // did: the usual way to post as the wrong login is a GH_TOKEN or
 // GITHUB_TOKEN exported for something else in this shell.
@@ -110,22 +140,92 @@ func WriteRefused(app App, repo model.Repo, what string) bool {
 	return true
 }
 
+// HeadFresh is how old a head read may be when the answer comes and
+// still stand for "just before the post"; an older one is read again.
+var HeadFresh = 5 * time.Second
+
+// headRead is one head read of a PR, in flight until done closes.
+type headRead struct {
+	done  chan struct{}
+	start time.Time
+	oid   string
+	err   error
+}
+
+var (
+	headMu    sync.Mutex
+	headReads = map[model.Ident]*headRead{}
+)
+
+// PrimeHead starts HeadStill's read now, on its own goroutine, so it
+// runs while the confirm is on screen instead of after the answer: a
+// caller primes right before its last question. The next HeadStill of
+// the same PR takes it (once) when it began within HeadFresh. Prime only
+// where the post is pinned to the head anyway (a review's commit_id): a
+// push in the last seconds before the answer can slip past a primed
+// read, so an unpinned command (/approve, release-now) reads after the
+// answer.
+func PrimeHead(app App, pr *model.PR) {
+	if pr == nil || pr.HeadRefOid == "" {
+		return
+	}
+	if p, ok := app.(interface{ PrimesHeads() bool }); ok && !p.PrimesHeads() {
+		return // a scripted test app: HeadStill reads in line
+	}
+	r := readHead(app, pr)
+	headMu.Lock()
+	headReads[model.Ident{Repo: pr.Repo, Number: pr.Number}] = r
+	headMu.Unlock()
+}
+
+// takeHead is the primed read of pr, if one began within HeadFresh, else
+// a fresh read; either way the primed one is used up.
+func takeHead(app App, pr *model.PR) *headRead {
+	id := model.Ident{Repo: pr.Repo, Number: pr.Number}
+	headMu.Lock()
+	r, ok := headReads[id]
+	delete(headReads, id)
+	headMu.Unlock()
+	if ok && app.Now().Sub(r.start) <= HeadFresh {
+		return r
+	}
+	return readHead(app, pr)
+}
+
+func readHead(app App, pr *model.PR) *headRead {
+	r := &headRead{done: make(chan struct{}), start: app.Now()}
+	gh, ctx := app.GH(), app.Context()
+	go func() {
+		defer close(r.done)
+		defer func() {
+			if p := recover(); p != nil {
+				r.err = fmt.Errorf("head read failed: %v", p)
+			}
+		}()
+		r.oid, _, r.err = gh.PRHead(ctx, pr.Repo, pr.Number)
+	}()
+	return r
+}
+
 // HeadStill re-reads pr's head just before an approval posts and
 // refuses (a gold notice, false) when it moved since the reviewer read
 // it: the confirm can sit open while someone pushes, and an approval
 // belongs to the code that was on screen. The review itself is pinned
 // to the head shown (commit_id), so when the re-read fails it allows.
+// A read primed (PrimeHead) within HeadFresh is used once; the read is
+// the head alone (PRHead), not the whole detail.
 func HeadStill(app App, pr *model.PR, what string) bool {
 	if pr == nil || pr.HeadRefOid == "" {
 		return true
 	}
-	now, err := app.GH().PRDetail(app.Context(), pr.Repo, pr.Number)
-	if err != nil || now == nil {
+	r := takeHead(app, pr)
+	<-r.done
+	if r.err != nil || r.oid == "" {
 		return true
 	}
-	if model.ShaMoved(pr.HeadRefOid, now.HeadRefOid) {
+	if model.ShaMoved(pr.HeadRefOid, r.oid) {
 		app.Notice(fmt.Sprintf("%s not posted: %s#%d moved from %s to %s since you read it — r reloads it, then look again",
-			what, pr.Repo.Name, pr.Number, model.ShortSHA(pr.HeadRefOid), model.ShortSHA(now.HeadRefOid)))
+			what, pr.Repo.Name, pr.Number, model.ShortSHA(pr.HeadRefOid), model.ShortSHA(r.oid)))
 		app.Refresh(true)
 		return false
 	}
@@ -140,6 +240,7 @@ func HeadStill(app App, pr *model.PR, what string) bool {
 // says "may have posted" and refreshes instead of "NOT posted", which
 // would invite a second post of the same command.
 func Post(app App, repo model.Repo, number int, body string) (id int64, unsure bool, err error) {
+	app.Flash(fmt.Sprintf("posting %s on %s#%d...", postWhat(body), repo.Name, number))
 	id, err = app.GH().PostComment(app.Context(), repo, number, body)
 	if err == nil || !ghapi.Ambiguous(err) {
 		return id, false, err
@@ -173,4 +274,14 @@ func PostFailed(app App, lead, what string, unsure bool, err error) {
 		return
 	}
 	app.Fail(fmt.Sprintf("%s%s NOT posted: %s", lead, what, err))
+}
+
+// postWhat is a posted body's first word, for the status line while it
+// goes out ("/approve", "release-now"), never the whole text.
+func postWhat(body string) string {
+	f := strings.Fields(body)
+	if len(f) == 0 {
+		return "a comment"
+	}
+	return text.Ellip(f[0], 40)
 }

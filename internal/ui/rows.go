@@ -29,6 +29,10 @@ func (m *Model) decision(pr *model.PR, listed *model.PR) (label, style string, n
 	if c := m.wf.Classify(pr, listed, m.me, local); c != nil {
 		return c.Label, c.Style, c.NeedsYou, c.Done
 	}
+	if pr.State == "MERGED" {
+		// merged from here: the row says so until a refresh drops it
+		return "merged", "chip.state", false, true
+	}
 	if s := model.StuckOf(pr, listed, m.me); s.Kind != model.StuckNone {
 		if s.Mine {
 			return model.LabelReReview, model.ChipForLabel[model.LabelReReview], true, false
@@ -237,6 +241,7 @@ func (m *Model) refilter() {
 	if m.selected < 0 {
 		m.selected = 0
 	}
+	m.overlayPending()
 	m.parkCursor()
 }
 

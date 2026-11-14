@@ -121,6 +121,9 @@ func (m *Model) liveDetail() bool {
 	if m.detail == nil {
 		return false
 	}
+	if m.detailPartial {
+		return true // its reading line's spinner turns until the read lands
+	}
 	var want model.Ident
 	switch d := m.detail.(type) {
 	case *model.PR:

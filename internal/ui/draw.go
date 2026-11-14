@@ -33,7 +33,9 @@ func (m *Model) drawFrame(c *canvas.Canvas) {
 	fx.Ambient = fx.Motion == "full" && fx.Now()-m.lastKey < fx.AmbientIdleSecs
 	// mono has no color effects to tick for, only the empty list's walk
 	m.ambient = fx.Ambient && (theme.Current() != theme.Mono || (m.view == ViewList && m.loaded && len(m.rows) == 0))
-	m.animating = m.refreshing
+	// a spinner on the status line turns at the spinner's pace, not
+	// the idle loop's
+	m.animating = m.refreshing || (m.status != "" && m.statusKind == "spin")
 	if _, splash := m.fx.Elapsed("splash"); splash {
 		if scenes.Splash(c, m.fx, h, w, scenes.SplashInfo{ReposText: m.reposText(), Loaded: m.loaded, Failed: m.errText != ""}) {
 			return

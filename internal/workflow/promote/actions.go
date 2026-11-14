@@ -234,6 +234,7 @@ func (w *Workflow) openPromotion(app workflow.App, c *Change) {
 	}
 	body := fmt.Sprintf("Promotes #%d from `%s` to `%s`.\n\nThe change of %s (#%d's merge commit on `%s`), applied to `%s` at %s file by file: every file it touches still matched `%s` before #%d.\n\nOpened with dillodash by %s.",
 		n, w.cfg.First(), w.cfg.Stage(), sha, n, w.cfg.First(), w.cfg.Stage(), head, w.cfg.First(), n, app.Me())
+	app.Flash(fmt.Sprintf("opening the promotion of #%d...", n))
 	if err := gh.CreateBranch(ctx, c.Repo, branch, head); err != nil {
 		if e, ok := ghapi.AsError(err); ok && e.Status == 422 {
 			app.Notice(fmt.Sprintf("branch %s exists — a promotion of #%d was started; open it on GitHub, or delete the branch and press p again", branch, n))
@@ -313,6 +314,7 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		app.Notice("merge cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("merging #%d into %s...", n, w.cfg.Stage()))
 	res, err := gh.MergePR(ctx, c.Repo, n, pr.HeadRefOid, "", method)
 	if err != nil {
 		app.Fail(fmt.Sprintf("merging #%d failed: %s", n, err))
@@ -391,6 +393,7 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 		app.Notice("cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("tagging %s...", name))
 	if c.Tag != "" {
 		if err := gh.DeleteRef(ctx, c.Repo, fmt.Sprintf("tags/%s%d", o.other, n)); err != nil {
 			var e *ghapi.Error
@@ -503,6 +506,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		app.Notice("deployment approval cancelled")
 		return true
 	}
+	app.Flash(fmt.Sprintf("approving %s...", what))
 	if err := gh.ApproveDeployments(ctx, c.Repo, run.ID, ids, w.cfg.Comment(c.Repo, run.Name, run.ID)); err != nil {
 		app.Fail(fmt.Sprintf("approving %s failed: %s", what, err))
 		return true

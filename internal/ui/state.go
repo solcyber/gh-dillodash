@@ -163,8 +163,24 @@ type Model struct {
 	// any other change to the detail clears it.
 	mdMemo         map[mdKey][]text.Line
 	detailLoadedAt float64
-	scroll         int
-	raw            bool
+	// detailPartial: the open detail is the list's copy, its full read
+	// in flight; keys that act wait for it (detailread.go)
+	detailPartial bool
+	detailHeld    bool // a kept read shown whole, its re-read in flight: acting keys wait
+	dcache        detailCache
+	openSeq       int // the latest open; an older open's read only fills dcache
+	reading       int // detail reads in flight
+	prefetchFor   model.Ident
+	prefetchGen   int
+	prefetching   bool
+	prefetchID    model.Ident // the item the prefetch in flight reads
+	prefetchAt    float64     // when it set off
+	adoptSeq      int         // an open waiting on that prefetch instead of a read of its own
+	// pending: writes this session a refresh may not have read yet,
+	// laid over the list (pending.go)
+	pending map[model.Ident]*pendingEdit
+	scroll  int
+	raw     bool
 
 	// files / patch
 	files       []model.PRFile
@@ -332,6 +348,27 @@ func (m *Model) setStatus(msg string) {
 		m.lastMsg = msg
 		m.msgSeq++
 		m.fx.Start("toast", 0.25, nil)
+	}
+}
+
+// ackText is the status the instant a modal is answered while an
+// action runs; the action's own Flash, OK, Notice or Fail replaces it.
+const ackText = "working..."
+
+// ack puts the answer's acknowledgment on the status line (lock held).
+func (m *Model) ack() {
+	m.status = ackText
+	m.statusKind = "spin"
+	m.statusAt = fx.Now()
+}
+
+// clearAck drops an acknowledgment nothing replaced: an action that
+// ended without a word (a filter, a pick that only moved the view) must
+// not leave a spinner turning.
+func (m *Model) clearAck() {
+	if m.statusKind == "spin" && m.status == ackText {
+		m.status = ""
+		m.statusKind = "info"
 	}
 }
 

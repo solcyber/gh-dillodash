@@ -106,6 +106,9 @@ func (m *Model) issueLines(iss *model.Issue, wrap int) []text.Line {
 	lines = append(lines, markdown.Wrap(meta, wrap, nil, nil, false)...)
 	lines = append(lines, text.Line{})
 	lines = append(lines, section("description", wrap, ""))
+	if m.detailPartial {
+		return append(lines, m.readingLines(wrap)...)
+	}
 	lines = append(lines, m.renderMD(iss.Body, wrap)...)
 	var events []event
 	for _, c := range iss.Comments.Nodes {
@@ -143,7 +146,7 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	if stat := diffSegs(pr); len(stat) > 0 {
 		meta = append(meta, text.S("  "+glyphs.G("sep")+"  ", "rule"))
 		meta = append(meta, stat...)
-		if pr.ChangedFiles > 0 || pr.Additions > 0 || pr.Deletions > 0 {
+		if !m.detailPartial && (pr.ChangedFiles > 0 || pr.Additions > 0 || pr.Deletions > 0) {
 			s := "s"
 			if pr.ChangedFiles == 1 {
 				s = ""
@@ -174,6 +177,9 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	}
 	lines = append(lines, text.Line{})
 	lines = append(lines, section("description", wrap, ""))
+	if m.detailPartial {
+		return append(lines, m.readingLines(wrap)...)
+	}
 	lines = append(lines, m.renderMD(pr.Body, wrap)...)
 
 	// merge issue comments and reviews into one timeline
@@ -206,6 +212,17 @@ func (m *Model) prLines(pr *model.PR, wrap int) []text.Line {
 	lines = append(lines, section("comments & reviews", wrap, fmt.Sprintf("%d%s", shown, ofTotal(shown, total, ""))))
 	lines = append(lines, m.timeline(events, wrap)...)
 	return lines
+}
+
+// readingLines stand in for the description and the timeline while the
+// open detail is the list's copy and its full read is on the way.
+func (m *Model) readingLines(wrap int) []text.Line {
+	return []text.Line{
+		{Segs: []text.Seg{text.S("  "+glyphs.SpinnerFrame()+" reading "+m.detailRef()+"...", "faint")}},
+		{},
+		section("comments & reviews", wrap, ""),
+		{Segs: []text.Seg{text.S("  ...", "faint")}},
+	}
 }
 
 // timeline renders comments and reviews, each under a dot and a bar.

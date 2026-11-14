@@ -121,6 +121,7 @@ func (m *Model) doDispatch(app *lockedApp) {
 	if d.Confirm != "" {
 		q += "\n" + d.Confirm
 	}
+	workflow.WarmMembership(app)
 	if !app.Confirm(fmt.Sprintf("%s\nsend that as %s?", q, m.me)) {
 		app.Notice("cancelled")
 		return
@@ -128,6 +129,7 @@ func (m *Model) doDispatch(app *lockedApp) {
 	if !workflow.PostGuard(app, d.Name) {
 		return
 	}
+	app.Flash(fmt.Sprintf("sending %s...", d.Name))
 	since := app.Now().Add(-5 * time.Second)
 	var err error
 	if d.Kind() == "event" {

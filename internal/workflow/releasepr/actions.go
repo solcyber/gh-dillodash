@@ -140,11 +140,13 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		if queues {
 			q = fmt.Sprintf("approve %s as %s? (queues the release for %s window)", wh, me, night)
 		}
+		workflow.PrimeHead(app, pr)
 		if !app.Confirm(q) {
 			app.Notice("approve cancelled")
 			return true
 		}
 	}
+	app.Flash(fmt.Sprintf("approving %s as %s...", wh, me))
 	if !workflow.HeadStill(app, pr, "approval") {
 		return true
 	}
@@ -281,6 +283,7 @@ func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldL
 	// the comment by id; the payload is only a pointer to it.
 	if target := w.manifestRepo(app); w.cfg.ReleaseNowDispatch && !target.IsZero() {
 		payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
+		app.Flash(fmt.Sprintf("posted %s — telling %s...", cmd, target))
 		if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
 			if ghapi.Ambiguous(err) {
 				// GitHub may have taken the dispatch: a merge by hand on
@@ -335,6 +338,7 @@ func (w *Workflow) offerSlotCancel(app workflow.App, pr *model.PR) {
 	if repo.IsZero() {
 		return
 	}
+	workflow.WarmMembership(app)
 	if !app.Confirm(fmt.Sprintf("%s also holds %s on manifest #%d (%s): post %s there, so the window does not pick up a merged release?",
 		where(pr), slot, it.Issue, it.Night, text)) {
 		app.Notice(fmt.Sprintf("%s not posted — the window still lists %s", text, where(pr)))
