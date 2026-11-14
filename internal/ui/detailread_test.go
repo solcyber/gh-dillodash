@@ -248,8 +248,11 @@ func TestAgingKeptReadHoldsActingKeys(t *testing.T) {
 		t.Error("keys still held after the re-read landed")
 	}
 	h.m.tp.Confirm = func(string) bool { return true }
+	before, _ := h.m.dcache.get(id)
+	was := before.started
 	h.key('A')
-	if _, ok := h.m.dcache.get(id); ok {
-		t.Error("a kept read survived a write")
+	// only a read that set off with or after the write may be kept now
+	if e, ok := h.m.dcache.get(id); ok && e.started <= was {
+		t.Error("a read kept from before the write survived it")
 	}
 }
