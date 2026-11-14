@@ -163,6 +163,15 @@ query($owner: String!, $name: String!) {
   }
 }`
 
+// prHeadQuery is the smallest read that says whether a PR moved: the
+// guards before a post ask it, not the whole detail.
+const prHeadQuery = `
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) { headRefOid state }
+  }
+}`
+
 const prDetailQuery = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {

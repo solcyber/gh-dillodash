@@ -232,6 +232,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg.done <- msg.err
 	case actionDoneMsg:
 		m.action = false
+		m.clearAck()
 		if msg.panic != "" {
 			m.modal = nil // a modal the action left open has nobody to answer it
 			m.fail(msg.panic)
@@ -335,6 +336,12 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		if m.modal.Handle(k) {
 			close(m.modalDone)
 			m.modal, m.modalDone = nil, nil
+			if m.action {
+				// the answer is in: say so on this frame, before the
+				// action's first round trip (it replaces this with its
+				// own words, or a cancel notice)
+				m.ack()
+			}
 		}
 		return nil
 	}

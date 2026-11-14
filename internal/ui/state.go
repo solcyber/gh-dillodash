@@ -335,6 +335,27 @@ func (m *Model) setStatus(msg string) {
 	}
 }
 
+// ackText is the status the instant a modal is answered while an
+// action runs; the action's own Flash, OK, Notice or Fail replaces it.
+const ackText = "working..."
+
+// ack puts the answer's acknowledgment on the status line (lock held).
+func (m *Model) ack() {
+	m.status = ackText
+	m.statusKind = "spin"
+	m.statusAt = fx.Now()
+}
+
+// clearAck drops an acknowledgment nothing replaced: an action that
+// ended without a word (a filter, a pick that only moved the view) must
+// not leave a spinner turning.
+func (m *Model) clearAck() {
+	if m.statusKind == "spin" && m.status == ackText {
+		m.status = ""
+		m.statusKind = "info"
+	}
+}
+
 func (m *Model) ok(msg string) {
 	m.setStatus(msg)
 	m.statusKind = "ok"

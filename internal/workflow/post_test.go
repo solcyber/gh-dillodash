@@ -3,7 +3,9 @@ package workflow_test
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
@@ -74,5 +76,50 @@ func TestPostAmbiguous(t *testing.T) {
 	app.Fake.Fail["comment"] = &ghapi.Error{Status: 422, Message: "Unprocessable"}
 	if _, unsure, err := workflow.Post(app, postRepo, 7, "/approve x"); err == nil || unsure {
 		t.Errorf("a 422 is NOT posted, surely: unsure=%v err=%v", unsure, err)
+	}
+}
+
+// TestPrimeHead: a head read primed while the confirm is up is what the
+// guard uses (once), and a primed read older than HeadFresh is read again.
+func TestPrimeHead(t *testing.T) {
+	app := wftest.New(config.Default(), "alice")
+	id := model.Ident{Repo: postRepo, Number: 7}
+	shown := &model.PR{Repo: postRepo, Number: 7, HeadRefOid: "aaaaaaa1"}
+	app.Fake.PRs = map[model.Ident]*model.PR{id: {Repo: postRepo, Number: 7, HeadRefOid: "bbbbbbb2"}}
+	var heads, details atomic.Int32
+	app.Fake.BeforeOp = func(op string) {
+		switch op {
+		case "pr_head":
+			heads.Add(1)
+		case "pr_detail":
+			details.Add(1)
+		}
+	}
+	workflow.PrimeHead(app, shown)
+	if workflow.HeadStill(app, shown, "approval") {
+		t.Fatalf("the primed read saw the head moved: %q", app.Log)
+	}
+	if n := heads.Load(); n != 1 {
+		t.Errorf("head reads = %d, want 1 (the primed one, not a second)", n)
+	}
+	// used up: the next guard reads again and sees the head back
+	app.Fake.PRs[id].HeadRefOid = "aaaaaaa1"
+	if !workflow.HeadStill(app, shown, "approval") {
+		t.Errorf("a used primed read must not answer twice: %q", app.Log)
+	}
+	if n := details.Load(); n != 0 {
+		t.Errorf("the guard read the whole detail %d times; it reads the head only", n)
+	}
+	// a primed read older than HeadFresh is read again
+	was := workflow.HeadFresh
+	defer func() { workflow.HeadFresh = was }()
+	workflow.HeadFresh = -time.Second
+	heads.Store(0)
+	workflow.PrimeHead(app, shown)
+	if !workflow.HeadStill(app, shown, "approval") {
+		t.Errorf("a stale primed read is read again: %q", app.Log)
+	}
+	if n := heads.Load(); n != 2 {
+		t.Errorf("head reads = %d, want 2 (the stale primed one, then a fresh one)", n)
 	}
 }

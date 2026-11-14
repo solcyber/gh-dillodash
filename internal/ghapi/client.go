@@ -144,6 +144,9 @@ type Client interface {
 	LastRate() *model.RateLimit
 
 	PRDetail(ctx context.Context, repo model.Repo, number int) (*model.PR, error)
+	// PRHead is a PR's head commit and state only: the cheap read the
+	// guards make right before a post.
+	PRHead(ctx context.Context, repo model.Repo, number int) (oid, state string, err error)
 	IssueDetail(ctx context.Context, repo model.Repo, number int) (*model.Issue, error)
 	AssignableUsers(ctx context.Context, repo model.Repo) ([]model.Actor, error)
 	PRComments(ctx context.Context, repo model.Repo, number int) ([]model.Comment, error)

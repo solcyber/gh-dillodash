@@ -93,6 +93,7 @@ func (m *Model) doLabels(app *lockedApp) {
 	if m.writeRefused(app, t.repo, "labelling "+where) {
 		return
 	}
+	app.Flash(fmt.Sprintf("reading the labels of %s...", t.repo))
 	defs, err := m.gh.RepoLabels(m.ctx, t.repo)
 	if err != nil {
 		app.Fail(fmt.Sprintf("couldn't list the labels of %s: %s", t.repo, err))
@@ -116,6 +117,7 @@ func (m *Model) doLabels(app *lockedApp) {
 		return
 	}
 	name := defs[i].Name
+	app.Flash(fmt.Sprintf("labelling %s...", where))
 	if hasFold(t.labels, name) {
 		if err := m.gh.RemoveLabel(m.ctx, t.repo, t.number, name); err != nil {
 			app.Fail(fmt.Sprintf("couldn't remove %q from %s: %s", name, where, err))
@@ -142,6 +144,7 @@ func (m *Model) assignable(app *lockedApp, repo model.Repo) ([]model.Actor, bool
 	if cached {
 		return users, true
 	}
+	app.Flash(fmt.Sprintf("reading who is assignable in %s...", repo))
 	u, err := m.gh.AssignableUsers(m.ctx, repo)
 	if err != nil {
 		app.Fail(fmt.Sprintf("couldn't list who is assignable in %s: %s", repo, err))
@@ -205,6 +208,7 @@ func (m *Model) doAssign(app *lockedApp) {
 		return
 	}
 	login := logins[i]
+	app.Flash(fmt.Sprintf("assigning on %s...", where))
 	if hasFold(current, login) {
 		if err := m.gh.RemoveAssignees(m.ctx, t.repo, t.number, []string{login}); err != nil {
 			app.Fail(fmt.Sprintf("couldn't unassign @%s from %s: %s", login, where, err))
@@ -280,6 +284,7 @@ func (m *Model) doIssueState(app *lockedApp) {
 		}
 		state, reason, did = "open", "reopened", "reopened %s"
 	}
+	app.Flash(fmt.Sprintf("%s %s...", map[string]string{"open": "reopening", "closed": "closing"}[state], where))
 	if err := m.gh.SetIssueState(m.ctx, t.repo, t.number, state, reason); err != nil {
 		app.Fail(fmt.Sprintf("couldn't change %s: %s", where, err))
 		return
@@ -328,6 +333,7 @@ func (m *Model) doHandoff(app *lockedApp) {
 		app.Notice("handoff cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("handing %s to %s...", where, m.agentName()))
 	if err := m.gh.AddLabels(m.ctx, t.repo, t.number, []string{label}); err != nil {
 		app.Fail(fmt.Sprintf("couldn't add %q to %s: %s", label, where, err))
 		return

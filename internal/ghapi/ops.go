@@ -84,6 +84,29 @@ func (c *GitHub) PRDetail(ctx context.Context, repo model.Repo, number int) (*mo
 	return node.PullRequest, nil
 }
 
+// PRHead is a PR's head commit and state, and nothing else.
+func (c *GitHub) PRHead(ctx context.Context, repo model.Repo, number int) (oid, state string, err error) {
+	vars := repoVars(repo)
+	vars["number"] = number
+	data, errs, err := c.graphql(ctx, prHeadQuery, vars)
+	if err != nil {
+		return "", "", err
+	}
+	var node struct {
+		PullRequest *struct {
+			HeadRefOid string `json:"headRefOid"`
+			State      string `json:"state"`
+		} `json:"pullRequest"`
+	}
+	if err := repoNode(data, errs, "repository", &node); err != nil {
+		return "", "", err
+	}
+	if node.PullRequest == nil {
+		return "", "", &Error{Message: fmt.Sprintf("#%d is not a pull request in %s", number, repo)}
+	}
+	return node.PullRequest.HeadRefOid, node.PullRequest.State, nil
+}
+
 // IssueDetail is the detail query's view of an issue.
 func (c *GitHub) IssueDetail(ctx context.Context, repo model.Repo, number int) (*model.Issue, error) {
 	vars := repoVars(repo)

@@ -118,10 +118,12 @@ func (m *Model) doApprove(app *lockedApp) {
 		app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
 		return
 	}
+	workflow.PrimeHead(app, pr) // the head check runs while the question is read
 	if !app.Confirm(fmt.Sprintf("submit a GitHub review approval of %s as %s?", where, m.me)) {
 		app.Notice("approve cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("approving %s as %s...", where, m.me))
 	if !workflow.HeadStill(app, pr, "approval") {
 		return
 	}
@@ -195,6 +197,7 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 	}
 	// one endpoint for both kinds: the issue-comment API is the
 	// conversation thread for issues AND pull requests
+	app.Flash(fmt.Sprintf("posting the comment on %s...", where))
 	if err := m.gh.Comment(m.ctx, repo, number, body); err != nil {
 		app.Fail("comment not posted: " + err.Error())
 		return
@@ -312,6 +315,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice("merge cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("merging %s at %s...", where, model.ShortSHA(head)))
 	res, err := m.gh.MergePR(m.ctx, repo, pr.Number, head, "", m.mergeMethod(repo))
 	if err != nil {
 		app.Fail(fmt.Sprintf("merge of %s failed: %s%s", where, err, deploys.TokenHint(err, "Contents", repo)))
@@ -453,6 +457,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	if comment == "" {
 		comment = fmt.Sprintf("dillodash: %s merged as %s", where, model.ShortSHA(sha))
 	}
+	app.Flash(fmt.Sprintf("approving %s of %s...", plural(len(mine), "deployment"), where))
 	done := 0
 	var failed []string
 	for _, w := range mine {

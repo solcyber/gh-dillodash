@@ -172,6 +172,7 @@ func (m *Model) doRuns(app *lockedApp, act bool) {
 		app.Notice("cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("%s: %s...", acts[i], what))
 	var err error
 	switch acts[i] {
 	case runRerunFailed:
@@ -202,6 +203,7 @@ func actionsHint(err error, repo model.Repo) string {
 // rejectRun rejects the environments a waiting run waits on that the
 // viewer reviews: the run fails there and deploys nothing.
 func (m *Model) rejectRun(app *lockedApp, t workflow.RunTarget, what string) {
+	app.Flash(fmt.Sprintf("reading what %s waits on...", what))
 	pend, err := m.gh.PendingDeployments(m.ctx, t.Repo, t.Run.ID)
 	if err != nil {
 		app.Fail(fmt.Sprintf("couldn't read the environments of %s: %s", what, err))
@@ -232,6 +234,7 @@ func (m *Model) rejectRun(app *lockedApp, t workflow.RunTarget, what string) {
 		app.Notice("cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("rejecting %s of %s...", strings.Join(names, ", "), what))
 	if err := m.gh.RejectDeployments(m.ctx, t.Repo, t.Run.ID, ids, comment); err != nil {
 		app.Fail(fmt.Sprintf("rejecting %s failed: %s", what, err))
 		return

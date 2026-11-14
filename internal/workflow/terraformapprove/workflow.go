@@ -303,10 +303,12 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		} else {
 			note = fmt.Sprintf("No live plan to %s on %s (%s).", cmd, where, strings.Join(all, ", "))
 		}
+		workflow.PrimeHead(app, pr)
 		if !app.Confirm(note + fmt.Sprintf(" Submit a GitHub review approval as %s?", me)) {
 			app.Notice("approve cancelled")
 			return true
 		}
+		app.Flash(fmt.Sprintf("approving %s as %s...", where, me))
 		if !workflow.HeadStill(app, pr, "approval") {
 			return true
 		}
@@ -462,6 +464,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	body := cmd + " " + cand.PlanID + outside // flags: any order
 	destroys := 0
 	var ok bool
+	workflow.PrimeHead(app, pr) // the last question is next: read the head meanwhile
 	switch {
 	case cand.Destroys == nil:
 		typed, got := app.Prompt(fmt.Sprintf("plan %s: its destroy count can't be parsed from the digest.%s\n"+
@@ -516,8 +519,11 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	reviewNote := " + review approved"
 	if reviewed {
 		reviewNote = " (your review approval stands)"
-	} else if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, "", pr.HeadRefOid); err != nil {
-		reviewNote = fmt.Sprintf(" (review approval failed: %s)", err)
+	} else {
+		app.Flash(fmt.Sprintf("posted %s — approving the review...", cmd))
+		if err := app.GH().Approve(app.Context(), pr.Repo, pr.Number, "", pr.HeadRefOid); err != nil {
+			reviewNote = fmt.Sprintf(" (review approval failed: %s)", err)
+		}
 	}
 	flagNote := ""
 	if destroys > 0 {

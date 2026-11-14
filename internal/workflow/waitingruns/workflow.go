@@ -753,6 +753,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		app.Notice("deployment approval cancelled")
 		return true
 	}
+	app.Flash(fmt.Sprintf("approving %s of %s...", plural(len(mine), "deployment"), where))
 	comment := w.cfg.Comment(it.Repo, it.Name(), it.Run.ID)
 	var done, failed []string
 	for _, p := range mine {

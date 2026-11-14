@@ -361,6 +361,20 @@ func (f *Client) PRDetail(ctx context.Context, repo model.Repo, number int) (*mo
 	return p, nil
 }
 
+// PRHead serves the head and state of PRs.
+func (f *Client) PRHead(ctx context.Context, repo model.Repo, number int) (string, string, error) {
+	if err := f.fail("pr_head"); err != nil {
+		return "", "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	p, ok := f.PRs[model.Ident{Repo: repo, Number: number}]
+	if !ok {
+		return "", "", &ghapi.Error{Message: fmt.Sprintf("#%d is not a pull request in %s", number, repo)}
+	}
+	return p.HeadRefOid, p.State, nil
+}
+
 // IssueDetail serves Issues.
 func (f *Client) IssueDetail(ctx context.Context, repo model.Repo, number int) (*model.Issue, error) {
 	if err := f.fail("issue_detail"); err != nil {
