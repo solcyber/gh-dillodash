@@ -26,6 +26,26 @@ import (
 // refuses a blocked PR).
 var mergeable = map[string]bool{"CLEAN": true, "HAS_HOOKS": true, "UNSTABLE": true, "UNKNOWN": true, "": true}
 
+// reviewOwed: GitHub says a review stands between this PR and a merge.
+// An empty reviewDecision is a branch that asks for no approving review
+// (a ruleset with 0 approvals), where the merge state decides.
+func reviewOwed(pr *model.PR) bool {
+	return pr.ReviewDecision != "" && pr.ReviewDecision != "APPROVED"
+}
+
+// unreviewed: no review is asked for and no approval is on the PR.
+func unreviewed(pr *model.PR) bool {
+	if pr.ReviewDecision != "" {
+		return false
+	}
+	for _, r := range pr.Opinions.Nodes {
+		if r.State == "APPROVED" {
+			return false
+		}
+	}
+	return true
+}
+
 // showDetail switches to the detail view (lock held).
 func (m *Model) showDetail(detail any, kind string, started float64, listed *model.PR) {
 	if m.status != "" && m.statusKind == "spin" {
@@ -233,14 +253,15 @@ func (m *Model) doTag(app *lockedApp) {
 	m.doComment(app, true, "@"+others[i].Login+" ")
 }
 
-// mergeMethod is the merge method M uses on repo: [merge] methods, else
-// [workflows.release_pr] merge_method, else a merge commit.
-func (m *Model) mergeMethod(repo model.Repo) string {
+// mergeMethod is the merge method M uses on a PR into base of repo:
+// [merge] methods, else [workflows.release_pr] merge_method, else a
+// merge commit.
+func (m *Model) mergeMethod(repo model.Repo, base string) string {
 	def := "merge"
 	if m.cfg.ReleasePR != nil && m.cfg.ReleasePR.MergeMethod != "" {
 		def = m.cfg.ReleasePR.MergeMethod
 	}
-	return m.cfg.Merge.Method(repo, def)
+	return m.cfg.Merge.Method(repo, base, def)
 }
 
 // doMerge is the M key: merge the open, approved PR, naming its head sha
@@ -274,8 +295,13 @@ func (m *Model) doMerge(app *lockedApp) {
 	case pr.IsDraft:
 		app.Notice(where + " is a draft")
 		return
-	case pr.ReviewDecision != "APPROVED" && !app.LocalApproved(pr):
+	case reviewOwed(pr) && !app.LocalApproved(pr):
 		app.Notice(where + " is not approved yet (A approves)")
+		return
+	case pr.ReviewDecision == "" && !app.LocalApproved(pr) && strings.EqualFold(pr.MergeStateStatus, "BLOCKED"):
+		// no review decision and GitHub blocks it: a rule (a code
+		// owner's review, a required check) is not met
+		app.Notice(where + " can't merge yet: a required check or review is missing (A approves)")
 		return
 	case !mergeable[pr.MergeStateStatus]:
 		app.Notice(fmt.Sprintf("%s is not mergeable: GitHub says %s", where, strings.ToLower(pr.MergeStateStatus)))
@@ -286,7 +312,11 @@ func (m *Model) doMerge(app *lockedApp) {
 	if base == "" {
 		base = "the base branch"
 	}
-	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s, as %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod(repo), m.me)
+	what := fmt.Sprintf("merge %s (%s -> %s at %s) with a %s, as %s?", where, text.OrQ(pr.HeadRefName), base, model.ShortSHA(head), m.mergeMethod(repo, pr.BaseRefName), m.me)
+	if unreviewed(pr) && !app.LocalApproved(pr) {
+		// say it, so a merge nobody reviewed is never a surprise
+		what = fmt.Sprintf("nobody has approved this, and %s asks for no review.\n%s", base, what)
+	}
 	if m.cfg != nil && m.cfg.Reviews.Applies(repo) {
 		// [reviews] merge_applies: this merge is a deploy, say it plainly
 		what = fmt.Sprintf("MERGING APPLIES: %s deploys on push to %s, so this merge changes what runs.\n%s", repo, base, what)
@@ -300,7 +330,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		return
 	}
 	app.Flash(fmt.Sprintf("merging %s at %s...", where, model.ShortSHA(head)))
-	res, err := m.gh.MergePR(m.ctx, repo, pr.Number, head, "", m.mergeMethod(repo))
+	res, err := m.gh.MergePR(m.ctx, repo, pr.Number, head, "", m.mergeMethod(repo, pr.BaseRefName))
 	if err != nil {
 		app.Fail(fmt.Sprintf("merge of %s failed: %s%s", where, err, deploys.TokenHint(err, "Contents", repo)))
 		return

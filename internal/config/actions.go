@@ -16,16 +16,30 @@ import (
 // [merge] methods, the maintenance window's reserved span, and the
 // allowlist of workflows X may run ([[workflows.dispatch]]).
 
-// MergeConfig is [merge]: how M merges a PR, per repo.
+// MergeConfig is [merge]: how M merges a PR, per repo and, where a repo
+// needs it, per base branch.
 type MergeConfig struct {
 	// Methods is the merge method per repo (merge | squash | rebase); a
 	// repo not listed merges with [workflows.release_pr] merge_method, or
 	// as a merge commit.
 	Methods map[model.Repo]string
+	// ByBase is the method for a PR into one base branch of a repo, which
+	// wins over Methods: a repo that squashes into its staging branch can
+	// still merge its release with a merge commit.
+	ByBase map[model.Repo]map[string]string
 }
 
-// Method is repo's merge method, or def when it is not listed.
-func (m MergeConfig) Method(repo model.Repo, def string) string {
+// Method is the merge method for a PR into base of repo: the base's own
+// method, else the repo's, else def.
+func (m MergeConfig) Method(repo model.Repo, base, def string) string {
+	for r, bases := range m.ByBase {
+		if !strings.EqualFold(r.String(), repo.String()) {
+			continue
+		}
+		if v, ok := bases[base]; ok && base != "" {
+			return v
+		}
+	}
 	for r, v := range m.Methods {
 		if strings.EqualFold(r.String(), repo.String()) {
 			return v
@@ -160,6 +174,10 @@ func (p *parser) parseMerge(top *table, cfg *Config) {
 					t.errf("methods", "%q is not \"owner/name\"", k)
 					continue
 				}
+				if bases, perBase := m[k].(map[string]any); perBase {
+					p.parseMergeBases(t, cfg, r, k, bases)
+					continue
+				}
 				v, ok := m[k].(string)
 				if !ok || !contains(MergeChoices, v) {
 					t.errf("methods", "%s: %v is not one of %s", k, m[k], strings.Join(MergeChoices, ", "))
@@ -173,6 +191,38 @@ func (p *parser) parseMerge(top *table, cfg *Config) {
 		}
 	}
 	t.done()
+}
+
+// parseMergeBases reads one repo's per-base methods: a table of base
+// branch to method, where the key "default" is the repo's method for
+// every other base.
+func (p *parser) parseMergeBases(t *table, cfg *Config, r model.Repo, name string, bases map[string]any) {
+	keys := make([]string, 0, len(bases))
+	for b := range bases {
+		keys = append(keys, b)
+	}
+	sort.Strings(keys)
+	for _, b := range keys {
+		v, ok := bases[b].(string)
+		if !ok || !contains(MergeChoices, v) {
+			t.errf("methods", "%s, %s: %v is not one of %s", name, b, bases[b], strings.Join(MergeChoices, ", "))
+			continue
+		}
+		if b == "default" {
+			if cfg.Merge.Methods == nil {
+				cfg.Merge.Methods = map[model.Repo]string{}
+			}
+			cfg.Merge.Methods[r] = v
+			continue
+		}
+		if cfg.Merge.ByBase == nil {
+			cfg.Merge.ByBase = map[model.Repo]map[string]string{}
+		}
+		if cfg.Merge.ByBase[r] == nil {
+			cfg.Merge.ByBase[r] = map[string]string{}
+		}
+		cfg.Merge.ByBase[r][b] = v
+	}
 }
 
 // parseReserved reads the maintenance window's reserved span: from and

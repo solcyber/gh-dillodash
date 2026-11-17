@@ -119,14 +119,15 @@ the change is.
 | Where | `P` does |
 |---|---|
 | `on dev` | **Opens the promotion PR.** It reads the change's merge commit and checks each file against the staging head. A file is taken when staging still has what the first tier had before the change, or already has the result. Any other file is a conflict, and `P` refuses with the files named: promote what the change depends on first, or promote it by hand. Nothing is merged three-way. After a confirm, `P` creates `promote/<N>-stage` from the staging head, commits the change there in one commit that GitHub signs (`createCommitOnBranch`, so a signed-commits rule holds), and opens the PR `Promote #N to stage: <title>`. If the commit fails, the branch is deleted again. If the branch already exists, `P` says so and writes nothing. |
-| `→ stage` | **Merges the promotion PR** once GitHub says it can (`ready`), with `[merge] methods` for the repo. `checks`, `behind`, `conflicts` and `draft` are said, not forced. The merge's push deploys staging. |
+| `→ stage` | **Merges the promotion PR** once GitHub says it can (`ready`), with `[merge] methods` for the repo and the staging branch. A squash is given the subject `<PR title> (#N)`, so the unit and its tag are still found by number. `checks`, `behind`, `conflicts` and `draft` are said, not forced. The merge's push deploys staging. |
 | `stage · …` | **Tags the unit.** A menu offers `go/<N>` (release it with the next cut) and `hold/<N>` (keep it on stage), minus the current tag. Before a go, the confirm says what staging's deploy of the unit did, and asks again unless it passed. Then a tag message (prefilled), and a last confirm. A flip deletes the other tag first. The tag is annotated, on the unit's commit, with "Tagged with dillodash by <you>." in its message. |
 | `stage · go` | Tagging is still offered (`hold`). The menu's title says the last hop: the open release PR into production that carries it (`A` approves it there), the unit ahead of it that holds the cut, or the next release cut. |
 
-Every `P` write passes the same guards as the other keys. `allowed_repos`
-refuses it outside the list, and a `[bots]` login or a login outside
-`approvers_team` posts nothing. A newer installed release is offered
-first. The release itself keeps its own rules (`release_pr`, the
+Every `P` write passes `allowed_repos`, which refuses it outside the
+list, and a `[bots]` login makes nothing: dillodash acts only as a
+person. `approvers_team` is not asked, because these steps are below
+production and the branch rules decide who may take them. A newer
+installed release is offered first. The release itself keeps its own rules (`release_pr`, the
 maintenance window).
 
 ## `D`

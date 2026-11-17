@@ -79,7 +79,8 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # merge_method, else a merge commit
 # ============================================================================
 [merge]
-# methods = {}                # e.g. { "acme/infra" = "squash" }
+# methods = {}                # e.g. { "acme/infra" = "squash" }; per base branch:
+#                             # { "acme/api" = { default = "merge", stage = "squash" } }
 
 # ============================================================================
 # Workflow: terraform approve

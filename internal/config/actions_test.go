@@ -24,8 +24,27 @@ methods = { "acme/infra" = "squash", "acme/web-portal" = "rebase" }
 	}
 	infra, _ := model.ParseRepo("acme/infra")
 	other, _ := model.ParseRepo("acme/etl-jobs")
-	if c.Merge.Method(infra, "merge") != "squash" || c.Merge.Method(other, "merge") != "merge" {
+	if c.Merge.Method(infra, "main", "merge") != "squash" || c.Merge.Method(other, "main", "merge") != "merge" {
 		t.Errorf("methods: %v", c.Merge.Methods)
+	}
+	// per base: one branch squashes, the rest take the repo's default
+	c, err = Parse([]byte(actionsBase+`
+[merge]
+methods = { "acme/infra" = { default = "rebase", stage = "squash" }, "acme/etl-jobs" = { stage = "squash" } }
+`), "t", Overrides{})
+	if err != nil || len(c.Warnings) != 0 {
+		t.Fatalf("%v %v", err, c.Warnings)
+	}
+	for _, tc := range []struct {
+		repo       model.Repo
+		base, want string
+	}{{infra, "stage", "squash"}, {infra, "main", "rebase"}, {infra, "", "rebase"}, {other, "stage", "squash"}, {other, "main", "merge"}} {
+		if got := c.Merge.Method(tc.repo, tc.base, "merge"); got != tc.want {
+			t.Errorf("%s into %q: %q, want %q", tc.repo, tc.base, got, tc.want)
+		}
+	}
+	if _, err := Parse([]byte(actionsBase+"[merge]\nmethods = { \"acme/infra\" = { stage = \"ff\" } }\n"), "t", Overrides{}); err == nil || !strings.Contains(err.Error(), "not one of") {
+		t.Errorf("a bad per-base method is an error: %v", err)
 	}
 	if _, err := Parse([]byte(actionsBase+"[merge]\nmethods = { \"acme/infra\" = \"fast-forward\" }\n"), "t", Overrides{}); err == nil || !strings.Contains(err.Error(), "not one of") {
 		t.Errorf("a bad method is an error: %v", err)

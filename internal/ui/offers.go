@@ -61,6 +61,14 @@ func (m *Model) offerMerge() (string, bool) {
 	if pr.ReviewDecision == "APPROVED" || m.localApproved(pr) {
 		return "merge", true
 	}
+	// no review asked for: offer the merge only when GitHub says it
+	// can happen, so the bar never offers a key that would refuse
+	if pr.ReviewDecision == "" {
+		switch strings.ToUpper(pr.MergeStateStatus) {
+		case "CLEAN", "HAS_HOOKS", "UNSTABLE":
+			return "merge", true
+		}
+	}
 	return "", false
 }
 

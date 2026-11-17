@@ -244,3 +244,53 @@ func TestConfigStaleAndPull(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// TestMergeWithoutAReviewRule: a branch that asks for no approving
+// review reports no review decision, and M goes by the merge state. A
+// review GitHub does ask for still stops it.
+func TestMergeWithoutAReviewRule(t *testing.T) {
+	id := model.Ident{Repo: infra, Number: 101}
+	open := func(decision, state string) (*harness, *string) {
+		h := newHarness(t)
+		h.gh.Mutate(func() {
+			h.gh.PRs[id].ReviewDecision = decision
+			h.gh.PRs[id].MergeStateStatus = state
+			h.gh.PRs[id].Opinions.Nodes = nil
+		})
+		h.load()
+		h.named("enter")
+		asked := new(string)
+		h.m.tp.Confirm = func(q string) bool { *asked = q; return true }
+		return h, asked
+	}
+
+	h, asked := open("", "CLEAN")
+	if label, ok := h.m.offerMerge(); !ok || label != "merge" {
+		t.Errorf("the bar offers the merge: %q %v", label, ok)
+	}
+	h.key('M')
+	if len(h.gh.Merges) != 1 {
+		t.Fatalf("no review asked, clean: one merge, got %+v (status %q)", h.gh.Merges, h.m.status)
+	}
+	if !strings.HasPrefix(*asked, "nobody has approved this, and main asks for no review.\n") {
+		t.Errorf("the confirm says nobody reviewed it: %q", *asked)
+	}
+
+	h, _ = open("", "BLOCKED")
+	if _, ok := h.m.offerMerge(); ok {
+		t.Error("a blocked PR is not offered")
+	}
+	h.key('M')
+	if len(h.gh.Merges) != 0 || !strings.Contains(h.m.status, "a required check or review is missing") {
+		t.Errorf("blocked: no merge and the reason, got %+v, %q", h.gh.Merges, h.m.status)
+	}
+
+	h, _ = open("REVIEW_REQUIRED", "BLOCKED")
+	if _, ok := h.m.offerMerge(); ok {
+		t.Error("a PR that needs a review is not offered")
+	}
+	h.key('M')
+	if len(h.gh.Merges) != 0 || !strings.Contains(h.m.status, "not approved yet") {
+		t.Errorf("review required: no merge, got %+v, %q", h.gh.Merges, h.m.status)
+	}
+}
