@@ -716,7 +716,7 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		if autoOnly(pr) {
 			// automation reviews it and still has its grace: nothing
 			// for the viewer to press yet
-			app.Notice(msg + ", which is approved automatically")
+			app.Notice(msg + ", left to the automation that reviews it")
 			break
 		}
 		app.Next(msg + " — press " + keymap.S(keymap.Deploys) + " on its row")
@@ -770,10 +770,7 @@ func waitingEnvs(pr *model.PR) string {
 // automation approves that is not yet put to the viewer.
 func autoOnly(pr *model.PR) bool {
 	dep, ok := pr.Get(ExtDeploy).(deploys.State)
-	if !ok || len(dep.Waits) == 0 {
-		return false
-	}
-	return len(dep.Auto()) == len(dep.Envs())
+	return ok && dep.AllLeft()
 }
 
 func (w *Workflow) progressTimeout() time.Duration {

@@ -33,6 +33,27 @@ func reviewOwed(pr *model.PR) bool {
 	return pr.ReviewDecision != "" && pr.ReviewDecision != "APPROVED"
 }
 
+// canMergeUnreviewed: GitHub has said a PR with no review decision can
+// merge. An unknown or missing merge state is not that.
+func canMergeUnreviewed(pr *model.PR) bool {
+	switch strings.ToUpper(pr.MergeStateStatus) {
+	case "CLEAN", "HAS_HOOKS", "UNSTABLE":
+		return true
+	}
+	return false
+}
+
+// changesRequestedBy names a reviewer whose standing review asks for
+// changes, or "".
+func changesRequestedBy(pr *model.PR) string {
+	for _, r := range pr.Opinions.Nodes {
+		if r.State == "CHANGES_REQUESTED" {
+			return text.OrQ(r.Author.Login)
+		}
+	}
+	return ""
+}
+
 // unreviewed: no review is asked for and no approval is on the PR.
 func unreviewed(pr *model.PR) bool {
 	if pr.ReviewDecision != "" {
@@ -298,12 +319,22 @@ func (m *Model) doMerge(app *lockedApp) {
 	case reviewOwed(pr) && !app.LocalApproved(pr):
 		app.Notice(where + " is not approved yet (A approves)")
 		return
+	case pr.ReviewDecision == "" && !app.LocalApproved(pr) && changesRequestedBy(pr) != "":
+		// no rule asks for a review, so GitHub would take the merge: a
+		// reviewer who asked for changes is still a reason to stop
+		app.Notice(fmt.Sprintf("%s: %s requested changes — settle that first (the branch asks for no review, so GitHub would not stop this)", where, changesRequestedBy(pr)))
+		return
 	case pr.ReviewDecision == "" && !app.LocalApproved(pr) && strings.EqualFold(pr.MergeStateStatus, "BLOCKED"):
 		// no review decision and GitHub blocks it: a rule (a code
 		// owner's review, a required check) is not met
-		app.Notice(where + " can't merge yet: a required check or review is missing (A approves)")
+		app.Notice(where + " can't merge yet: a required check or review is missing")
 		return
-	case !mergeable[pr.MergeStateStatus]:
+	case pr.ReviewDecision == "" && !app.LocalApproved(pr) && !canMergeUnreviewed(pr):
+		// with no approval to go by, GitHub's verdict is all there is:
+		// wait for it rather than assert that no review is asked for
+		app.Notice(fmt.Sprintf("GitHub hasn't worked out whether %s can merge (%s) — try again in a moment", where, text.OrQ(strings.ToLower(pr.MergeStateStatus))))
+		return
+	case !mergeable[strings.ToUpper(pr.MergeStateStatus)]:
 		app.Notice(fmt.Sprintf("%s is not mergeable: GitHub says %s", where, strings.ToLower(pr.MergeStateStatus)))
 		return
 	}
@@ -441,11 +472,24 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	pr.SetShared("deploy", st) // the release workflow's refresh may be cloning this row
 	m.detailVer++
 	m.mu.Unlock()
-	var mine []deploys.Wait
+	// what is due is approved; a wait left to automation is approved
+	// only when nothing else is, and then the question says so
+	var mine, left []deploys.Wait
 	for _, w := range st.Waits {
-		if w.Mine {
+		switch {
+		case w.Due:
 			mine = append(mine, w)
+		case w.Mine:
+			left = append(left, w)
 		}
+	}
+	early := ""
+	switch {
+	case len(mine) == 0 && len(left) > 0:
+		mine, left = left, nil
+		early = fmt.Sprintf("%s reviews %s and is expected to approve it — approve it yourself only if that isn't happening.\n", text.OrQ(st.LeftBy()), strings.Join(envNames(mine), ", "))
+	case len(left) > 0:
+		early = fmt.Sprintf("%s is left to %s, which reviews it.\n", strings.Join(envNames(left), ", "), text.OrQ(st.LeftBy()))
 	}
 	if len(mine) == 0 {
 		switch {
@@ -464,12 +508,6 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	lines := make([]string, len(mine))
 	for i, w := range mine {
 		lines[i] = fmt.Sprintf("%s (%s, run %d)", w.EnvName, text.Ellip(text.OrQ(w.Run.Name), 40), w.Run.ID)
-	}
-	early := ""
-	if by, n := st.AutoBy(), len(st.Auto()); n > 0 && len(st.Due()) == 0 {
-		// every wait of mine is one automation reviews, still inside
-		// its grace: say so, and let the viewer decide
-		early = fmt.Sprintf("%s reviews %s and is expected to approve it — approve it yourself only if that isn't happening.\n", text.OrQ(by), strings.Join(st.Auto(), ", "))
 	}
 	if !app.Confirm(fmt.Sprintf("%sapprove %s of %s on merge %s as %s?\n%s", early, plural(len(mine), "deployment"), where, model.ShortSHA(sha), m.me, strings.Join(lines, "\n"))) {
 		app.Notice("deployment approval cancelled")

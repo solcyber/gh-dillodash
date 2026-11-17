@@ -139,21 +139,44 @@ func TestAutomaticWaits(t *testing.T) {
 	o := Options{IsBot: isBot}
 
 	st := ComputeWith(run(time.Minute), map[int64][]model.PendingDeployment{1: {pend("prod", "alice", "release-bot")}}, now, o)
-	if st.Text != "waits: prod · automatic" || len(st.Due()) != 0 || st.AutoBy() != "release-bot" || len(st.Mine()) != 1 {
-		t.Errorf("young automatic wait: %q due %v by %q mine %v", st.Text, st.Due(), st.AutoBy(), st.Mine())
+	if st.Text != "waits: prod · automatic" || len(st.Due()) != 0 || st.LeftBy() != "release-bot" || len(st.Mine()) != 1 || !st.AllLeft() {
+		t.Errorf("young automatic wait: %q due %v by %q mine %v", st.Text, st.Due(), st.LeftBy(), st.Mine())
 	}
 	st = ComputeWith(run(6*time.Minute), map[int64][]model.PendingDeployment{1: {pend("prod", "alice", "release-bot")}}, now, o)
 	if st.Text != "approve: prod" || len(st.Due()) != 1 {
 		t.Errorf("automation left it past the grace: %q due %v", st.Text, st.Due())
 	}
 	st = ComputeWith(run(time.Minute), map[int64][]model.PendingDeployment{1: {pend("data", "alice")}}, now, o)
-	if st.Text != "approve: data" || len(st.Due()) != 1 || len(st.Auto()) != 0 {
+	if st.Text != "approve: data" || len(st.Due()) != 1 || len(st.Left()) != 0 {
 		t.Errorf("people only: due at once: %q due %v", st.Text, st.Due())
 	}
 	// one of each: the viewer's own is named, the automatic one is not
 	st = ComputeWith(run(time.Minute), map[int64][]model.PendingDeployment{1: {pend("data", "alice"), pend("prod", "release-bot")}}, now, o)
-	if st.Text != "approve: data" {
-		t.Errorf("mixed: %q", st.Text)
+	if st.Text != "approve: data" || st.AllLeft() || len(st.Left()) != 1 {
+		t.Errorf("mixed: %q left %v", st.Text, st.Left())
+	}
+	// two runs on one environment name, one past the grace: it is due,
+	// and the deploy is not "all left to automation"
+	two := []model.WorkflowRun{
+		{ID: 1, Name: "api", Status: "waiting", CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-10 * time.Minute)},
+		{ID: 2, Name: "web", Status: "waiting", CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Minute)},
+	}
+	st = ComputeWith(two, map[int64][]model.PendingDeployment{1: {pend("prod", "release-bot")}, 2: {pend("prod", "release-bot")}}, now, o)
+	if st.Text != "approve: prod" || st.AllLeft() {
+		t.Errorf("one of two runs past the grace: %q allLeft %v", st.Text, st.AllLeft())
+	}
+	// a wait nobody here can approve reads automatic only inside the grace
+	notMine := pend("prod", "release-bot")
+	notMine.CurrentUserCanApprove = false
+	if st = ComputeWith(run(time.Minute), map[int64][]model.PendingDeployment{1: {notMine}}, now, o); st.Text != "waits: prod · automatic" {
+		t.Errorf("not mine, inside the grace: %q", st.Text)
+	}
+	if st = ComputeWith(run(time.Hour), map[int64][]model.PendingDeployment{1: {notMine}}, now, o); st.Text != "waits: prod" {
+		t.Errorf("not mine, automation stalled: %q", st.Text)
+	}
+	// no grace at all
+	if st = ComputeWith(run(time.Second), map[int64][]model.PendingDeployment{1: {pend("prod", "release-bot")}}, now, Options{IsBot: isBot, AutoGrace: -1}); st.Text != "approve: prod" {
+		t.Errorf("a negative grace leaves nothing to automation: %q", st.Text)
 	}
 	// no bot list: as before
 	st = ComputeWith(run(time.Minute), map[int64][]model.PendingDeployment{1: {pend("prod", "alice", "release-bot")}}, now, Options{})

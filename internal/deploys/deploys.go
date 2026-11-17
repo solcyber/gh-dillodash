@@ -34,6 +34,15 @@ var Chip = map[string]string{
 // wait before it is put to the viewer as theirs to approve.
 const AutoGrace = 5 * time.Minute
 
+// GraceOf is the grace for a configured number of seconds: zero is no
+// grace at all, so a config can say "never leave a wait to automation".
+func GraceOf(secs int) time.Duration {
+	if secs <= 0 {
+		return -1
+	}
+	return time.Duration(secs) * time.Second
+}
+
 // Wait is one environment a run waits on.
 type Wait struct {
 	Run     model.WorkflowRun
@@ -44,9 +53,10 @@ type Wait struct {
 	// automation is expected to approve it. By names the first one.
 	Auto bool
 	By   string
-	// Due: it is the viewer's to approve now. A wait that is Mine and
-	// not Auto is due at once; an Auto one only when automation has left
-	// it longer than the grace.
+	// Left: automation reviews it and still has its grace, so it is
+	// left alone, whoever is looking.
+	Left bool
+	// Due: it is the viewer's to approve now: Mine and not Left.
 	Due bool
 	// For is how long the run has waited.
 	For time.Duration
@@ -92,22 +102,33 @@ func (s State) Due() []string {
 	return sortedKeys(set)
 }
 
-// Auto lists the waiting environments automation is expected to approve
-// and that are not yet put to the viewer.
-func (s State) Auto() []string {
+// Left lists the waiting environments left to automation: it reviews
+// them and still has its grace.
+func (s State) Left() []string {
 	set := map[string]bool{}
 	for _, w := range s.Waits {
-		if w.Auto && !w.Due {
+		if w.Left {
 			set[w.EnvName] = true
 		}
 	}
 	return sortedKeys(set)
 }
 
-// AutoBy names who approves the automatic waits ("" when none).
-func (s State) AutoBy() string {
+// AllLeft reports the deploy waits and every wait is left to automation:
+// nothing is anyone's to press yet.
+func (s State) AllLeft() bool {
 	for _, w := range s.Waits {
-		if w.Auto && w.By != "" {
+		if !w.Left {
+			return false
+		}
+	}
+	return len(s.Waits) > 0
+}
+
+// LeftBy names who approves the waits left to automation ("" when none).
+func (s State) LeftBy() string {
+	for _, w := range s.Waits {
+		if w.Left && w.By != "" {
 			return w.By
 		}
 	}
@@ -158,7 +179,7 @@ type Options struct {
 	// and every wait the viewer can approve is due at once.
 	IsBot func(login string) bool
 	// AutoGrace is how long automation gets before its wait is put to
-	// the viewer (zero means AutoGrace; negative means at once).
+	// the viewer (zero means AutoGrace; negative means no grace at all).
 	AutoGrace time.Duration
 }
 
@@ -214,8 +235,10 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 						}
 					}
 				}
-				// a run with no times can't show how long it waited: don't hide it
-				wt.Due = wt.Mine && (!wt.Auto || idle >= grace || start.IsZero())
+				// a run with no times can't show how long it waited:
+				// never leave it to anyone on that
+				wt.Left = wt.Auto && idle < grace && !start.IsZero()
+				wt.Due = wt.Mine && !wt.Left
 				st.Waits = append(st.Waits, wt)
 			}
 			phases["waiting"] = true
@@ -261,8 +284,8 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 		// said as such, so nobody approves it by reflex
 		if due := st.Due(); len(due) > 0 {
 			st.Text = "approve: " + strings.Join(due, ", ")
-		} else if auto := st.Auto(); len(auto) > 0 && len(auto) == len(st.Envs()) {
-			st.Text = "waits: " + strings.Join(auto, ", ") + " · automatic"
+		} else if st.AllLeft() {
+			st.Text = "waits: " + strings.Join(st.Left(), ", ") + " · automatic"
 		} else {
 			st.Text = "waits: " + strings.Join(st.Envs(), ", ")
 		}

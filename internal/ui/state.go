@@ -522,13 +522,14 @@ func botCheck(cfg *config.Config) func(string) bool {
 	return cfg.Bots.IsBot
 }
 
-// deployAutoGrace is the release config's deploy_auto_grace_secs, or
-// zero for the deploys package's default.
+// deployAutoGrace is the release config's deploy_auto_grace_secs: zero
+// there means no grace (negative here), and no release config means the
+// deploys package's default.
 func deployAutoGrace(cfg *config.Config) time.Duration {
-	if cfg != nil && cfg.ReleasePR != nil && cfg.ReleasePR.DeployAutoGraceSecs > 0 {
-		return time.Duration(cfg.ReleasePR.DeployAutoGraceSecs) * time.Second
+	if cfg == nil || cfg.ReleasePR == nil {
+		return 0
 	}
-	return 0
+	return deploys.GraceOf(cfg.ReleasePR.DeployAutoGraceSecs)
 }
 
 // deployRefresh is how soon to look again while a deploy waits or runs:

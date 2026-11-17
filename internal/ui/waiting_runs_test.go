@@ -262,3 +262,37 @@ func TestDLeavesAnAutomaticEnvironmentAlone(t *testing.T) {
 		t.Error("past the grace the bar offers D")
 	}
 }
+
+// TestDApprovesWhatIsDueAndNamesWhatItLeft: one run waits on an
+// environment people review and on one automation reviews. D approves
+// the first only, and its question names the one it left.
+func TestDApprovesWhatIsDueAndNamesWhatItLeft(t *testing.T) {
+	id := model.Ident{Repo: infra, Number: 101}
+	sha := strings.Repeat("e", 40)
+	h := newHarness(t)
+	soon := time.Now().Add(time.Hour)
+	run := model.WorkflowRun{ID: 77, Name: "deploy", Status: "waiting", HeadSHA: sha, HeadBranch: "main", Event: "push", CreatedAt: soon, UpdatedAt: soon}
+	var data, prod model.PendingDeployment
+	data.Environment.ID, data.Environment.Name, data.CurrentUserCanApprove = 8, "data", true
+	prod.Environment.ID, prod.Environment.Name, prod.CurrentUserCanApprove = 9, "prod", true
+	var bot model.DeploymentReviewer
+	bot.Type, bot.Reviewer.Login = "User", "github-actions"
+	prod.Reviewers = []model.DeploymentReviewer{bot}
+	h.gh.Mutate(func() {
+		h.gh.PRs[id].State = "MERGED"
+		h.gh.PRs[id].MergeCommit = &model.MergeCommit{Oid: sha}
+		h.gh.Runs = map[string][]model.WorkflowRun{sha: {run}}
+		h.gh.Pending = map[int64][]model.PendingDeployment{77: {data, prod}}
+	})
+	h.load()
+	h.named("enter")
+	var asked string
+	h.m.tp.Confirm = func(q string) bool { asked = q; return true }
+	h.key('D')
+	if !strings.HasPrefix(asked, "prod is left to github-actions, which reviews it.\napprove 1 deployment") || strings.Contains(asked, "prod (") {
+		t.Errorf("the question approves data and names prod as left: %q", asked)
+	}
+	if got := h.gh.DeployApprovals; len(got) != 1 || len(got[0].EnvIDs) != 1 || got[0].EnvIDs[0] != 8 {
+		t.Errorf("only the due environment is approved: %+v (status %q)", got, h.m.status)
+	}
+}

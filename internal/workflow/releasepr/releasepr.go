@@ -313,7 +313,7 @@ func New(ctx *workflow.Context) *Workflow {
 	w.nowRE = ReleaseNowRE(cfg.ReleaseNowCommand, cfg.ReleaseNowMinReason)
 	w.deploy.StuckAfter = time.Duration(cfg.DeployStuckSecs) * time.Second
 	w.deploy.IsBot = ctx.Config.Bots.IsBot
-	w.deploy.AutoGrace = time.Duration(cfg.DeployAutoGraceSecs) * time.Second
+	w.deploy.AutoGrace = deploys.GraceOf(cfg.DeployAutoGraceSecs)
 	return w
 }
 

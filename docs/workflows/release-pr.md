@@ -166,12 +166,16 @@ Without the window workflow, an approving review is just an approval, and
 - **An environment that automation approves is left to it.** When one of
   an environment's required reviewers is a `[bots]` login (a release job
   that approves its own merge's deploy, say), the row reads `waits: prod
-  · automatic`, nothing announces it, and `D` leaves the key bar. If it
-  still waits after `deploy_auto_grace_secs` (5 minutes by default) it
-  becomes `approve: prod` and is announced like any other. `D` works
-  throughout; inside the grace its question says who is expected to
-  approve. An environment reviewed only by people or teams is yours at
-  once.
+  · automatic`, it is not put to you or counted as yours, and `D` leaves
+  the key bar. If it still waits after `deploy_auto_grace_secs` (5
+  minutes by default; 0 leaves nothing to automation) it becomes
+  `approve: prod` and is announced like any other. `D` works throughout:
+  with nothing else to approve, its question says who is expected to
+  approve; with another environment that is yours, it approves that one
+  and names the one it left. An environment reviewed only by people or
+  teams is yours at once. This is about a merged PR's own deploy; a run
+  in the waiting-approvals section is one somebody started, and is never
+  left to automation.
 - `X` on a release (its row, or its detail) lists its runs: the release
   run in the manifest repo, then the runs on its merge (or head) commit.
   Pick one to re-run its failed jobs or every job, cancel it, reject the
