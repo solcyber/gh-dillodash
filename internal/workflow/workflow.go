@@ -57,12 +57,36 @@ type Identer interface{ Ident() model.Ident }
 // Layout is a row kind's column widths for one frame, by column name.
 type Layout map[string]int
 
+// authorWKey is where the dashboard leaves the frame's shared author
+// column width for the row kinds' layouts.
+const authorWKey = "ui.author_w"
+
+// SetAuthorW records the author column's width for this frame: the
+// widest author of any row on screen, so every section's column is the
+// same width.
+func SetAuthorW(app App, w int) { app.SetState(authorWKey, w) }
+
+// AuthorW is the author column's width for a kind whose own rows need
+// own: the frame's shared width when one was recorded, never narrower
+// than the kind's own.
+func AuthorW(app App, own int) int {
+	if n, ok := app.State(authorWKey).(int); ok && n > own {
+		return n
+	}
+	return own
+}
+
 // RowKind renders rows of one kind.
 type RowKind struct {
 	Icon string // glyph name
 	// Layout computes the column widths for the rows of this kind at
 	// width w; numW is the "#number" column width shared by every kind.
 	Layout func(app App, items []Row, w, numW, repoW int) Layout
+	// Author names who a row is by (a PR's author, a run's actor), for
+	// the author column's width, which every section shares; nil for a
+	// kind whose item is a PR or an issue (read directly) or that has no
+	// such column.
+	Author func(row Row) string
 	// Segs renders one row (after the gutter); pos is the row's place on
 	// screen, which staggers ambient effects.
 	Segs func(app App, row Row, L Layout, w, pos int) []text.Seg

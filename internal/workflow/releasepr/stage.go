@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
+	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -225,12 +226,20 @@ func (w *Workflow) cutOf(prs []*model.PR) (*model.PR, time.Time) {
 // release was cut. Nil when there is no open release or the repo has no
 // first tier, and on a failed read: the row then says nothing rather
 // than something stale, and the error is the caller's to report.
-func (w *Workflow) sinceCut(ctx context.Context, gh ghapi.Client, repo model.Repo, stageOid string, prs []*model.PR, now time.Time) (*SinceCut, error) {
+func (w *Workflow) sinceCut(ctx context.Context, gh ghapi.Client, repo model.Repo, stageOid string, prs []*model.PR, lease *Lease, now time.Time) (*SinceCut, error) {
 	if w.first == "" || !w.firstRepos[repo] {
 		return nil, nil
 	}
 	rel, at := w.cutOf(prs)
-	if rel == nil || at.IsZero() {
+	number := 0
+	switch {
+	case rel != nil && !at.IsZero():
+		number = rel.Number
+	case lease != nil:
+		// someone is running a release and nothing is cut yet: what
+		// merged since they began is what their sweep has to cover
+		at = lease.Since
+	default:
 		return nil, nil
 	}
 	w.stageMu.Lock()
@@ -243,7 +252,7 @@ func (w *Workflow) sinceCut(ctx context.Context, gh ghapi.Client, repo model.Rep
 	if err != nil {
 		return nil, err
 	}
-	out := &SinceCut{Release: rel.Number, At: at, Tier: w.first, Since: s}
+	out := &SinceCut{Release: number, At: at, Tier: w.first, Since: s}
 	w.stageMu.Lock()
 	w.sinceCache[repo] = sinceCached{at: now, cut: at, stage: stageOid, since: out}
 	w.stageMu.Unlock()
@@ -256,7 +265,7 @@ func (w *Workflow) sinceCut(ctx context.Context, gh ghapi.Client, repo model.Rep
 func (w *Workflow) sinceText(s *Stage) string {
 	c := s.Since
 	if c == nil {
-		return ""
+		return w.leaseText(s, clock.Now())
 	}
 	var merged []string
 	if c.FirstCount > 0 {
@@ -267,7 +276,7 @@ func (w *Workflow) sinceText(s *Stage) string {
 	}
 	var parts []string
 	if len(merged) > 0 {
-		parts = append(parts, "since the cut: "+strings.Join(merged, ", "))
+		parts = append(parts, c.label()+": "+strings.Join(merged, ", "))
 	}
 	switch {
 	case c.Same():
@@ -275,7 +284,26 @@ func (w *Workflow) sinceText(s *Stage) string {
 	case c.Known():
 		parts = append(parts, fmt.Sprintf("%s ≠ %s", c.Tier, w.cfg.StagingBranch))
 	}
+	if l := w.leaseText(s, clock.Now()); l != "" {
+		parts = append([]string{l}, parts...)
+	}
 	return strings.Join(parts, " "+glyphs.G("sep")+" ")
+}
+
+// label names the moment the counts start from.
+func (c *SinceCut) label() string {
+	if c.Release == 0 {
+		return "since the lease"
+	}
+	return "since the cut"
+}
+
+// leaseText is "lease: carol 42m", or "".
+func (w *Workflow) leaseText(s *Stage, now time.Time) string {
+	if s.Lease == nil {
+		return ""
+	}
+	return fmt.Sprintf("lease: %s %s", s.Lease.Holder, deploys.FmtSecs(now.Sub(s.Lease.Since)))
 }
 
 // sinceNotice is the same in a sentence, with the PR numbers: what
@@ -315,9 +343,18 @@ func (w *Workflow) sinceNotice(s *Stage, now time.Time) string {
 	default:
 		msg += fmt.Sprintf("couldn't compare %s with %s", c.Tier, w.cfg.StagingBranch)
 	}
-	msg += fmt.Sprintf(" — since release #%d was cut (%s): ", c.Release, clock.Ago(c.At, now))
-	if len(parts) == 0 {
-		return msg + "nothing merged"
+	if c.Release == 0 {
+		msg += fmt.Sprintf(" — since the release lease began (%s): ", clock.Ago(c.At, now))
+	} else {
+		msg += fmt.Sprintf(" — since release #%d was cut (%s): ", c.Release, clock.Ago(c.At, now))
 	}
-	return msg + "merged " + strings.Join(parts, "; ")
+	if len(parts) == 0 {
+		msg += "nothing merged"
+	} else {
+		msg += "merged " + strings.Join(parts, "; ")
+	}
+	if s.Lease != nil {
+		msg += fmt.Sprintf(" — %s holds the release lease", s.Lease.Holder)
+	}
+	return msg
 }

@@ -99,16 +99,19 @@ type Stage struct {
 	Repo  model.Repo
 	Units *Units // nil when the tips were not read
 	// Since is what merged below production since the open release was
-	// cut; nil without an open release, a first tier, or a read.
+	// cut (or, with no release open yet, since its lease began); nil
+	// without either, without a first tier, or without a read.
 	Since *SinceCut
+	// Lease is who is running this repo's release, when an issue says so.
+	Lease *Lease
 }
 
 // SinceCut is what happened below production after a release was cut:
 // the PRs merged into the first tier and into staging since, and whether
 // the two branches hold the same content.
 type SinceCut struct {
-	Release int       // the open release PR the cut belongs to
-	At      time.Time // the cut: the release head's commit time
+	Release int       // the open release PR the cut belongs to; 0 when the moment is a lease's start
+	At      time.Time // the cut (when the release head landed on staging), or the lease's start
 	Tier    string    // the first tier's branch name
 	ghapi.Since
 }
@@ -118,11 +121,11 @@ type SinceCut struct {
 // cut is dropped, because a count that silently stopped moving is worse
 // than none.
 func staleStage(s *Stage) *Stage {
-	if s == nil || s.Since == nil {
+	if s == nil || (s.Since == nil && s.Lease == nil) {
 		return s
 	}
 	cp := *s
-	cp.Since = nil
+	cp.Since, cp.Lease = nil, nil
 	return &cp
 }
 
@@ -288,6 +291,7 @@ type Workflow struct {
 	sinceCache map[model.Repo]sinceCached // under stageMu
 	first      string                     // the first tier's branch ([workflows.promote] tiers), "" when unknown
 	firstRepos map[model.Repo]bool        // the repos that have that tier ([workflows.promote] repos)
+	leaseRepo  model.Repo                 // where the lease issue lives: the manifest repo, else the first review repo
 
 	mu   sync.Mutex
 	cur  *State           // the last applied state (UI goroutine reads)
@@ -348,6 +352,11 @@ func New(ctx *workflow.Context) *Workflow {
 		for _, r := range p.Repos {
 			w.firstRepos[r] = true
 		}
+	}
+	if mw := ctx.Config.MaintenanceWindow; mw != nil && !mw.ManifestRepo.IsZero() {
+		w.leaseRepo = mw.ManifestRepo
+	} else if len(ctx.Config.Reviews.Repos) > 0 {
+		w.leaseRepo = ctx.Config.Reviews.Repos[0]
 	}
 	w.nowRE = ReleaseNowRE(cfg.ReleaseNowCommand, cfg.ReleaseNowMinReason)
 	w.deploy.StuckAfter = time.Duration(cfg.DeployStuckSecs) * time.Second
@@ -446,6 +455,16 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			return st, warns, rateLimit(err)
 		}
 	}
+	// who is running which release, when an issue says so: one small
+	// request, before the rows that show it
+	leases, leaseNotes, leaseErr := w.leases(ctx, gh, now)
+	if leaseErr != nil {
+		if ghapi.IsRateLimit(leaseErr) {
+			return st, warns, leaseErr // back off, as for the other reads
+		}
+		warns = append(warns, "release leases: "+leaseErr.Error())
+	}
+	warns = append(warns, leaseNotes...)
 	// every repo's stage row side by side (the compare and the tags):
 	// the loop below reads them in order
 	type stageRead struct {
@@ -473,7 +492,8 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			if err == nil && stage != nil {
 				func() {
 					defer workflow.Recover(&sinceErr)
-					stage.Since, sinceErr = w.sinceCut(ctx, gh, repo, info.StageOid, info.PRs, now)
+					stage.Lease = leases[strings.ToLower(repo.String())]
+					stage.Since, sinceErr = w.sinceCut(ctx, gh, repo, info.StageOid, info.PRs, stage.Lease, now)
 				}()
 			}
 			stagesMu.Lock()

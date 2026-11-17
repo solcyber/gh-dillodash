@@ -312,7 +312,13 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		app.Notice(fmt.Sprintf("GitHub hasn't worked out whether #%d can merge (%s) — try again in a moment", n, text.OrQ(st)))
 		return
 	}
-	method := app.Config().Merge.Method(c.Repo, w.cfg.Stage(), "")
+	// the same fallback as M: [workflows.release_pr] merge_method, else
+	// a merge commit, so the two keys never merge one PR differently
+	def := ""
+	if rp := app.Config().ReleasePR; rp != nil && rp.MergeMethod != "merge" {
+		def = rp.MergeMethod
+	}
+	method := app.Config().Merge.Method(c.Repo, w.cfg.Stage(), def)
 	how, title := method, ""
 	switch method {
 	case "":
@@ -322,7 +328,12 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		// it, which is how the unit and its go or hold tag are found
 		title = fmt.Sprintf("%s (#%d)", strings.TrimSpace(pr.Title), n)
 	}
-	if !app.Confirm(fmt.Sprintf("merge #%d into %s (%s) as %s? Its push deploys %s.%s", n, w.cfg.Stage(), how, app.Me(), w.cfg.Stage(), extra)) {
+	lead := ""
+	if h := leaseHolder(app, c.Repo); h != "" && !strings.EqualFold(h, app.Me()) {
+		// someone is cutting a release from this branch: say so first
+		lead = fmt.Sprintf("%s holds the release lease on %s: a merge now lands after their sweep — ask first.\n", h, c.Repo.Name)
+	}
+	if !app.Confirm(fmt.Sprintf("%smerge #%d into %s (%s) as %s? Its push deploys %s.%s", lead, n, w.cfg.Stage(), how, app.Me(), w.cfg.Stage(), extra)) {
 		app.Notice("merge cancelled")
 		return
 	}
@@ -527,4 +538,17 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	app.Celebrate(false)
 	app.Refresh(true)
 	return true
+}
+
+// leaseHolder is who holds the release lease on repo, when the release
+// workflow read one; "" otherwise. The release workflow's state is
+// asked through an interface: the two workflows don't import each other.
+func leaseHolder(app workflow.App, repo model.Repo) string {
+	st, ok := app.State(releaseName).(interface {
+		LeaseHolder(model.Repo) string
+	})
+	if !ok {
+		return ""
+	}
+	return st.LeaseHolder(repo)
 }

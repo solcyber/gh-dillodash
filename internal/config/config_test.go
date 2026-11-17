@@ -160,6 +160,7 @@ merge_method = "squash"
 merged_keep_secs = 1
 deploy_stuck_secs = 2
 deploy_auto_grace_secs = 4
+lease_label = "cutting"
 deploy_refresh_secs = 3
 deploy_approval_comment = "merged {repo}#{number} {sha}"
 
@@ -235,7 +236,7 @@ poll_secs = 0
 		ReleaseNowCommand: "/now", ReleaseNowMinReason: 3, ReleaseNowDispatch: false, ReleaseNowDispatchEvent: "go-now",
 		ApplyWorkflow: "ship.yml", ApplyRunMatch: "ship {repo}#{number}", ProgressPollSecs: 17, ProgressTimeoutSecs: 99,
 		ApprovalQueuesForWindow: true, MergeMethod: "squash",
-		MergedKeepSecs: 1, DeployStuckSecs: 2, DeployAutoGraceSecs: 4, DeployRefreshSecs: 3, DeployApprovalComment: "merged {repo}#{number} {sha}",
+		MergedKeepSecs: 1, DeployStuckSecs: 2, DeployAutoGraceSecs: 4, LeaseLabel: "cutting", DeployRefreshSecs: 3, DeployApprovalComment: "merged {repo}#{number} {sha}",
 	}
 	if !reflect.DeepEqual(rp, wantRP) {
 		t.Errorf("release_pr =\n %+v\nwant\n %+v", rp, wantRP)

@@ -364,3 +364,27 @@ func TestBlockedMergeNamesWhatItWaitsFor(t *testing.T) {
 		t.Errorf("unreadable rules leave the plain reason: %q", h.m.status)
 	}
 }
+
+// TestOneAuthorColumnWidth: the author column is as wide as the widest
+// author on screen in every section, so it does not change width from
+// the pull requests to the issues.
+func TestOneAuthorColumnWidth(t *testing.T) {
+	h := newHarness(t)
+	h.gh.Mutate(func() { h.gh.Open[infra].Issues[0].Author.Login = "a-very-long-name" })
+	h.load()
+	h.screen()
+	if got := workflow.AuthorW(h.m, 3); got != 14 {
+		t.Errorf("the shared width is the widest author, capped at 14: %d", got)
+	}
+	// the PR rows pad their short authors to it
+	found := false
+	for _, line := range strings.Split(h.screen(), "\n") {
+		if strings.Contains(line, "#101") {
+			found = strings.Contains(line, "bob"+strings.Repeat(" ", 11))
+			break
+		}
+	}
+	if !found {
+		t.Errorf("a short author is padded to the shared width:\n%s", h.screen())
+	}
+}

@@ -250,6 +250,9 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				if s, ok := row.Item.(*Stage); ok && s.Since != nil {
 					app.Status(w.sinceNotice(s, app.Now()))
 					return true
+				} else if ok && s.Lease != nil {
+					app.Status(fmt.Sprintf("%s: %s holds the release lease (%s) — ask before merging into %s", s.Repo.Name, s.Lease.Holder, clock.Ago(s.Lease.Since, app.Now()), w.cfg.StagingBranch))
+					return true
 				}
 				app.Notice(fmt.Sprintf("%s is a branch, not a PR — o opens its compare with %s on GitHub", w.cfg.StagingBranch, w.cfg.ProductionBranch))
 				return true
@@ -341,7 +344,7 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 			c, _ := r.Item.(*model.PR).Get(ExtCI).(model.CICluster)
 			return text.SegsText(ciSegs(c.Glyphs))
 		}, 14),
-		"author": maxw(items, func(r workflow.Row) string { return text.OrQ(r.Item.(*model.PR).Author.Login) }, 14),
+		"author": workflow.AuthorW(app, maxw(items, func(r workflow.Row) string { return text.OrQ(r.Item.(*model.PR).Author.Login) }, 14)),
 		"age":    3,
 	}
 	// narrow: the repo goes last; the chip (needs approval) never. A
