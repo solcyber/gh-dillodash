@@ -423,6 +423,19 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 		}
 		return ""
 	}
+	// one author column width for every section: the widest author (or
+	// actor) of any row on screen, so the column does not change width
+	// from one section to the next
+	kinds := m.wf.RowKinds()
+	authorW := 0
+	for _, r := range m.rows {
+		a := author(r)
+		if rk, ok := kinds[r.Kind]; ok && rk.Author != nil {
+			a = rk.Author(r)
+		}
+		authorW = max(authorW, text.Width(a))
+	}
+	workflow.SetAuthorW(m, min(14, authorW))
 	if prs := byKind["pr"]; len(prs) > 0 {
 		cols := workflow.Layout{
 			"chip": maxw(prs, func(r workflow.Row) string {
@@ -434,7 +447,7 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 				return text.SegsText(m.ciSegs(c.Glyphs))
 			}, 14),
 			"diff":   maxw(prs, func(r workflow.Row) string { return text.SegsText(diffSegs(r.Item.(*model.PR))) }, 99),
-			"author": maxw(prs, author, 14),
+			"author": workflow.AuthorW(m, maxw(prs, author, 14)),
 			"age":    3,
 		}
 		lay["pr"] = fit(cols, w, numW, "diff", "age", "author", "ci", "chip")
@@ -445,7 +458,7 @@ func (m *Model) listLayout(w int) map[string]workflow.Layout {
 			"count": maxw(iss, func(r workflow.Row) string {
 				return glyphs.Ico("comment") + fmt.Sprint(r.Item.(*model.Issue).Comments.TotalCount)
 			}, 99),
-			"author": maxw(iss, author, 14),
+			"author": workflow.AuthorW(m, maxw(iss, author, 14)),
 			"age":    3,
 		}
 		lay["issue"] = fit(cols, w, numW, "age", "author", "count", "chip")
