@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -309,5 +310,59 @@ func TestRefreshingAbort(t *testing.T) {
 	}
 	if len(annotated) != 0 {
 		t.Errorf("an aborted refresh annotated: %v", annotated)
+	}
+}
+
+// panicky is a workflow whose Refresh panics.
+type panicky struct{ Base }
+
+func (panicky) Name() string { return "boom" }
+func (panicky) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string, error) {
+	panic("a bug in a workflow")
+}
+
+// TestRefreshingPanicIsAWarning: a workflow whose Refresh panics (on its
+// own goroutine, which the refresh worker's recover never sees) fails
+// alone: no state, a warning naming it, and the others land as usual.
+func TestRefreshingPanicIsAWarning(t *testing.T) {
+	var annotated []string
+	ok := &timed{name: "a", started: make(chan struct{}), annotated: &annotated}
+	s, err := NewSet(nil, panicky{}, ok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, warns, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
+	if err != nil {
+		t.Fatalf("a panic is not a rate limit: err %v", err)
+	}
+	if _, has := states["boom"]; has {
+		t.Errorf("the panicked workflow has a state: %v", states)
+	}
+	if states["a"] != "a state" {
+		t.Errorf("the other workflow lost its state: %v", states)
+	}
+	if len(warns) == 0 || !strings.Contains(warns[0], "boom refresh failed: panic:") {
+		t.Errorf("warns %q", warns)
+	}
+}
+
+// TestRefreshingOtherErrorIsAWarning: only a rate limit is returned (it
+// sets the back-off); any other error is a warning, so it can never
+// hide a later workflow's rate limit.
+func TestRefreshingOtherErrorIsAWarning(t *testing.T) {
+	var annotated []string
+	limit := &ghapi.Error{Status: 403, Message: "API rate limit exceeded", RetryAt: time.Now().Add(time.Minute)}
+	broken := &timed{name: "a", started: make(chan struct{}), err: errors.New("bad gateway"), annotated: &annotated}
+	walled := &timed{name: "b", started: make(chan struct{}), err: limit, annotated: &annotated}
+	s, err := NewSet(nil, broken, walled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 20 { // either may end first; the limit wins every time
+		_, _, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
+		if !ghapi.IsRateLimit(err) {
+			t.Fatalf("the rate limit was hidden: err %v", err)
+		}
+		broken.started, walled.started = make(chan struct{}), make(chan struct{})
 	}
 }
