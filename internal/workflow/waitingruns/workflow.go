@@ -500,7 +500,13 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 			Icon:   "shield",
 			Browse: "run",
 			Layout: w.layout,
-			Segs:   w.segs,
+			Author: func(r workflow.Row) string {
+				if it, ok := r.Item.(*Item); ok {
+					return text.OrQ(it.Run.Actor.Login)
+				}
+				return ""
+			},
+			Segs: w.segs,
 			URL: func(app workflow.App, row workflow.Row) string {
 				it, ok := row.Item.(*Item)
 				if !ok {
@@ -599,7 +605,7 @@ func (w *Workflow) layout(app workflow.App, items []workflow.Row, width, numW, r
 		"chips":    min(48, chipsW),
 		"workflow": maxw(items, (*Item).Name, 24),
 		"branch":   maxw(items, branchText, 32),
-		"actor":    maxw(items, func(it *Item) string { return text.OrQ(it.Run.Actor.Login) }, 14),
+		"actor":    workflow.AuthorW(app, maxw(items, func(it *Item) string { return text.OrQ(it.Run.Actor.Login) }, 14)),
 		"age":      3,
 	}
 	if w.multi(app) {
