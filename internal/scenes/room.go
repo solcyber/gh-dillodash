@@ -95,26 +95,89 @@ func Room(c *canvas.Canvas, l RoomLayout, in RoomInfo) {
 	steam(c, p, st.mug, in)
 }
 
+// MullionsAt is where the window's bars cross on the glass: the column
+// and the row near its middle that the dashboard leaves blankest (a gap
+// between columns, the blank line under a section), so they cover as
+// little as can be; they are drawn only on blank cells anyway.
+func MullionsAt(c *canvas.Canvas, l RoomLayout) (my, mx int) {
+	best := func(from, to, center int, blank func(i int) int) int {
+		at, most := center, -1
+		for i := from; i <= to; i++ {
+			n := blank(i)
+			if n > most || (n == most && abs(i-center) < abs(at-center)) {
+				at, most = i, n
+			}
+		}
+		return at
+	}
+	cx, cy := l.X+l.W/2, l.Y+l.H/2
+	mx = best(l.X+l.W*2/5, l.X+l.W*3/5, cx, func(x int) int {
+		n := 0
+		for y := l.Y; y < l.Y+l.H; y++ {
+			if c.Blank(y, x) {
+				n++
+			}
+		}
+		return n
+	})
+	my = best(l.Y+l.H*2/5, l.Y+l.H*3/5, cy, func(y int) int {
+		n := 0
+		for x := l.X; x < l.X+l.W; x++ {
+			if c.Blank(y, x) {
+				n++
+			}
+		}
+		return n
+	})
+	return my, mx
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
 // RoomFront paints what is in front of the glass, over the dashboard:
 // the mullions, a faint glare, and the night sky where the view is blank.
+// Nothing of it covers a letter: the mullions run where the dashboard is
+// blankest and break around whatever is there (MullionsAt).
 func RoomFront(c *canvas.Canvas, l RoomLayout, in RoomInfo) {
-	my, mx := l.Y+l.H/2, l.X+l.W/2
+	my, mx := MullionsAt(c, l)
 	if !pixelRoom(in.Tier) {
 		v, hz, x := "|", "-", "+"
 		if glyphs.Active() != glyphs.ASCII {
 			v, hz, x = "│", "─", "┼"
 		}
+		put := func(y, x int, g string) {
+			if c.Blank(y, x) {
+				c.PutStr(y, x, g, "art")
+			}
+		}
+		cross := c.Blank(my, mx)
 		for y := l.Y; y < l.Y+l.H; y++ {
-			c.PutStr(y, mx, v, "art")
+			put(y, mx, v)
 		}
 		for x := l.X; x < l.X+l.W; x++ {
-			c.PutStr(my, x, hz, "art")
+			put(my, x, hz)
 		}
-		c.PutStr(my, mx, x, "art")
+		if cross {
+			c.PutStr(my, mx, x, "art")
+		}
 		return
 	}
 	night := rgb{0, 0, 0}
-	// the sky first, so nothing of it lands on the bars
+	// the cells the bars may take, read before the sky puts its stars
+	// (a star is night, not a letter: a bar may cover it)
+	var vert, horiz []bool
+	for y := l.Y; y < l.Y+l.H; y++ {
+		vert = append(vert, c.Blank(y, mx))
+	}
+	for x := l.X; x < l.X+l.W; x++ {
+		horiz = append(horiz, c.Blank(my, x))
+	}
+	cross := c.Blank(my, mx)
 	sky(c, l, in)
 	// a faint glare: two short streaks in the first pane, from the
 	// bottom left round, with blank glass for them (never over a letter)
@@ -142,13 +205,19 @@ func RoomFront(c *canvas.Canvas, l RoomLayout, in RoomInfo) {
 	}
 	bar := sgrFg(cream, night)
 	shade := sgrFg(creamShade, night)
-	for y := l.Y; y < l.Y+l.H; y++ {
-		c.PutRaw(y, mx, "┃", bar)
+	for i, ok := range vert {
+		if ok {
+			c.PutRaw(l.Y+i, mx, "┃", bar)
+		}
 	}
-	for x := l.X; x < l.X+l.W; x++ {
-		c.PutRaw(my, x, "━", shade)
+	for i, ok := range horiz {
+		if ok {
+			c.PutRaw(my, l.X+i, "━", shade)
+		}
 	}
-	c.PutRaw(my, mx, "╋", bar)
+	if cross {
+		c.PutRaw(my, mx, "╋", bar)
+	}
 }
 
 // sky puts a few stars and, where the glass is blank enough, a crescent
