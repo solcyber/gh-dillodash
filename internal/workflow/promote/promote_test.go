@@ -562,6 +562,33 @@ func TestPromoteNeedsNoApprover(t *testing.T) {
 	}
 }
 
+// leaseState stands in for the release workflow's state.
+type leaseState struct{ holder string }
+
+func (l leaseState) LeaseHolder(model.Repo) string { return l.holder }
+
+// TestPromoteMergeNamesTheLeaseHolder: merging into a branch someone
+// else is releasing from says so first; your own lease says nothing.
+func TestPromoteMergeNamesTheLeaseHolder(t *testing.T) {
+	w, app := newWF(t)
+	p := open(306, "stage", "promote/203-stage", "Promote #203", "h306", 1)
+	p.MergeStateStatus = "CLEAN"
+	app.Fake.PRs = map[model.Ident]*model.PR{p.Ident(): p}
+	selectChange(app, &Change{Repo: web, First: merged(203, "dev", "feat/c", "c", "d203", 3), Promo: p, Where: Promoting})
+	app.SetState("release_pr", leaseState{"carol"})
+	app.Confirms = []bool{false}
+	w.doPromote(app)
+	if q := app.Questions[len(app.Questions)-1]; !strings.HasPrefix(q, "carol holds the release lease on web: a merge now lands after their sweep — ask first.\nmerge #306") {
+		t.Errorf("asked %q", q)
+	}
+	app.SetState("release_pr", leaseState{"alice"})
+	app.Confirms = []bool{false}
+	w.doPromote(app)
+	if q := app.Questions[len(app.Questions)-1]; !strings.HasPrefix(q, "merge #306") {
+		t.Errorf("your own lease: asked %q", q)
+	}
+}
+
 // TestPromoteTagsAUnit: p on a staging unit tags it go (an annotated tag
 // on its merge commit); flipping hold to go deletes hold first; a deploy
 // that isn't green asks first.
