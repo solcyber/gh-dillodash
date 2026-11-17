@@ -127,6 +127,7 @@ enabled = false
 # release_command = "/release"              # comment that releases an item
 # cancel_command = "/window-cancel"         # comment that pulls an item from the window
 # missed_freeze_marker = "MISSED FREEZE"    # conductor comment text: the freeze never ran, nothing fires that night
+# attended_days = []                       # e.g. ["tue", "thu"]: only those nights ask for the attend command; default: every night
 # missed_freeze_grace_mins = 30             # an open manifest this long past the cutoff is a missed freeze (0 = the comment only)
 # missed_freeze_hint = ""                   # the recovery a missed night shows; default: a generic one
 # late_skip = ""                            # "HH:MM": the run starts no new item after it; default: not shown
@@ -165,6 +166,7 @@ enabled = false
 # merge_method = "merge"                    # merge | squash | rebase
 # merged_keep_secs = 43200                  # keep a merged release listed this long
 # deploy_stuck_secs = 2700                  # flag a deploy still running after this long
+# deploy_auto_grace_secs = 300              # an environment a [bots] login reviews is left to it this long (0 = never)
 # deploy_refresh_secs = 30                  # poll a running deploy this often
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
 # lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, A offers the next

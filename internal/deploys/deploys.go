@@ -30,12 +30,36 @@ var Chip = map[string]string{
 	"none": "chip.state",
 }
 
+// AutoGrace is how long an environment that automation approves may
+// wait before it is put to the viewer as theirs to approve.
+const AutoGrace = 5 * time.Minute
+
+// GraceOf is the grace for a configured number of seconds: zero is no
+// grace at all, so a config can say "never leave a wait to automation".
+func GraceOf(secs int) time.Duration {
+	if secs <= 0 {
+		return -1
+	}
+	return time.Duration(secs) * time.Second
+}
+
 // Wait is one environment a run waits on.
 type Wait struct {
 	Run     model.WorkflowRun
 	EnvID   int64
 	EnvName string
 	Mine    bool // the viewer can approve it
+	// Auto: one of the environment's reviewers is a bot login, so
+	// automation is expected to approve it. By names the first one.
+	Auto bool
+	By   string
+	// Left: automation reviews it and still has its grace, so it is
+	// left alone, whoever is looking.
+	Left bool
+	// Due: it is the viewer's to approve now: Mine and not Left.
+	Due bool
+	// For is how long the run has waited.
+	For time.Duration
 }
 
 // Row is one run for the card: its name, what it is doing, a chip style.
@@ -64,6 +88,51 @@ func (s State) Mine() []string {
 		}
 	}
 	return sortedKeys(set)
+}
+
+// Due lists the environment names that are the viewer's to approve now
+// (see Wait.Due).
+func (s State) Due() []string {
+	set := map[string]bool{}
+	for _, w := range s.Waits {
+		if w.Due {
+			set[w.EnvName] = true
+		}
+	}
+	return sortedKeys(set)
+}
+
+// Left lists the waiting environments left to automation: it reviews
+// them and still has its grace.
+func (s State) Left() []string {
+	set := map[string]bool{}
+	for _, w := range s.Waits {
+		if w.Left {
+			set[w.EnvName] = true
+		}
+	}
+	return sortedKeys(set)
+}
+
+// AllLeft reports the deploy waits and every wait is left to automation:
+// nothing is anyone's to press yet.
+func (s State) AllLeft() bool {
+	for _, w := range s.Waits {
+		if !w.Left {
+			return false
+		}
+	}
+	return len(s.Waits) > 0
+}
+
+// LeftBy names who approves the waits left to automation ("" when none).
+func (s State) LeftBy() string {
+	for _, w := range s.Waits {
+		if w.Left && w.By != "" {
+			return w.By
+		}
+	}
+	return ""
 }
 
 // Envs lists every waiting environment name.
@@ -99,14 +168,30 @@ func RefreshInterval(secs int) time.Duration {
 // usually superseded). A run queued or running longer than StuckAfter
 // is stuck; ComputeWith takes the threshold.
 func compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time) State {
-	return ComputeWith(runs, pending, now, StuckAfter)
+	return ComputeWith(runs, pending, now, Options{})
 }
 
-// ComputeWith is compute with the stuck threshold given (zero or less
-// means StuckAfter).
-func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time, stuckAfter time.Duration) State {
+// Options are what ComputeWith reads besides the runs.
+type Options struct {
+	// StuckAfter is the stuck threshold (zero or less means StuckAfter).
+	StuckAfter time.Duration
+	// IsBot says a reviewer login is automation; nil means nobody is,
+	// and every wait the viewer can approve is due at once.
+	IsBot func(login string) bool
+	// AutoGrace is how long automation gets before its wait is put to
+	// the viewer (zero means AutoGrace; negative means no grace at all).
+	AutoGrace time.Duration
+}
+
+// ComputeWith is compute with its options given.
+func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time, o Options) State {
+	stuckAfter := o.StuckAfter
 	if stuckAfter <= 0 {
 		stuckAfter = StuckAfter
+	}
+	grace := o.AutoGrace
+	if grace == 0 {
+		grace = AutoGrace
 	}
 	sorted := append([]model.WorkflowRun(nil), runs...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
@@ -141,7 +226,20 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 					en = "?"
 				}
 				envs = append(envs, en)
-				st.Waits = append(st.Waits, Wait{Run: r, EnvID: p.Environment.ID, EnvName: en, Mine: p.CurrentUserCanApprove})
+				wt := Wait{Run: r, EnvID: p.Environment.ID, EnvName: en, Mine: p.CurrentUserCanApprove, For: idle}
+				if o.IsBot != nil {
+					for _, rv := range p.Reviewers {
+						if rv.Type != "Team" && rv.Reviewer.Login != "" && o.IsBot(rv.Reviewer.Login) {
+							wt.Auto, wt.By = true, rv.Reviewer.Login
+							break
+						}
+					}
+				}
+				// a run with no times can't show how long it waited:
+				// never leave it to anyone on that
+				wt.Left = wt.Auto && idle < grace && !start.IsZero()
+				wt.Due = wt.Mine && !wt.Left
+				st.Waits = append(st.Waits, wt)
 			}
 			phases["waiting"] = true
 			what := "waiting for an approval"
@@ -182,8 +280,12 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	switch {
 	case phases["waiting"]:
 		st.Phase = "waiting"
-		if mine := st.Mine(); len(mine) > 0 {
-			st.Text = "approve: " + strings.Join(mine, ", ")
+		// what is the viewer's comes first; a wait automation takes is
+		// said as such, so nobody approves it by reflex
+		if due := st.Due(); len(due) > 0 {
+			st.Text = "approve: " + strings.Join(due, ", ")
+		} else if st.AllLeft() {
+			st.Text = "waits: " + strings.Join(st.Left(), ", ") + " · automatic"
 		} else {
 			st.Text = "waits: " + strings.Join(st.Envs(), ", ")
 		}
@@ -236,6 +338,10 @@ type Cache struct {
 	// StuckAfter is the stuck threshold Fetch computes with; zero means
 	// the package default. The release config's deploy_stuck_secs.
 	StuckAfter time.Duration
+	// IsBot and AutoGrace are Options' (the [bots] logins, and the
+	// release config's deploy_auto_grace_secs).
+	IsBot     func(login string) bool
+	AutoGrace time.Duration
 
 	mu    sync.Mutex
 	items map[string]cached
@@ -247,6 +353,13 @@ func (c *Cache) Stuck() time.Duration {
 		return StuckAfter
 	}
 	return c.StuckAfter
+}
+
+func (c *Cache) options() Options {
+	if c == nil {
+		return Options{}
+	}
+	return Options{StuckAfter: c.Stuck(), IsBot: c.IsBot, AutoGrace: c.AutoGrace}
 }
 
 type cached struct {
@@ -279,7 +392,7 @@ func (c *Cache) Fetch(ctx context.Context, gh ghapi.Client, repo model.Repo, sha
 			pending[r.ID] = p
 		}
 	}
-	st := ComputeWith(runs, pending, now, c.Stuck())
+	st := ComputeWith(runs, pending, now, c.options())
 	st.SHA = sha
 	if c != nil {
 		c.mu.Lock()

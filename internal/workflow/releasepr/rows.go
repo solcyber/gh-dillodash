@@ -604,7 +604,7 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 			if d, ok := deployOf(pr, nil); ok {
 				mine := false
 				for _, wt := range d.Waits {
-					if wt.Mine {
+					if wt.Due {
 						mine = true
 						break
 					}
@@ -673,7 +673,10 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	ends = append(ends, sp)
 	ends = append(ends, scenes.Chip("bumped — "+keymap.S(keymap.Approve)+": release NOW", "chip.act")...)
 	ends = append(ends, text.S(" yours to act on", "muted"))
-	return [][]text.Seg{row, rail, ends}
+	auto := []text.Seg{text.S(text.Pad("", 10), "section")}
+	auto = append(auto, scenes.Chip("waits: prod · automatic", "chip.await")...)
+	auto = append(auto, text.S(" automation reviews that environment: nothing to press", "muted"))
+	return [][]text.Seg{row, auto, rail, ends}
 }
 
 // FortressLaneLabel names a release repo's lane.
@@ -739,14 +742,14 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	var rule string
 	switch {
 	case merged:
-		rule = fmt.Sprintf("merged: D approves the environment deployments waiting on its merge commit; dillodash refreshes every %ds while one waits or runs and says when the next one waits", int(w.refreshEvery().Seconds()))
+		rule = fmt.Sprintf("merged: D approves the environments that wait on you; one that automation reviews is left to it and reads automatic; dillodash refreshes every %ds while one waits or runs and says when one is yours", int(w.refreshEvery().Seconds()))
 	case kind == KindHotfix:
 		rule = fmt.Sprintf("a hotfix is an emergency by definition: A approves and posts %s with a reason", cmd)
 	case kind == KindOther:
 		rule = fmt.Sprintf("only %s<date> (the go-tagged cut on %s) and %s<slug> ship to %s; a, M and D refuse anything else",
 			w.cfg.ReleasePrefix, w.cfg.StagingBranch, w.cfg.HotfixPrefix, w.cfg.ProductionBranch)
 	case (src.State == "" || src.State == "OPEN") && (workflow.IApproved(app, pr) || workflow.IApproved(app, src)):
-		rule = fmt.Sprintf("approved by you — A: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves the deployments waiting on the merge", cmd)
+		rule = fmt.Sprintf("approved by you — A: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves a deployment that waits on you after the merge", cmd)
 	case w.cfg.ApprovalQueuesForWindow && w.win != nil:
 		rule = fmt.Sprintf("A: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
 			w.NightPhrase(app.Now()), cmd)

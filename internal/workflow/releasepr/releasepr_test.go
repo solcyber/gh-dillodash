@@ -1248,9 +1248,9 @@ func TestDetailCards(t *testing.T) {
 	if rows := w.HelpRows(); len(rows) != 4 || rows[0][0] != "releases" || !strings.Contains(rows[0][1], "/release-now") || !strings.Contains(rows[2][1], "rail") {
 		t.Errorf("help rows: %v", rows)
 	}
-	if rows := w.LegendRows(); len(rows) != 3 || !strings.Contains(text.SegsText(rows[1]), "deploying") ||
-		!strings.Contains(text.SegsText(rows[2]), "released") || !strings.Contains(text.SegsText(rows[2]), "bumped — A: release NOW") {
-		t.Errorf("three legend rows: the chips, the rail, the ends: %v", rows)
+	if rows := w.LegendRows(); len(rows) != 4 || !strings.Contains(text.SegsText(rows[1]), "waits: prod · automatic") || !strings.Contains(text.SegsText(rows[2]), "deploying") ||
+		!strings.Contains(text.SegsText(rows[3]), "released") || !strings.Contains(text.SegsText(rows[3]), "bumped — A: release NOW") {
+		t.Errorf("four legend rows: the chips, the automatic wait, the rail, the ends: %v", rows)
 	}
 	for i, r := range w.LegendRows() {
 		if n := text.SegsWidth(r); n > 100 {

@@ -58,6 +58,13 @@ assume the example window.
   roll` after it, `/release now (W) by 16:10 UTC` from `release_from`.
   With `closer` set, a night past its `end` that is not closed yet says
   `closes at <closer>`, then `closer late`.
+- **Attended nights.** With `attended_days` set (`["tue", "thu"]`), only
+  those nights ask for `/attend`. Another night says `not an attended
+  night — held items wait for Thu (W attends tonight anyway)` in the
+  plain header colour, and past the cutoff `held items roll to Thu`.
+  This is a team's convention, not a rule the conductor checks: `W`
+  posts the commands on any night, and they count. Unset, every night
+  asks, as before.
 - **A missed freeze.** When the freeze never ran, the conductor fires
   nothing that night. dillodash shows a gold `missed freeze` chip and the
   recovery (`missed_freeze_hint`) on the night, and `W` stops offering

@@ -485,6 +485,17 @@ func TestNightSegs(t *testing.T) {
 	check(t, "header: a held item with nobody attending asks for /attend", strings.Contains(segs, "needs /attend (W) by 21:00 ET") && strings.Contains(segs, "#3600"))
 	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:20:00Z")))
 	check(t, "header: past the cutoff with nobody, it says items roll", strings.Contains(segs, "nobody attending"))
+	// 2026-10-21 is a Wednesday: with attended nights on Tuesday and
+	// Thursday the night asks for nothing and names the next one
+	mw.AttendedDays = []time.Weekday{time.Tuesday, time.Thursday}
+	segs = segsText(w.NightSegs(app, night, at("2026-10-21T19:00:00Z")))
+	check(t, "header: not an attended night, before the cutoff", strings.Contains(segs, "not an attended night — held items wait for Thu (W attends tonight anyway)") && !strings.Contains(segs, "needs /attend"))
+	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:20:00Z")))
+	check(t, "header: not an attended night, past the cutoff", strings.Contains(segs, "not an attended night: held items roll to Thu") && !strings.Contains(segs, "nobody attending"))
+	mw.AttendedDays = []time.Weekday{time.Wednesday}
+	segs = segsText(w.NightSegs(app, night, at("2026-10-21T19:00:00Z")))
+	check(t, "header: an attended night asks as before", strings.Contains(segs, "needs /attend (W) by 21:00 ET"))
+	mw.AttendedDays = nil
 	segs = segsText(w.NightSegs(app, night, at("2026-10-22T01:30:00Z")))
 	check(t, "header: still open past the cutoff's grace: missed freeze, and the recovery", strings.Contains(segs, "missed freeze") &&
 		strings.Contains(segs, mw.MissedHint()) && !strings.Contains(segs, "nobody attending"))

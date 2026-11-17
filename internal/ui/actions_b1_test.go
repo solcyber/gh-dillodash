@@ -294,3 +294,38 @@ func TestMergeWithoutAReviewRule(t *testing.T) {
 		t.Errorf("review required: no merge, got %+v, %q", h.gh.Merges, h.m.status)
 	}
 }
+
+// TestMergeWithoutAReviewRuleStops: with no review decision to go by,
+// M stops on a reviewer who asked for changes and on a merge state
+// GitHub has not worked out, and the bar offers it in neither case.
+func TestMergeWithoutAReviewRuleStops(t *testing.T) {
+	id := model.Ident{Repo: infra, Number: 101}
+	for name, tc := range map[string]struct {
+		state    string
+		opinions []model.Review
+		want     string
+	}{
+		"changes requested": {"CLEAN", []model.Review{{Author: model.Actor{Login: "carol"}, State: "CHANGES_REQUESTED"}}, "carol requested changes"},
+		"approved and changes requested": {"CLEAN", []model.Review{{Author: model.Actor{Login: "bob"}, State: "APPROVED"},
+			{Author: model.Actor{Login: "carol"}, State: "CHANGES_REQUESTED"}}, "carol requested changes"},
+		"unknown state": {"UNKNOWN", nil, "hasn't worked out"},
+		"no state":      {"", nil, "hasn't worked out"},
+	} {
+		h := newHarness(t)
+		h.gh.Mutate(func() {
+			h.gh.PRs[id].ReviewDecision = ""
+			h.gh.PRs[id].MergeStateStatus = tc.state
+			h.gh.PRs[id].Opinions.Nodes = tc.opinions
+		})
+		h.load()
+		h.named("enter")
+		h.m.tp.Confirm = func(string) bool { return true }
+		if _, ok := h.m.offerMerge(); ok {
+			t.Errorf("%s: the bar offers a merge M would refuse", name)
+		}
+		h.key('M')
+		if len(h.gh.Merges) != 0 || !strings.Contains(h.m.status, tc.want) {
+			t.Errorf("%s: no merge and %q, got %+v, %q", name, tc.want, h.gh.Merges, h.m.status)
+		}
+	}
+}
