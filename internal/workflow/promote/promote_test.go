@@ -520,6 +520,48 @@ func TestPromoteMergesAReadyPromotion(t *testing.T) {
 	}
 }
 
+// TestPromoteSquashKeepsTheNumber: a staging branch that squashes gets
+// the PR's number on the squash subject (the unit and its tag are found
+// by it), and only the staging base squashes.
+func TestPromoteSquashKeepsTheNumber(t *testing.T) {
+	w, app := newWF(t)
+	app.Config().Merge.ByBase = map[model.Repo]map[string]string{web: {"stage": "squash"}}
+	p := open(306, "stage", "promote/203-stage", "Promote #203 to stage: c ", "h306", 1)
+	p.MergeStateStatus = "CLEAN"
+	app.Fake.PRs = map[model.Ident]*model.PR{p.Ident(): p}
+	selectChange(app, &Change{Repo: web, First: merged(203, "dev", "feat/c", "c", "d203", 3), Promo: p, Where: Promoting})
+	app.Confirms = []bool{true}
+	w.doPromote(app)
+	if len(app.Fake.Merges) != 1 {
+		t.Fatalf("merges %+v; log %v", app.Fake.Merges, app.Log)
+	}
+	if m := app.Fake.Merges[0]; m.Method != "squash" || m.Title != "Promote #203 to stage: c (#306)" {
+		t.Errorf("squash with the number on the subject: %+v", m)
+	}
+	if got := app.Config().Merge.Method(web, "main", "merge"); got != "merge" {
+		t.Errorf("the production base keeps its own method: %q", got)
+	}
+}
+
+// TestPromoteNeedsNoApprover: the steps below production are open to
+// anyone with write access, so an approvers team the viewer is not in
+// does not stop a promotion.
+func TestPromoteNeedsNoApprover(t *testing.T) {
+	w, app := newWF(t)
+	app.Config().GitHub.ApproversTeam = "acme/approvers"
+	app.Config().GitHub.ApproversTeamStrict = true
+	app.Fake.Teams = map[string][]string{"acme/approvers": {"bob"}}
+	p := open(306, "stage", "promote/203-stage", "Promote #203", "h306", 1)
+	p.MergeStateStatus = "CLEAN"
+	app.Fake.PRs = map[model.Ident]*model.PR{p.Ident(): p}
+	selectChange(app, &Change{Repo: web, First: merged(203, "dev", "feat/c", "c", "d203", 3), Promo: p, Where: Promoting})
+	app.Confirms = []bool{true}
+	w.doPromote(app)
+	if len(app.Fake.Merges) != 1 {
+		t.Fatalf("a non-approver merges a promotion: merges %+v last %q", app.Fake.Merges, app.Last())
+	}
+}
+
 // TestPromoteTagsAUnit: p on a staging unit tags it go (an annotated tag
 // on its merge commit); flipping hold to go deletes hold first; a deploy
 // that isn't green asks first.

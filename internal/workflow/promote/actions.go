@@ -46,15 +46,15 @@ func (w *Workflow) doPromote(app workflow.App) {
 	}
 	switch c.Where {
 	case OnFirst:
-		if workflow.PostGuard(app, "the promotion PR") {
+		if workflow.PersonGuard(app, "the promotion PR") {
 			w.openPromotion(app, c)
 		}
 	case Promoting:
-		if workflow.PostGuard(app, "the promotion merge") {
+		if workflow.PersonGuard(app, "the promotion merge") {
 			w.mergePromotion(app, c)
 		}
 	case OnStage:
-		if workflow.PostGuard(app, "the "+w.cfg.Stage()+" tag") {
+		if workflow.PersonGuard(app, "the "+w.cfg.Stage()+" tag") {
 			w.tagUnit(app, c)
 		}
 	default:
@@ -306,17 +306,22 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		app.Notice(fmt.Sprintf("GitHub hasn't worked out whether #%d can merge (%s) — try again in a moment", n, text.OrQ(st)))
 		return
 	}
-	method := app.Config().Merge.Method(c.Repo, "")
-	how := method
-	if how == "" {
+	method := app.Config().Merge.Method(c.Repo, w.cfg.Stage(), "")
+	how, title := method, ""
+	switch method {
+	case "":
 		how = "merge commit"
+	case "squash":
+		// a squash takes its subject from here: keep the PR's number on
+		// it, which is how the unit and its go or hold tag are found
+		title = fmt.Sprintf("%s (#%d)", strings.TrimSpace(pr.Title), n)
 	}
 	if !app.Confirm(fmt.Sprintf("merge #%d into %s (%s) as %s? Its push deploys %s.%s", n, w.cfg.Stage(), how, app.Me(), w.cfg.Stage(), extra)) {
 		app.Notice("merge cancelled")
 		return
 	}
 	app.Flash(fmt.Sprintf("merging #%d into %s...", n, w.cfg.Stage()))
-	res, err := gh.MergePR(ctx, c.Repo, n, pr.HeadRefOid, "", method)
+	res, err := gh.MergePR(ctx, c.Repo, n, pr.HeadRefOid, title, method)
 	if err != nil {
 		app.Fail(fmt.Sprintf("merging #%d failed: %s", n, err))
 		return

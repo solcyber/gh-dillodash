@@ -27,6 +27,20 @@ func ResetMembershipCache() {
 	memberMu.Unlock()
 }
 
+// PersonGuard is the identity check before a write that needs no
+// approver, only a person: the steps below production (a promotion PR,
+// its merge, a go or hold tag), which the branch rules leave open to
+// anyone with write access. It refuses a bot login and nothing else, so
+// [github] approvers_team never becomes a gate on those steps.
+func PersonGuard(app App, what string) bool {
+	me := app.Me()
+	if cfg := app.Config(); cfg != nil && cfg.Bots.IsBot(me) {
+		app.Notice(fmt.Sprintf("%s not made: %s is a bot login, and dillodash acts only as a person%s", what, me, tokenHint(app)))
+		return false
+	}
+	return true
+}
+
 // PostGuard is the identity check before posting a command that a bot
 // accepts only from an approver (what names the command, e.g.
 // "/release-now"). It refuses (a gold notice, false) when the posting

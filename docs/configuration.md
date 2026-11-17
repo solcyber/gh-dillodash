@@ -90,6 +90,13 @@ merge commit. A repo not listed merges with `[workflows.release_pr]
 merge_method`, else as a merge commit. Each value is `merge`, `squash` or
 `rebase`.
 
+A repo whose branches want different methods takes a table per base
+branch instead: `{ "acme/api" = { default = "merge", stage = "squash" } }`
+squashes a PR into `stage` and merges every other one, a release
+included. `default` is optional. The [`promote`](workflows/promote.md)
+workflow reads the staging branch's method the same way, and on a squash
+it keeps the PR's number on the commit subject.
+
 ## `[[workflows.dispatch]]`
 
 The workflows `X` may run, one table per entry; nothing else is ever

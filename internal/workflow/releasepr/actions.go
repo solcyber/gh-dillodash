@@ -447,7 +447,7 @@ func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handle
 		base = w.cfg.ProductionBranch
 	}
 	how := "as a merge commit"
-	switch method := app.Config().Merge.Method(pr.Repo, w.cfg.MergeMethod); method {
+	switch method := app.Config().Merge.Method(pr.Repo, base, w.cfg.MergeMethod); method {
 	case "squash", "rebase":
 		how = "with a " + method
 	}
