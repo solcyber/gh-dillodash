@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
@@ -169,8 +170,11 @@ func TestAnswerIsAcknowledgedAtOnce(t *testing.T) {
 		t.Fatal("no confirm modal")
 	}
 	h.press(runeKey('y'))
-	if h.m.statusKind != "spin" || h.m.status == "" {
-		t.Errorf("after y: status %q (%s); want a spinner on the same frame", h.m.status, h.m.statusKind)
+	h.m.mu.Lock() // the action goroutine writes the status too
+	status, kind := h.m.status, h.m.statusKind
+	h.m.mu.Unlock()
+	if kind != "spin" || status == "" {
+		t.Errorf("after y: status %q (%s); want a spinner on the same frame", status, kind)
 	}
 	g.release()
 	h.pump()
@@ -292,5 +296,22 @@ func TestOpenSkipsAPrefetchFromBeforeAWrite(t *testing.T) {
 	h.pump()
 	if n := h.gh.Reads["pr_detail"]; n != 2 {
 		t.Errorf("pr_detail reads = %d, want 2 (the open reads after the write)", n)
+	}
+}
+
+// TestRereadIsTheEndingActionsOwn: the re-read an earlier action set off
+// is not kept past a later action's end (that action may have written
+// without reading again).
+func TestRereadIsTheEndingActionsOwn(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	id := model.Ident{Repo: infra, Number: 101}
+	started := fx.Now()
+	h.m.dcache.reread = started
+	h.m.dcache.put(id, &model.PR{Number: 101}, started)
+	h.m.runAction(func() {}) // a later action that writes without a re-read
+	h.pump()
+	if _, ok := h.m.dcache.get(id); ok {
+		t.Error("an earlier action's re-read survived a later action's end")
 	}
 }

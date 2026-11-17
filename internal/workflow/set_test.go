@@ -207,6 +207,7 @@ type timed struct {
 	free      bool
 	started   chan struct{}
 	release   chan struct{} // nil: return at once
+	ended     chan struct{} // closed when Refresh returns (nil: none)
 	err       error
 	gotPRs    int
 	annotated *[]string
@@ -216,6 +217,9 @@ func (w *timed) Name() string   { return w.name }
 func (w *timed) ListFree() bool { return w.free }
 func (w *timed) Refresh(ctx context.Context, _ ghapi.Client, _ []model.Repo, prs []*model.PR, _ []*model.Issue) (State, []string, error) {
 	w.gotPRs = len(prs)
+	if w.ended != nil {
+		defer close(w.ended)
+	}
 	close(w.started)
 	if w.release != nil {
 		select {
@@ -358,11 +362,15 @@ func TestRefreshingOtherErrorIsAWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 20 { // either may end first; the limit wins every time
-		_, _, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
-		if !ghapi.IsRateLimit(err) {
-			t.Fatalf("the rate limit was hidden: err %v", err)
-		}
-		broken.started, walled.started = make(chan struct{}), make(chan struct{})
+	// the error ends first (so it is not "late" and is weighed), then
+	// the limit: the limit is still what Finish returns
+	broken.ended, walled.release = make(chan struct{}), make(chan struct{})
+	go func() { <-broken.ended; close(walled.release) }()
+	_, warns, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
+	if !ghapi.IsRateLimit(err) {
+		t.Fatalf("the rate limit was hidden: err %v", err)
+	}
+	if !strings.Contains(strings.Join(warns, "; "), "a: bad gateway") {
+		t.Errorf("the other error is not a warning: %q", warns)
 	}
 }

@@ -152,14 +152,28 @@ func (m *Model) refresh(again bool) {
 			wantOpenTo = len(requested) > 0 && len(openFirst) > 0
 		)
 		lists.Add(1)
-		go func() { defer lists.Done(); results, err = gh.ListOpen(ctx, repos) }()
+		// each read on its own goroutine, out of reach of the worker's
+		// recover: a panic is that read's error
+		go func() {
+			defer lists.Done()
+			defer workflow.Recover(&err)
+			results, err = gh.ListOpen(ctx, repos)
+		}()
 		if len(requested) > 0 {
 			lists.Add(1)
-			go func() { defer lists.Done(); rq, rqErr = gh.ListRequested(ctx, requested) }()
+			go func() {
+				defer lists.Done()
+				defer workflow.Recover(&rqErr)
+				rq, rqErr = gh.ListRequested(ctx, requested)
+			}()
 		}
 		if wantOpenTo {
 			lists.Add(1)
-			go func() { defer lists.Done(); op, opErr = gh.ListOpenInto(ctx, openFirst, firstTier) }()
+			go func() {
+				defer lists.Done()
+				defer workflow.Recover(&opErr)
+				op, opErr = gh.ListOpenInto(ctx, openFirst, firstTier)
+			}()
 		}
 		lists.Wait()
 		if err != nil {
