@@ -420,7 +420,7 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 // carries it, the unit ahead of it holding the cut, or the next cut.
 func (w *Workflow) releaseNote(app workflow.App, c *Change) string {
 	if c.BlockedBy > 0 {
-		return fmt.Sprintf("it releases once #%d ahead of it is go", c.BlockedBy)
+		return fmt.Sprintf("it releases once %s ahead of it is go", c.blocker())
 	}
 	if p, ok := app.State(releaseName).(workflow.CIProvider); ok && p != nil {
 		var open []*model.PR

@@ -198,6 +198,7 @@ enabled = false
 # hold_tag_prefix = "hold/"                 # default: release_pr's
 # branch_prefix = "promote/"                # a promotion branch is <prefix><number>-<staging tier>
 # approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
+# backmerge_title = ""                      # a regular expression (e.g. "^Back-merge"): a PR whose title matches is a back-merge, not listed; side-branch back-merges are found without it, set it for cherry-picked ones
 
 # ============================================================================
 # Dispatch — the workflows X may run (nothing else is ever dispatched).
