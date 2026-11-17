@@ -127,6 +127,7 @@ func Config() *config.Config {
 	rp.Repos = []model.Repo{Repos[1]}
 	rp.Org = "acme"
 	rp.ApprovalQueuesForWindow = true
+	rp.LeaseLabel = "release-lease" // carol is cutting the portal's release
 	cfg.ReleasePR = rp
 	wr := config.DefaultWaitingRuns()
 	wr.Repos = Repos
@@ -336,7 +337,12 @@ func Client() *fake.Client {
 	manifest.Body = fmt.Sprintf("Tonight's window.\n\n<!-- window-manifest:begin\n{\"night\": %q, \"phase\": \"open\", \"attendees\": [\"carol\"], \"items\": [{\"id\": \"#43\", \"repo\": \"infra\", \"pr\": 43, \"flag\": \"scheduled\", \"revertible\": true, \"start_utc\": %q, \"release_by_utc\": %q, \"status\": \"\", \"reasons\": []}]}\nwindow-manifest:end -->", nightDate, start.Add(4*time.Minute).Format(time.RFC3339), start.Add(14*time.Minute).Format(time.RFC3339))
 	manifest.Comments.Nodes = []model.Comment{bot("@carol is attending the night of "+nightDate+".", 3*time.Hour)}
 	manifest.Comments.TotalCount = 1
-	gh.Labelled = map[model.Repo]map[string][]*model.Issue{infra: {"window-manifest": {manifest}}}
+	// who is cutting which release: the issue whatever takes the lease
+	// keeps, with its machine block
+	lease := &model.Issue{Repo: infra, Number: 31, Title: "Release leases", State: "OPEN", CreatedAt: at(50 * time.Hour), UpdatedAt: at(52 * time.Minute), Author: actor("infra-bot")}
+	lease.Body = fmt.Sprintf("Who is cutting which release.\n\n<!-- release-lease:begin\n{\"leases\": [{\"repo\": \"web-portal\", \"holder\": \"carol\", \"since\": %q, \"until\": %q}]}\nrelease-lease:end -->",
+		at(52*time.Minute).UTC().Format(time.RFC3339), at(-11*time.Hour).UTC().Format(time.RFC3339))
+	gh.Labelled = map[model.Repo]map[string][]*model.Issue{infra: {"window-manifest": {manifest}, "release-lease": {lease}}}
 	infraIssues := append([]*model.Issue{manifest}, issues[:2]...)
 	gh.Open[infra] = ghapi.ListResult{PRs: infraPRs, Issues: infraIssues}
 	gh.Issues[manifest.Ident()] = manifest
