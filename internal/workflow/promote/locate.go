@@ -234,12 +234,17 @@ type backmerger struct {
 }
 
 // backmergeWork caps the own commits a back-merge is proven over (each
-// is an ancestry read, once): a PR with more stays listed.
-const backmergeWork = 100
+// is an ancestry read per merge commit tried, once): a PR with more
+// stays listed.
+const backmergeWork = 60
 
 // backmergeOids caps the later-tier merge commits each own commit is
 // tried against, newest first (the newest usually holds the rest).
-const backmergeOids = 3
+const backmergeOids = 2
+
+// prCommitsListed is the most commits GitHub lists for a PR: a list that
+// long may be cut short, so it proves nothing.
+const prCommitsListed = 250
 
 func newBackmerger(in Inputs) *backmerger {
 	b := &backmerger{in: in, merges: map[string]time.Time{}, stageMerges: map[string]bool{}, stageBackmerge: map[int]bool{}}
@@ -276,6 +281,9 @@ func (b *backmerger) is(p *model.PR, first bool) bool {
 		return false
 	}
 	own := b.in.Commits(p)
+	if len(own) >= prCommitsListed {
+		return false // the newest commits may be past the list: unknown
+	}
 	var later []string
 	for _, c := range own {
 		if _, ok := b.merges[c.SHA]; ok && (first || !b.stageMerges[c.SHA]) {

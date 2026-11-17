@@ -88,7 +88,8 @@ not changes, and aren't listed:
   that moves. A change that merely touches a later tier stays listed: a
   branch cut from production, one that merged staging in to settle a
   conflict, a hotfix opened into staging first. So does any PR whose
-  commits can't be read, or with more than 100 commits of its own. A
+  commits can't be read, or with more than 60 commits of its own that
+aren't merges, or 250 or more in all (GitHub lists no more). A
   promotion of the whole first tier is never taken for one.
 - **By title,** when `backmerge_title` is set.
 

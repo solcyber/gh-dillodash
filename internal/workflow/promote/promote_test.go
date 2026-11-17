@@ -620,3 +620,24 @@ func TestLocateHotfixedChange(t *testing.T) {
 		t.Errorf("released %d, listed %v: want #511 released, #512 and #513 listed", released, got)
 	}
 }
+
+// TestBackmergeProofNeedsTheWholeList: GitHub lists at most 250 of a
+// PR's commits; a list that long may hide the newest (the author's own
+// work), so it proves nothing and the PR stays listed.
+func TestBackmergeProofNeedsTheWholeList(t *testing.T) {
+	set := ghapi.PromoteSet{
+		ProdMerged:  []*model.PR{merged(611, "main", "hotfix/x", "hotfix", "p611", 60)},
+		FirstMerged: []*model.PR{merged(230, "dev", "feat/big", "a feature that merged main in", "d230", 10)},
+	}
+	own := []ghapi.CompareCommit{cm("p611", 2)}
+	for i := range prCommitsListed - 1 {
+		own = append(own, cm("x"+itoa(i), 2))
+	}
+	in := Inputs{Repo: web, First: "dev", Stage: "stage", Prod: "main", Set: set, AheadOK: true,
+		Contains: func(string, string) bool { return true },
+		Commits:  func(*model.PR) []ghapi.CompareCommit { return own },
+	}
+	if changes, _ := Locate(in); len(changes) != 1 {
+		t.Errorf("a PR with a cut-short commit list was hidden: %v", numbers(changes))
+	}
+}
