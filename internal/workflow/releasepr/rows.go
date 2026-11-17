@@ -250,6 +250,9 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				if s, ok := row.Item.(*Stage); ok && s.Since != nil {
 					app.Status(w.sinceNotice(s, app.Now()))
 					return true
+				} else if ok && s.Lease != nil {
+					app.Status(fmt.Sprintf("%s: %s holds the release lease (%s) — ask before merging into %s", s.Repo.Name, s.Lease.Holder, clock.Ago(s.Lease.Since, app.Now()), w.cfg.StagingBranch))
+					return true
 				}
 				app.Notice(fmt.Sprintf("%s is a branch, not a PR — o opens its compare with %s on GitHub", w.cfg.StagingBranch, w.cfg.ProductionBranch))
 				return true

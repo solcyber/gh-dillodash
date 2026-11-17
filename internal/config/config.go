@@ -417,6 +417,9 @@ type ReleasePRConfig struct {
 	DeployAutoGraceSecs   int
 	DeployRefreshSecs     int
 	DeployApprovalComment string // placeholders {repo} {number} {sha}
+	// LeaseLabel is the label of the issue (in the manifest repo) whose
+	// machine block says who is running which repo's release; "" = off.
+	LeaseLabel string
 	// LaneOrder is the release repos' order on a manual night (short
 	// names): after one is released, the next one's open release is
 	// offered; empty = no order

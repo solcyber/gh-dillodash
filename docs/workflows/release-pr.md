@@ -55,6 +55,23 @@ the day after it is enrolled, or at once after the cache file is deleted.
   count, and neither does a repo outside `[workflows.promote] repos`. A
   read that fails leaves the tail off and warns; it never shows an old
   count.
+- **Who is running the release.** With `lease_label` set, an open issue
+  carrying that label (in the manifest repo, else the first review repo)
+  can say who is cutting which repo's release. Its body holds a block:
+
+  ```text
+  <!-- release-lease:begin
+  {"leases": [{"repo": "web-portal", "holder": "carol",
+               "since": "2026-10-28T03:18:00Z", "until": "2026-10-28T15:18:00Z"}]}
+  release-lease:end -->
+  ```
+
+  The `stage:` line then starts its tail with `lease: carol 42m`, and
+  `P` asks first before merging into that repo's staging branch as anyone
+  else. With a lease and no release open yet, the counts read `since the
+  lease` and start when it began. An entry past its `until`, without a
+  holder or without a start is ignored. dillodash only reads the issue:
+  whatever takes the lease writes it, and nothing is blocked by it.
 - **A PR into production that is not a release** (its branch has neither
   prefix) is listed last in its repo, dimmed, with the chip `not a
   release`. It is not counted, and `A`, `M` and `D` refuse it. Set
