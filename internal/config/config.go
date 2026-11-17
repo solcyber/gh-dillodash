@@ -151,7 +151,7 @@ type DisplayConfig struct {
 	ClockTimezone string // IANA zone, validated at parse
 	ClockTZLabel  string // "" = derived (EST/EDT)
 	// Room draws the dashboard as seen through a window from a room
-	// while the release window is open (W steps out of it and back).
+	// while the release window is open (w steps out of it and back).
 	Room bool
 	// FortressEpigraph lays Borges's "On Exactitude in Science" over the
 	// fortress map (b toggles it there).

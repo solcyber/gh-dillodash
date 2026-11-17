@@ -26,6 +26,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -712,7 +713,7 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		} else if p.Detail != "" {
 			msg += " (" + p.Detail + ")"
 		}
-		app.Notice(msg + " — press D on its row")
+		app.Notice(msg + " — press " + keymap.S(keymap.Deploys) + " on its row")
 	case PhaseFailed, PhaseUnverifiable:
 		msg := fmt.Sprintf("%s release FAILED", wh)
 		if p.Phase == PhaseUnverifiable {

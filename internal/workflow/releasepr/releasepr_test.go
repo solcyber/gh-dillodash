@@ -688,8 +688,8 @@ func TestMergeConfirm(t *testing.T) {
 	patchNow(t, outWindow)
 	w, app = newWF(t, true)
 	if ok, handled := w.MergeConfirm(app, mergeableRelease()); ok || !handled || len(app.Menus) != 0 || len(app.Questions) != 0 ||
-		!logHas(app, "notice", "use a — release NOW posts /release-now") {
-		t.Errorf("M outside the window points at a: %v %v %q", ok, handled, app.Log)
+		!logHas(app, "notice", "use A — release NOW posts /release-now") {
+		t.Errorf("M outside the window points at A: %v %v %q", ok, handled, app.Log)
 	}
 	// a command that has waited with no run for unpickedAfter (a restart
 	// forgot the failed dispatch) lets M merge by hand too; a fresh one
