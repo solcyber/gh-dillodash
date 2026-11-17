@@ -712,7 +712,7 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		} else if p.Detail != "" {
 			msg += " (" + p.Detail + ")"
 		}
-		app.Notice(msg + " — press D on its row")
+		app.Next(msg + " — press D on its row")
 	case PhaseFailed, PhaseUnverifiable:
 		msg := fmt.Sprintf("%s release FAILED", wh)
 		if p.Phase == PhaseUnverifiable {

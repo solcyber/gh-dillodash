@@ -226,6 +226,7 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 		},
 		RowStage: {
 			Icon:    "stage",
+			Browse:  "compare",
 			NumText: func(workflow.Row) string { return "stage" },
 			Layout:  w.stageLayout,
 			Segs:    w.stageSegs,

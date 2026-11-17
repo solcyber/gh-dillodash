@@ -191,7 +191,7 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 			w.refire(app, pr, wh, id)
 			return true
 		}
-		app.Notice(fmt.Sprintf("%s is approved by you and already on its way — nothing to post.", wh))
+		app.Notice(fmt.Sprintf("%s is approved by you and already on its way — nothing to post", wh))
 		return true
 	}
 	stands := "your approval of this head stands"

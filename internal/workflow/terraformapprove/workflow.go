@@ -459,6 +459,12 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		outside = fmt.Sprintf(` %s="%s"`, cfg.OutsideWindowFlag, reason)
 	}
 
+	// A plan that doesn't queue applies as soon as the command lands:
+	// the confirm says so, and what (the window cases said it above).
+	if !cand.Applied && !strings.Contains(note, "\nWindow:") {
+		note += "\nApplies at once: " + appliesWhat(cand) + "."
+	}
+
 	// Build the command. The validator requires --confirm-destroys=N
 	// exactly matching the destroy count when destroys >= 1, and its
 	// ABSENCE when destroys == 0. Every question shows the exact comment.
@@ -599,4 +605,20 @@ func (w *Workflow) ApproveOffer(f workflow.Focus) (string, bool) {
 		return cmd + " ceremony", true
 	}
 	return cmd + " plan", true
+}
+
+// appliesWhat names what an approve applies: the stack, or a plan-set's
+// stacks (the first few, and how many more).
+func appliesWhat(c Candidate) string {
+	if !c.Set || len(c.Members) == 0 {
+		return c.Stack
+	}
+	names := make([]string, 0, len(c.Members))
+	for _, m := range c.Members {
+		names = append(names, m.Stack)
+	}
+	if len(names) > 4 {
+		return fmt.Sprintf("%s and %d more", strings.Join(names[:3], ", "), len(names)-3)
+	}
+	return strings.Join(names, ", ")
 }

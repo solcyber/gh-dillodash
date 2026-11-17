@@ -434,7 +434,8 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.refreshGen++
 		m.refreshStamp = fmt.Sprintf("%d|%d|%d", m.refreshGen, len(m.allPRs), len(m.issues))
 		m.noteDeltas()
-		if m.manualPending && m.errText == "" && !spoke {
+		nextUp := m.statusKind == "next" && m.status != "" && fx.Now()-m.statusAt < fx.ToastSecs
+		if m.manualPending && m.errText == "" && !spoke && !nextUp {
 			m.ok("refreshed at " + m.lastRefreshWall)
 		}
 		m.manualPending = false

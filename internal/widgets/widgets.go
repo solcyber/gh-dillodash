@@ -148,7 +148,16 @@ func chunks(s string) []string {
 // lands on lastRow, on cleared rows. A paragraph holding an /approve
 // command is drawn in cmdStyle. Returns the first row used.
 func DrawBlock(c *canvas.Canvas, s string, lastRow int, style, cmdStyle string) int {
-	w := c.W
+	return drawBlock(c, c.W, s, lastRow, style, cmdStyle)
+}
+
+// BlockTop is the row DrawBlock would start s at on a w-wide screen,
+// without drawing: what a view behind it keeps clear.
+func BlockTop(w int, s string, lastRow int) int {
+	return drawBlock(nil, w, s, lastRow, "", "")
+}
+
+func drawBlock(c *canvas.Canvas, w int, s string, lastRow int, style, cmdStyle string) int {
 	width := w - 3
 	if width < 10 {
 		width = 10
@@ -176,6 +185,9 @@ func DrawBlock(c *canvas.Canvas, s string, lastRow int, style, cmdStyle string) 
 		lines = lines[len(lines)-keep:]
 	}
 	top := lastRow - len(lines) + 1
+	if c == nil {
+		return top
+	}
 	for i, ln := range lines {
 		c.Fill(top+i, 0, w, "text", false, false)
 		c.PutSegs(top+i, 1, []text.Seg{text.S(ln.t, ln.st)}, 0, false, false)

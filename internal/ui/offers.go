@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
+	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -62,12 +63,53 @@ func (m *Model) offerMerge() (string, bool) {
 	return "", false
 }
 
+// deploysDone: the merged PR's deploys were read and every run on its
+// merge commit finished, so D has nothing to approve.
+func deploysDone(pr *model.PR) bool {
+	st, ok := pr.Get("deploy").(deploys.State)
+	return ok && (st.Phase == "done" || st.Phase == "cancelled")
+}
+
+// browseLabel is what o opens on the selected row when the row has
+// nothing to open in the dashboard (RowKind.Browse); "" otherwise.
+func (m *Model) browseLabel() string {
+	row, ok := m.Selected()
+	if !ok {
+		return ""
+	}
+	if rk, has := m.wf.RowKinds()[row.Kind]; has {
+		return rk.Browse
+	}
+	return ""
+}
+
+// offerOpen: Enter opens the selected row, unless the row is a branch
+// with nothing to open in the dashboard (o opens it on GitHub).
+func (m *Model) offerOpen() (string, bool) {
+	if _, ok := m.Selected(); !ok {
+		return "", false
+	}
+	return "open", m.browseLabel() == ""
+}
+
+// offerBrowse: o joins the bar on a row Enter can't open.
+func (m *Model) offerBrowse() (string, bool) {
+	if m.view != ViewList {
+		return "", false
+	}
+	l := m.browseLabel()
+	return l, l != ""
+}
+
 func (m *Model) offerDeploysList() (string, bool) {
 	row, ok := m.Selected()
 	if !ok {
 		return "", false
 	}
 	if pr, ok := row.Item.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
+		if deploysDone(pr) {
+			return "", false
+		}
 		return "approve deploys", true
 	}
 	if row.Kind == "waiting_run" {
@@ -78,6 +120,9 @@ func (m *Model) offerDeploysList() (string, bool) {
 
 func (m *Model) offerDeploysDetail() (string, bool) {
 	if pr, ok := m.detail.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
+		if deploysDone(pr) {
+			return "", false
+		}
 		return "approve deploys", true
 	}
 	return "", false
@@ -255,6 +300,9 @@ func (m *Model) hintSegs() []text.Seg {
 			enter = "enter"
 		}
 		next := enter + " opens it"
+		if l := m.browseLabel(); l != "" && view == ViewList {
+			next = "o opens its " + l + " on GitHub"
+		}
 		if view != ViewList {
 			next = "q goes back " + dot + " ? lists every key"
 		}
