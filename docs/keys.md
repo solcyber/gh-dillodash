@@ -22,7 +22,7 @@
 | list, detail | `u` | open the compare view from a stale approval's commit to the head: what changed since the PR was approved, so a re-approve is a look at the delta (the bar shows it while the selected PR's approval is on an older commit) |
 | list | `d` | fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits |
 | detail | `A` | approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm |
-| detail | `M` | merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first |
+| detail | `M` | merge the open PR once it is approved, or once GitHub says it can merge where the branch asks for no review (the question then says nobody approved it), naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first |
 | detail | `D` | approve the environment deployments waiting on the open merged PR |
 | detail | `x` | the Actions runs of the open PR (its head's, or its merge's once merged, and a release's run): read a job's log in `$PAGER` (`X` acts on them) |
 | detail | `C` | comment: type it on the line and Enter posts it; Enter on an empty line opens `$EDITOR` for a longer one |

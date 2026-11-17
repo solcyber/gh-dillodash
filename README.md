@@ -83,7 +83,8 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   markdown (tables, code, terraform plans colored), the review timeline, the
   changed files (`f`) and each file's diff, or the whole diff in `$PAGER`
   (`v`). `A` approves, `C` comments, `T` tags someone, `M` merges an
-  approved PR, `D` approves the deployments waiting on a merged one.
+  approved PR (or one whose branch asks for no review), `D` approves the
+  deployments waiting on a merged one that are yours to approve.
 - **The summary row** counts what needs you and what is failing; the status
   line explains every refusal in words; the header shows a UTC + local clock,
   the GraphQL budget and when the next refresh lands.

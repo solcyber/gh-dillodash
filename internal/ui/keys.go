@@ -93,7 +93,7 @@ var bindings = []binding{
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Approve)}, Bar: keymap.S(keymap.Approve), Label: "approve", Group: "detail", Prio: 10, Acts: true, offer: (*Model).offerApprove,
 		Help: "A  approve", Doc: "approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm", Do: doApprove},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Merge)}, Bar: keymap.S(keymap.Merge), Label: "merge", Group: "detail", Prio: 12, Acts: true, offer: (*Model).offerMerge,
-		Help: "M  merge an approved PR", Doc: "merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first", Do: doMerge},
+		Help: "M  merge a PR GitHub will take", Doc: "merge the open PR once it is approved, or once GitHub says it can merge where the branch asks for no review (the question then says nobody approved it), naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first", Do: doMerge},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Deploys)}, Bar: keymap.S(keymap.Deploys), Label: "approve deploys", Group: "detail", Prio: 30, Acts: true, offer: (*Model).offerDeploysDetail,
 		Help: "D  approve its waiting deployments", Doc: "approve the environment deployments waiting on the open merged PR", Do: doDeploys},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Runs)}, Bar: keymap.S(keymap.Runs), Label: "runs", Group: "detail", Prio: 70,
