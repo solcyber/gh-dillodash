@@ -1,6 +1,90 @@
 # Changelog
 
-## [2.2.0]
+## [2.3.0] — 2026-11-17
+
+**Polish.** The 2.1 and 2.2 speed-ups made safe, the key bar offers only
+what works, confirms say what will happen, every message names a real
+key, and the room no longer paints over the dashboard. Found by walking
+every view of the demo at four sizes and by reviewing the parallel
+refresh and the instant open.
+
+### Fixed
+
+- **A panic in one workflow no longer ends the program.** Since the
+  refresh went parallel, each workflow's read ran out of reach of the
+  refresh's recover. Now a workflow that panics fails alone: its last
+  rows stay, and a warning names it. Any error other than a rate limit is
+  a warning, so it can't hide another workflow's rate limit.
+- **A rate limit right after the first list paints lands the rest.** CI or
+  the fortress meeting the limit no longer fails the whole first load and
+  leaves every key saying "still reading the workflows" for the back-off.
+  A first load that fails anyway says why the keys wait, and that `r`
+  tries again.
+- **An open never shows a read from before a write.** A read-ahead that
+  set off before you merged from the list could answer the open after it,
+  showing the PR as open again with its keys live.
+- **The read a write sets off is kept**, so the next open is whole at once.
+- **A cancelled approve can't stand in for a later post's head check.**
+- **The window strip on a night the clocks change** ends at the right
+  hour.
+- **A read shared within a refresh** no longer fails every reader when
+  the first one is cancelled.
+- **Promote: back-merges made through a side branch are not listed**
+  (#80). A PR whose own commits carry a later tier's merge commit, and
+  bring nothing else of their own, is a back-merge. That is proven with
+  ancestry, so a branch cut from production or one that merged staging
+  in stays listed. Optional `backmerge_title` covers cherry-picked
+  back-merges. A `go` unit behind a back-merge says `after back-merge #N`.
+- **Every message names the key as it is since 2.0.** The all-clear said
+  `A` shows approved PRs (it's `s`), a landed release said "a on its row",
+  and menus said "re-run 'a'". The same goes for the README, the example
+  config that `config init` writes, and the update hint. Keys named in
+  messages now come from one table, and a test fails on a retired letter.
+- **The room's window bars never cover a letter.** They run in the
+  blankest column and row near the middle of the glass, and break around
+  text.
+- **`config pull --force OWNER/REPO`** switches repos (the repo was
+  dropped when it came after the flags), and every subcommand refuses a
+  word it doesn't take.
+
+### Changed
+
+- **The key bar offers only what works on the selection.** No `A release
+  NOW` on a release already on its way. No `D` once every deploy on the
+  merge finished. On the stage row and on waiting runs, `o` opens the
+  compare or the run, instead of an Enter that only refused.
+- **Confirms say what happens.**
+  - A waiting run's deploy approval names the run as its row does (`#412`)
+    and what it ships (`main @3f888d2 — …`).
+  - A terraform `/approve` that applies at once says "Applies at once:"
+    and what.
+  - A confirm keeps the row it asks about in view.
+- **The status line:**
+  - "press D on its row" is a next step in its own color, not a warning,
+    and `r` doesn't replace it.
+  - A plain "cancelled" is said plainly.
+- **The header** keeps the clock, refresh and budget before the running
+  version. A build from source shows as `+dev`.
+- **The summary row:**
+  - Counts of nothing are left out.
+  - Whole items are dropped with a `…`, never cut.
+  - Under a filter it shows the filter's own count.
+- **Section headers:** a section without releases is "staging", and one
+  with nothing queued is "the maintenance window".
+- **The detail's position** reads `all 10`, or how far down the screen
+  reaches (`L35–54/54 end`).
+- **`--icons ascii`** draws no `·` or `—`, and section names line up.
+- **The help** wraps at words on a narrow screen.
+- **`version`** prints the commit, the Go version and the platform.
+  **`config check`** ends with `config check: OK (…)`.
+
+### Added
+
+- `[workflows.promote] backmerge_title`.
+- `internal/keymap`: the keys messages name, bound by the key table.
+- The help lists exit statuses.
+
+## [2.2.0] — 2026-11-14
 
 **Snappy.** The keys never wait on GitHub to say they were heard. Measured
 on one real configuration: opening a PR showed a spinner for 0.6–1.2 s and
@@ -50,7 +134,7 @@ while the question is still on screen.
   frame of the list, the detail or the help takes 0.5–3 ms at 120x40 and
   240x70, well inside the 33 ms frame.
 
-## [2.1.0]
+## [2.1.0] — 2026-11-11
 
 **A faster refresh.** Measured on one real configuration (five workflows,
 five repos), a refresh that took 70 s cold and 39 s warm now takes about
@@ -80,7 +164,7 @@ five repos), a refresh that took 70 s cold and 39 s warm now takes about
 - **Conditional requests.** REST reads send the last ETag; an unchanged
   answer (304) is served from memory and costs no rate limit.
 
-## [2.0.0]
+## [2.0.0] — 2026-11-09
 
 **Shift acts, lowercase looks.** Every key that changes something is now a
 capital and asks first; the key bar leads with what you can do to the
@@ -228,7 +312,7 @@ capitals that just move.
   - Equal `reserved_from` and `reserved_to` is an error, not a whole-day
     reservation.
 
-## [1.13.0]
+## [1.13.0] — 2026-11-06
 
 Two epigraphs, and waiting runs you can tell apart.
 
@@ -256,7 +340,7 @@ Two epigraphs, and waiting runs you can tell apart.
   (`stage @9b1e4a7 (#230)`). `enter` shows the run's URL, and `:` matches
   the run number and id. Two runs of one workflow no longer look the same.
 
-## [1.12.0]
+## [1.12.0] — 2026-11-06
 
 A change can be followed and moved through every tier of a
 branch-per-tier repo, not only the last hop. Waiting runs are read every
@@ -298,7 +382,7 @@ branch-per-tier repo, not only the last hop. Waiting runs are read every
   it: with `refresh_secs = 300`, a run approved within five minutes
   never showed.
 
-## [1.11.0]
+## [1.11.0] — 2026-11-06
 
 An approval that will not merge by itself stays in view, a busy repo can
 be listed for its review requests alone, and fortress mode gains the
@@ -345,7 +429,7 @@ Kowloon Walled City.
   into a branch other than production is no longer taken for a release.
 - The screenshot tool bounds each 24-bit colour channel when it paints.
 
-## [1.10.0]
+## [1.10.0] — 2026-11-05
 
 Issue triage from the detail view, a hand-off to an agent, and a
 dashboard that can be held to the repos and the team it is for.
@@ -401,7 +485,7 @@ dashboard that can be held to the repos and the team it is for.
   drawn at a fixed instant now, and a snapshot's spinner turns with its
   clock; a test renders a shot twice and compares.
 
-## [1.9.0]
+## [1.9.0] — 2026-11-05
 
 A room to watch the release window from, a far louder launch, and a
 release rail that only believes the release job.
@@ -451,7 +535,7 @@ release rail that only believes the release job.
   finds the waiting deployment, instead of doing nothing; a failed read
   says why.
 
-## [1.8.0]
+## [1.8.0] — 2026-11-04
 
 The whole release night from the dashboard: review choices, runs,
 dispatches and the window's newer rules. Plus the graphics pass and a
@@ -537,7 +621,7 @@ keyed hygiene check.
 - The message after approving deployments says what dillodash does next,
   instead of stopping mid-sentence.
 
-## [1.7.1]
+## [1.7.1] — 2026-11-04
 
 ### Fixed
 
@@ -549,7 +633,7 @@ keyed hygiene check.
   re-reads it instead of pointing at `M`, and an open detail falls back
   to its listed row's merge commit.
 
-## [1.7.0]
+## [1.7.0] — 2026-11-03
 
 A clock on the header row.
 
@@ -569,7 +653,7 @@ A clock on the header row.
   refresh time and the meters: a narrow terminal drops those first. Only
   the version outranks the login.
 
-## [1.6.1]
+## [1.6.1] — 2026-11-02
 
 Polish after 1.6.0: a release night's slots show from the first refresh,
 the restart-first prompt 1.6.0 promised, and release rows that keep what
@@ -613,7 +697,7 @@ matters on a narrow screen.
 - No `env_followup` setting: `D` on a release row already approves
   whichever environment its deploy waits on, and the row names it.
 
-## [1.6.0]
+## [1.6.0] — 2026-11-02
 
 A release night in dillodash alone, and installs that keep themselves
 current: release NOW from every place a release can be opened (#23), a
@@ -730,7 +814,7 @@ into it (#25).
   `DILLODASH_AUTO_UPDATE=0` to pin one host whatever a pulled config
   says (#25).
 
-## [1.5.4]
+## [1.5.4] — 2026-10-30
 
 ### Fixed
 
@@ -759,7 +843,7 @@ into it (#25).
 - `pending_label` under `[workflows.maintenance_window]` (default
   `window:pending`).
 
-## [1.5.3]
+## [1.5.3] — 2026-10-30
 
 ### Fixed
 
@@ -782,7 +866,7 @@ into it (#25).
   GitHub). A workflow's `Approve` now runs before that check, so one that
   submits a review must look it up itself.
 
-## [1.5.2]
+## [1.5.2] — 2026-10-29
 
 ### Changed
 
@@ -791,7 +875,7 @@ into it (#25).
   the sprite; the ASCII glyphs, `mascot = "ascii"` and 16 colors keep the
   line art.
 
-## [1.5.1]
+## [1.5.1] — 2026-10-29
 
 ### Added
 
@@ -808,7 +892,7 @@ into it (#25).
   silently onto the wrong row. The fortress shot no longer flips a coin
   for its city on every render.
 
-## [1.5.0]
+## [1.5.0] — 2026-10-29
 
 ### Added
 
@@ -876,7 +960,7 @@ into it (#25).
   descriptions of their own, and the unicode shot uses the app's own
   glyph setup.
 
-## [1.4.1]
+## [1.4.1] — 2026-10-29
 
 ### Fixed
 
@@ -890,7 +974,7 @@ into it (#25).
   among the releases with its rail. The release query now reads each
   review's `submittedAt` for the age.
 
-## [1.4.0]
+## [1.4.0] — 2026-10-29
 
 ### Added
 
@@ -920,7 +1004,7 @@ into it (#25).
   a 403. The closing line now says what was probed and what was not
   (fine-grained grants, Actions write, protection rules). (#8)
 
-## [1.3.0]
+## [1.3.0] — 2026-10-29
 
 ### Added
 
@@ -942,7 +1026,7 @@ into it (#25).
   `[X.Y.Z]` against the tag with its brackets, so it found no notes. It
   now strips the brackets first.
 
-## [1.2.0]
+## [1.2.0] — 2026-10-29
 
 A polish release: three filed issues, several latent bugs, and a pass
 over every surface of the app, the command line and the docs.
@@ -1046,14 +1130,14 @@ over every surface of the app, the command line and the docs.
 - Doctor errors print once; a bad token exits 2 like every other refusal
   to start.
 
-## [1.1.0]
+## [1.1.0] — 2026-10-28
 
 - `gh dillodash config pull owner/repo[:path]` installs the config from a
   repository through the `gh` token, validates it first, and records its
   source; a bare `config pull` refreshes it and `config check` reports
   whether the installed copy is current.
 
-## [1.0.0]
+## [1.0.0] — 2026-10-28
 
 First public release of dillodash, a rewrite in Go of an internal Python
 dashboard, as a GitHub CLI extension.
@@ -1071,6 +1155,25 @@ dashboard, as a GitHub CLI extension.
 - Fortress mode, the splash, wipes, confetti, the release launch, and Amos.
 - The bundled Hack Nerd Font Mono and `font install`.
 
+[2.3.0]: https://github.com/solcyber/gh-dillodash/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/solcyber/gh-dillodash/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/solcyber/gh-dillodash/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/solcyber/gh-dillodash/compare/v1.13.0...v2.0.0
+[1.13.0]: https://github.com/solcyber/gh-dillodash/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/solcyber/gh-dillodash/compare/v1.11.0...v1.12.0
+[1.11.0]: https://github.com/solcyber/gh-dillodash/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/solcyber/gh-dillodash/compare/v1.9.0...v1.10.0
+[1.9.0]: https://github.com/solcyber/gh-dillodash/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/solcyber/gh-dillodash/compare/v1.7.1...v1.8.0
+[1.7.1]: https://github.com/solcyber/gh-dillodash/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/solcyber/gh-dillodash/compare/v1.6.1...v1.7.0
+[1.6.1]: https://github.com/solcyber/gh-dillodash/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/solcyber/gh-dillodash/compare/v1.5.4...v1.6.0
+[1.5.4]: https://github.com/solcyber/gh-dillodash/compare/v1.5.3...v1.5.4
+[1.5.3]: https://github.com/solcyber/gh-dillodash/compare/v1.5.2...v1.5.3
+[1.5.2]: https://github.com/solcyber/gh-dillodash/compare/v1.5.1...v1.5.2
+[1.5.1]: https://github.com/solcyber/gh-dillodash/compare/v1.5.0...v1.5.1
+[1.5.0]: https://github.com/solcyber/gh-dillodash/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/solcyber/gh-dillodash/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/solcyber/gh-dillodash/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/solcyber/gh-dillodash/compare/v1.2.0...v1.3.0
