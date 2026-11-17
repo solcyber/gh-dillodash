@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -63,11 +64,20 @@ func (m *Model) offerMerge() (string, bool) {
 	return "", false
 }
 
-// deploysDone: the merged PR's deploys were read and every run on its
-// merge commit finished, so D has nothing to approve.
+// deploysSettledAfter is how long after a merge a "done" deploy read is
+// trusted to stay done: a deploy that starts after CI (workflow_run, a
+// conductor's dispatch) can begin minutes later, on a state read before.
+const deploysSettledAfter = 30 * time.Minute
+
+// deploysDone: the merged PR's deploys were read, every run on its
+// merge commit finished, and the merge is old enough that no deploy is
+// still to start, so D has nothing to approve.
 func deploysDone(pr *model.PR) bool {
 	st, ok := pr.Get("deploy").(deploys.State)
-	return ok && (st.Phase == "done" || st.Phase == "cancelled")
+	if !ok || (st.Phase != "done" && st.Phase != "cancelled") {
+		return false
+	}
+	return pr.MergedAt != nil && clock.Now().Sub(*pr.MergedAt) > deploysSettledAfter
 }
 
 // browseLabel is what o opens on the selected row when the row has

@@ -51,9 +51,6 @@ func (c *Confirm) Animated() bool {
 	return false
 }
 
-// Draw paints the question with its [y/N] as a panel on the bottom
-// rows, a gold rule across its top so it reads apart from the screen it
-// asks about.
 // Top is the first row the confirm covers on an h x w screen, its rule
 // included: a list behind it keeps the selected row above it.
 func (c *Confirm) Top(h, w int) int {
@@ -64,6 +61,9 @@ func (c *Confirm) Top(h, w int) int {
 	return top
 }
 
+// Draw paints the question with its [y/N] as a panel on the bottom
+// rows, a gold rule across its top so it reads apart from the screen it
+// asks about.
 func (c *Confirm) Draw(cv *canvas.Canvas, f *fx.Fx) {
 	cmd := "approve.cmd"
 	if c.Animated() {

@@ -461,7 +461,13 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 
 	// A plan that doesn't queue applies as soon as the command lands:
 	// the confirm says so, and what (the window cases said it above).
-	if !cand.Applied && !strings.Contains(note, "\nWindow:") {
+	switch {
+	case cand.Applied || strings.Contains(note, "\nWindow:"):
+	case disruptive && !verdict.Shadow && outside == "":
+		// disruptive, but dillodash has no window of its own to say
+		// when: the dispatcher decides
+		note += fmt.Sprintf("\nWindow: %s — the dispatcher may queue it for the window.", verdict.Verdict)
+	default:
 		note += "\nApplies at once: " + appliesWhat(cand) + "."
 	}
 

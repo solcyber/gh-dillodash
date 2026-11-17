@@ -315,3 +315,17 @@ func TestRereadIsTheEndingActionsOwn(t *testing.T) {
 		t.Error("an earlier action's re-read survived a later action's end")
 	}
 }
+
+// TestCancelIsPlainARefusalIsNot: an answer of no is said plainly; a
+// cancel with a reason (the input was refused) keeps the warning.
+func TestCancelIsPlainARefusalIsNot(t *testing.T) {
+	h := newHarness(t)
+	h.m.notice("approve cancelled")
+	if h.m.statusKind == "warn" {
+		t.Error("a plain cancel is styled as a warning")
+	}
+	h.m.notice("approve cancelled (destroy count not confirmed)")
+	if h.m.statusKind != "warn" {
+		t.Error("a refused input is not a warning")
+	}
+}

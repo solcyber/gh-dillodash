@@ -74,7 +74,6 @@ func TestDOnAWaitingRun(t *testing.T) {
 	}
 	h.key('n')
 	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	h.m.tp.Confirm = func(string) bool { return true }
 	var asked []string
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return true }
 	h.key('D')

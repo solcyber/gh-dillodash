@@ -89,7 +89,6 @@ func (it *Item) Envs() []string {
 
 func envName(p model.PendingDeployment) string { return text.OrQ(p.Environment.Name) }
 
-// where names the run in status text: "infra deploy run 4242".
 // where names the run as its row does: repo, workflow and "#412" (the
 // run number the Actions page shows), else "run <id>".
 func (it *Item) where() string {

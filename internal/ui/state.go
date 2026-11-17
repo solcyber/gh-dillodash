@@ -401,9 +401,10 @@ func (m *Model) notice(msg string) {
 	m.fx.Start("toast.shake", 0.3, nil)
 }
 
-// cancelRE is a cancellation notice: "cancelled", "<what> cancelled",
-// with a reason after it or not.
-var cancelRE = regexp.MustCompile(`^([a-z][a-z -]* )?cancelled\b`)
+// cancelRE is a plain cancellation: "cancelled" or "<what> cancelled",
+// nothing after it. One with a reason ("approve cancelled (destroy count
+// not confirmed)") was refused, and is said as a refusal.
+var cancelRE = regexp.MustCompile(`^([a-z][a-z -]* )?cancelled$`)
 
 func (m *Model) fail(msg string) {
 	m.errText = msg
