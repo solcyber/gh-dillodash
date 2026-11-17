@@ -37,8 +37,18 @@ the day after it is enrolled, or at once after the cache file is deleted.
   is not on production; its PR number is read from the commit subject
   (`Merge pull request #N` or a squash's `(#N)`), and the tags
   `go_tag_prefix<N>` / `hold_tag_prefix<N>` decide the count. Untagged
-  counts as hold: a unit nobody tagged does not release. `enter` does
-  nothing on this line; `o` and `y` give its compare page.
+  counts as hold: a unit nobody tagged does not release. `o` and `y` give
+  its compare page.
+- **Since the cut.** While a release is open and the
+  [`promote`](promote.md) workflow names the first tier, the line ends
+  with what happened below production after the release was cut: `since
+  the cut: +3 dev, +1 stage · dev ≠ stage`. The counts are the PRs merged
+  into each branch after the release head's commit, however they were
+  merged; a re-cut moves the moment with it. `dev == stage` means the two
+  branches hold the same content, compared by their root trees, so a
+  squashed promotion still reads equal. `enter` on the line names the
+  PRs. A change that landed after a release manager swept the tiers shows
+  here without anyone asking. A hotfix alone starts no count.
 - **A PR into production that is not a release** (its branch has neither
   prefix) is listed last in its repo, dimmed, with the chip `not a
   release`. It is not counted, and `A`, `M` and `D` refuse it. Set

@@ -130,6 +130,11 @@ type Client struct {
 	// NextPR is the number CreatePR hands back (0: 900).
 	NextPR int
 
+	// Sinces is what MergedSince answers per repo (every merged PR and
+	// the two trees; the call filters by its moment), and SinceAsked the
+	// moments it was asked for.
+	Sinces     map[model.Repo]ghapi.Since
+	SinceAsked []time.Time
 	// Teams is each "org/team"'s members for TeamMember; a team that is
 	// not in the map is unreadable.
 	Teams map[string][]string
@@ -828,6 +833,31 @@ func (f *Client) Compare(ctx context.Context, repo model.Repo, base, head string
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.Compares[base+"..."+head], nil
+}
+
+// MergedSince serves Sinces[repo], keeping only the PRs merged after
+// since.
+func (f *Client) MergedSince(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (ghapi.Since, error) {
+	if err := f.fail("since"); err != nil {
+		return ghapi.Since{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.SinceAsked = append(f.SinceAsked, since)
+	src := f.Sinces[repo]
+	out := ghapi.Since{FirstTree: src.FirstTree, StageTree: src.StageTree}
+	for _, p := range src.First {
+		if p.MergedAt.After(since) {
+			out.First = append(out.First, p)
+		}
+	}
+	for _, p := range src.Stage {
+		if p.MergedAt.After(since) {
+			out.Stage = append(out.Stage, p)
+		}
+	}
+	out.FirstCount, out.StageCount = len(out.First), len(out.Stage)
+	return out, nil
 }
 
 // TagRefs serves Tags[repo] under prefix.

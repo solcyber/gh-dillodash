@@ -409,6 +409,13 @@ func Client() *fake.Client {
 	promotions(gh)
 	gh.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {Name: portal.Name, PRs: []*model.PR{&rel, flight}, ProdOid: "aaaa0001", StageOid: "cccc0003"}}
 	gh.Tags = map[model.Repo][]string{portal: {"go/905", "hold/907"}}
+	// since release #91 was cut: two changes landed on the first tier and
+	// one more unit on staging, so the two branches differ
+	gh.Sinces = map[model.Repo]ghapi.Since{portal: {
+		First:     []ghapi.MergedPR{{Number: 912, Title: "feat: saved filters", MergedAt: at(40 * time.Minute)}, {Number: 913, Title: "fix: empty state copy", MergedAt: at(20 * time.Minute)}},
+		Stage:     []ghapi.MergedPR{{Number: 910, Title: "chore: bump deps", MergedAt: at(30 * time.Minute)}},
+		FirstTree: "7a11000000000000000000000000000000000001", StageTree: "7a11000000000000000000000000000000000002",
+	}}
 	gh.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 3, TotalCommits: 3, Commits: []ghapi.CompareCommit{
 		{SHA: "bbbb0001", Message: "Merge pull request #905 from acme/feat-search", Parents: []string{"aaaa0001", "dddd0001"}},
 		{SHA: "bbbb0002", Message: "fix: referral code on signup (#907)", Parents: []string{"bbbb0001"}},
