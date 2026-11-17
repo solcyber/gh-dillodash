@@ -565,14 +565,37 @@ func (w *Workflow) NightSegs(app workflow.App, night string, now time.Time) []te
 		segs = append(segs, text.S("  attending: "+mentions(info.Attendees), "sum.info"))
 	case needs && live:
 		cutoff, _ := WallToUTC(night, w.cfg.Cutoff, w.cfg)
-		if now.Before(cutoff) {
+		day, attended := nightDay(night, w.cfg)
+		switch {
+		case !attended && now.Before(cutoff):
+			// not a night anyone is expected to attend: say when the
+			// next one is, calmly; W still posts the command
+			segs = append(segs, text.S(fmt.Sprintf("  not an attended night — held items wait for %s (W attends tonight anyway)", shortDay(w.cfg.NextAttended(day))), "sum.info"))
+		case !attended:
+			segs = append(segs, text.S(fmt.Sprintf("  not an attended night: held items roll to %s", shortDay(w.cfg.NextAttended(day))), "sum.info"))
+		case now.Before(cutoff):
 			segs = append(segs, text.S(fmt.Sprintf("  needs %s (W) by %s", w.cfg.AttendCommand, local.T(w.cfg.Cutoff)), "sum.attn"))
-		} else {
+		default:
 			segs = append(segs, text.S("  nobody attending: not-revertible items roll", "sum.attn"))
 		}
 	}
 	return segs
 }
+
+// nightDay is the weekday of a night ("2026-10-21") and whether it is an
+// attended one ([workflows.maintenance_window] attended_days). A night
+// that does not parse counts as attended, so nothing is ever hidden by
+// a bad date.
+func nightDay(night string, cfg *config.MaintenanceWindowConfig) (time.Weekday, bool) {
+	t, err := time.Parse("2006-01-02", night)
+	if err != nil {
+		return 0, true
+	}
+	return t.Weekday(), cfg.Attended(t.Weekday())
+}
+
+// shortDay is "Thu".
+func shortDay(d time.Weekday) string { return d.String()[:3] }
 
 // SummarySegs is the "N queued tonight" chip.
 func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {

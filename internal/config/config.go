@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -292,7 +293,13 @@ type MaintenanceWindowConfig struct {
 	// the night shows ("" = a generic one).
 	MissedFreezeMarker    string
 	MissedFreezeGraceMins int
-	MissedFreezeHint      string
+	// AttendedDays are the weekdays whose nights someone is expected to
+	// attend. Empty: every night, and the night asks for the attend
+	// command whenever a held item needs someone. Set: only those nights
+	// ask; another night says it is not an attended one. The conductor
+	// still takes the commands on any night.
+	AttendedDays     []time.Weekday
+	MissedFreezeHint string
 	// LateSkip is when the run stops starting new items; Closer is when
 	// the conductor closes the night. Both are wall clock in the window's
 	// zone, nil = not set (not shown).
@@ -567,4 +574,29 @@ func (e *Error) Error() string {
 		}
 	}
 	return strings.Join(parts, ": ")
+}
+
+// Attended reports the night of day is one someone is expected to
+// attend: any night when AttendedDays is empty.
+func (c *MaintenanceWindowConfig) Attended(day time.Weekday) bool {
+	if len(c.AttendedDays) == 0 {
+		return true
+	}
+	for _, d := range c.AttendedDays {
+		if d == day {
+			return true
+		}
+	}
+	return false
+}
+
+// NextAttended is the first attended weekday after day (day itself
+// when it is the only one).
+func (c *MaintenanceWindowConfig) NextAttended(day time.Weekday) time.Weekday {
+	for i := 1; i <= 7; i++ {
+		if d := time.Weekday((int(day) + i) % 7); c.Attended(d) {
+			return d
+		}
+	}
+	return day
 }

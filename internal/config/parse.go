@@ -702,6 +702,21 @@ func (p *parser) parseMaintenanceWindow(wt *table, cfg *Config) {
 	if !(w.Cutoff.Before(w.ReleaseFrom) && w.ReleaseFrom.Before(w.Start) && w.Start.Before(w.End)) {
 		t.errf("cutoff, release_from, start, end", "expected cutoff < release_from < start < end, got %s, %s, %s, %s", w.Cutoff, w.ReleaseFrom, w.Start, w.End)
 	}
+	if days, ok := t.strs("attended_days", nil); ok {
+		w.AttendedDays = nil
+		seen := map[time.Weekday]bool{}
+		for _, d := range days {
+			day, known := weekday(d)
+			if !known {
+				t.errf("attended_days", "%q is not a weekday (mon, tue, wed, thu, fri, sat, sun)", d)
+				continue
+			}
+			if !seen[day] {
+				seen[day] = true
+				w.AttendedDays = append(w.AttendedDays, day)
+			}
+		}
+	}
 	w.QueuedLabel = t.nonEmpty("queued_label", w.QueuedLabel)
 	w.ScheduledLabel = t.nonEmpty("scheduled_label", w.ScheduledLabel)
 	w.RolledLabel = t.nonEmpty("rolled_label", w.RolledLabel)
@@ -1045,4 +1060,16 @@ func levenshtein(a, b string) int {
 		prev, cur = cur, prev
 	}
 	return prev[len(rb)]
+}
+
+// weekday reads "tue" or "tuesday", in any case.
+func weekday(s string) (time.Weekday, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		name := strings.ToLower(d.String())
+		if s == name || s == name[:3] {
+			return d, true
+		}
+	}
+	return 0, false
 }
