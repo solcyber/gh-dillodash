@@ -155,6 +155,11 @@ func (p *parser) parsePromote(wt *table, cfg *Config) {
 		t.warnf("tiers", "%q and %q differ from release_pr's staging_branch %q and production_branch %q; the last hop is release_pr's", w.Stage(), w.Prod(), rp.StagingBranch, rp.ProductionBranch)
 	}
 	for _, r := range w.Repos {
+		// a rebase leaves no merge commit and no "(#N)" on the subject,
+		// so the unit and its go or hold tag could not be found
+		if cfg.Merge.Method(r, w.Stage(), "") == "rebase" {
+			t.warnf("repos", "%s merges into %s with a rebase ([merge] methods): a promoted unit's number is then on no commit, so its tag can't be matched; use merge or squash there", r, w.Stage())
+		}
 		if !containsRepo(cfg.Reviews.Repos, r) && !containsRepo(cfg.Reviews.Requested, r) {
 			t.warnf("repos", "%s is in neither [reviews] repos nor requested_repos; its open %s PRs are not listed", r, w.First())
 		}

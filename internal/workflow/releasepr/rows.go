@@ -344,7 +344,7 @@ func (w *Workflow) releaseLayout(app workflow.App, items []workflow.Row, width, 
 			c, _ := r.Item.(*model.PR).Get(ExtCI).(model.CICluster)
 			return text.SegsText(ciSegs(c.Glyphs))
 		}, 14),
-		"author": maxw(items, func(r workflow.Row) string { return text.OrQ(r.Item.(*model.PR).Author.Login) }, 14),
+		"author": workflow.AuthorW(app, maxw(items, func(r workflow.Row) string { return text.OrQ(r.Item.(*model.PR).Author.Login) }, 14)),
 		"age":    3,
 	}
 	// narrow: the repo goes last; the chip (needs approval) never. A
