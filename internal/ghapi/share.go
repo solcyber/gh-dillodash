@@ -2,6 +2,7 @@ package ghapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 
@@ -105,6 +106,9 @@ func (c *GitHub) getShared(ctx context.Context, rawURL, accept string) ([]byte, 
 	v, err, _ := s.g.Do(key, func() (any, error) {
 		b, err := c.getCached(ctx, rawURL, accept)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, leaderCancelled{err}
+			}
 			return nil, err
 		}
 		s.mu.Lock()
@@ -113,10 +117,27 @@ func (c *GitHub) getShared(ctx context.Context, rawURL, accept string) ([]byte, 
 		return b, nil
 	})
 	if err != nil {
+		var lc leaderCancelled
+		if errors.As(err, &lc) {
+			if ctx.Err() == nil {
+				// the reader that went first was cancelled (a workflow
+				// stopped by another's rate limit); this one wasn't, so
+				// it asks for itself
+				return c.getCached(ctx, rawURL, accept)
+			}
+			return nil, lc.err
+		}
 		return nil, err
 	}
 	return v.([]byte), nil
 }
+
+// leaderCancelled is a shared GET that failed because the context of the
+// reader that set it off ended, not because GitHub answered so.
+type leaderCancelled struct{ err error }
+
+func (e leaderCancelled) Error() string { return e.err.Error() }
+func (e leaderCancelled) Unwrap() error { return e.err }
 
 // getCached is a conditional GET: If-None-Match with the last ETag the
 // URL answered, and the remembered body on a 304.
