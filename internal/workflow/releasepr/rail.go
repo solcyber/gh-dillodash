@@ -20,6 +20,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -339,7 +340,7 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 		if compact {
 			label += " · A: NOW"
 		} else {
-			label += " — A: release NOW"
+			label += " — " + keymap.S(keymap.Approve) + ": release NOW"
 		}
 	}
 	segs = append(segs, text.S(label, style))
@@ -378,7 +379,7 @@ func (w *Workflow) budgetLeft(p Progress, now time.Time, measure bool) string {
 
 // nowOffered reports a release the window left behind (bumped or
 // rolled, so not tonight) that is still open and approved by me: its
-// approval stands, so a offers release NOW, and the chip says so.
+// approval stands, so A offers release NOW, and the chip says so.
 func (w *Workflow) nowOffered(app workflow.App, pr *model.PR, p Progress) bool {
 	if p.Phase != PhaseBumped && p.Phase != PhaseRolled {
 		return false

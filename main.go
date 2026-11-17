@@ -48,6 +48,22 @@ import (
 // it "dev", and resolveVersion fills it in from the build info.
 var version = "dev"
 
+// versionLine is what version prints: the release, and for a bug report
+// the commit it was built from, the Go that built it and the platform.
+func versionLine() string {
+	line := "dillodash " + version
+	var extra []string
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+				extra = append(extra, s.Value[:7])
+			}
+		}
+	}
+	extra = append(extra, runtime.Version(), runtime.GOOS+"/"+runtime.GOARCH)
+	return line + " (" + strings.Join(extra, ", ") + ")"
+}
+
 // resolveVersion is v unless it is still "dev" and the build info knows
 // better: the module version when it is a real one, else the commit
 // ("dev+abc1234", "-dirty" when the tree had changes).
@@ -109,6 +125,10 @@ usage:
   gh dillodash version
   gh dillodash help               this text (every command takes --help too)
 
+exit status:
+  0  done              1  it ran and failed (an update, a check that failed)
+  2  usage, config or sign-in problem          130  interrupted
+
 flags:
   --config PATH      config file (default: $DILLODASH_CONFIG, else
                      $XDG_CONFIG_HOME/dillodash/config.toml, else ~/.config/dillodash/config.toml)
@@ -120,7 +140,7 @@ flags:
   --mono             no colors, attributes only (also: NO_COLOR)
   --demo             open the dashboard on an offline fixture, no GitHub needed
   --demo-night       replay a manual release night offline
-  --demo-agent       an offline team working with an AI agent: apply on approval, a legacy repo, handoffs: release NOW, the lane, D
+  --demo-agent       replay a team working with an AI agent offline (apply on approval, a legacy repo, handoffs)
 
 environment:
   DILLODASH_CONFIG   the config file, when --config is not given
@@ -131,7 +151,7 @@ environment:
                      a token that overrides the gh login (config check says when one does)
   GH_PAGER, PAGER    the pager for v (default less)
   GH_EDITOR, VISUAL, EDITOR
-                     the editor for C and t (default vi)
+                     the editor for C and T (default vi)
   NO_COLOR           no colors, like --mono
 `
 
@@ -143,8 +163,19 @@ func (r *repoList) Set(s string) error { *r = append(*r, s); return nil }
 // subFlags parses a subcommand's flags: define declares them on the
 // set, --help prints the usage and returns errHelp, anything else wrong
 // is an exit-2 error that names the flag, and a stray word is an
-// unknown-command error. The remaining positional words come back.
-func subFlags(name string, args []string, define func(*flag.FlagSet)) ([]string, error) {
+// exit-2 error that names it (a misplaced argument is never ignored).
+func subFlags(name string, args []string, define func(*flag.FlagSet)) error {
+	_, err := subFlagsArgs(name, args, 0, define)
+	return err
+}
+
+// subFlagsArgs is subFlags for a command that takes up to max words
+// besides its flags, before or after them: they come back in order.
+func subFlagsArgs(name string, args []string, max int, define func(*flag.FlagSet)) ([]string, error) {
+	var words []string
+	for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		words, args = append(words, args[0]), args[1:]
+	}
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {}
@@ -158,7 +189,11 @@ func subFlags(name string, args []string, define func(*flag.FlagSet)) ([]string,
 		}
 		return nil, exitError{2, fmt.Errorf("%s: %s (see gh dillodash help)", name, err)}
 	}
-	return fs.Args(), nil
+	words = append(words, fs.Args()...)
+	if len(words) > max {
+		return nil, exitError{2, fmt.Errorf("%s: unexpected %q (see gh dillodash help)", name, words[max])}
+	}
+	return words, nil
 }
 
 // isHelp reports whether a word asks for help.
@@ -222,19 +257,25 @@ func dispatch(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "version", "--version", "-v":
-			fmt.Printf("dillodash %s\n", version)
+			if err := subFlags("version", args[1:], nil); err != nil {
+				return err
+			}
+			fmt.Println(versionLine())
 			return nil
 		case "help", "--help", "-h":
 			fmt.Print(usage())
 			return nil
 		case "amos":
+			if err := subFlags("amos", args[1:], nil); err != nil {
+				return err
+			}
 			for _, l := range amos.Lines(amos.Options{}) {
 				fmt.Println(l)
 			}
 			return nil
 		case "glyph-test":
 			icons := "nerd"
-			if _, err := subFlags("glyph-test", args[1:], func(fs *flag.FlagSet) {
+			if err := subFlags("glyph-test", args[1:], func(fs *flag.FlagSet) {
 				fs.StringVar(&icons, "icons", icons, "glyph set")
 			}); err != nil {
 				return err
@@ -304,9 +345,6 @@ func parseFlags(args []string) (flags, error) {
 	if n := btoi(f.demo) + btoi(f.demoNight) + btoi(f.demoAgent); n > 1 {
 		return f, exitError{2, errors.New("--demo, --demo-night and --demo-agent are different replays: pass one")}
 	}
-	if f.demo && f.demoNight {
-		return f, exitError{2, errors.New("--demo and --demo-night are two different replays: pass one")}
-	}
 	return f, nil
 }
 
@@ -327,9 +365,9 @@ func loadConfig(f flags) (*config.Config, error) {
 	}
 	if path == "" {
 		if legacy != "" {
-			return nil, exitError{2, fmt.Errorf("no config.toml found; %s is the legacy INI format. Run: gh dillodash config migrate", legacy)}
+			return nil, exitError{2, fmt.Errorf("no config.toml found; %s is the legacy INI format; run: gh dillodash config migrate", legacy)}
 		}
-		return nil, exitError{2, fmt.Errorf("no config found (looked for %s). Run: gh dillodash config init", config.DefaultPath(os.Getenv))}
+		return nil, exitError{2, fmt.Errorf("no config found (looked for %s); run: gh dillodash config init", config.DefaultPath(os.Getenv))}
 	}
 	cfg, err := config.Load(path, f.overrides())
 	if err != nil {
@@ -462,7 +500,7 @@ func restart(r ui.Restore) error {
 // the .prev binaries back.
 func updateCmd(args []string, w io.Writer) error {
 	var rollback bool
-	if _, err := subFlags("update", args, func(fs *flag.FlagSet) {
+	if err := subFlags("update", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&rollback, "rollback", false, "put the .prev binaries back")
 	}); err != nil {
 		return err
@@ -471,7 +509,7 @@ func updateCmd(args []string, w io.Writer) error {
 	if c, err := newClient(ghapi.Options{Host: "github.com", Version: version}); err == nil {
 		gh = c
 	} else if !rollback {
-		return exitError{2, fmt.Errorf("update reads its releases from github.com: %w — gh auth login --hostname github.com", err)}
+		return exitError{2, fmt.Errorf("update reads its releases from github.com: %w; run: gh auth login --hostname github.com", err)}
 	}
 	u := newChecker(gh)
 	if rollback {
@@ -506,7 +544,7 @@ func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 	fmt.Fprintf(w, "dillodash %s; the latest release is %s\n", st.Running, st.Latest)
 	switch {
 	case !selfupdate.Comparable(st.Running):
-		return exitError{2, fmt.Errorf("%s is not a release build — update replaces release builds only: gh extension install solcyber/gh-dillodash", st.Running)}
+		return exitError{1, fmt.Errorf("%s is not a release build, and update replaces release builds only; run: gh extension install solcyber/gh-dillodash", st.Running)}
 	case !st.Stale():
 		fmt.Fprintln(w, "already current")
 		return nil
@@ -528,7 +566,7 @@ func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 	if notes := firstLines(st.Notes, 8); notes != "" {
 		fmt.Fprintf(w, "what changed in %s:\n%s\n", res.Version, notes)
 	}
-	fmt.Fprintln(w, "restart dillodash to run it (R in a running dashboard)")
+	fmt.Fprintln(w, "restart dillodash to run it (U in a running dashboard)")
 	return nil
 }
 
@@ -726,19 +764,21 @@ func configCmd(args []string) error {
 		defer stop()
 		return doctor.Run(ctx, os.Stdout, cfg, version, buildCheck)
 	case "pull":
-		rest := args[1:]
-		spec := ""
-		if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
-			spec, rest = rest[0], rest[1:]
-		}
 		var path, host string
 		var force bool
-		if _, err := subFlags("config pull", rest, func(fs *flag.FlagSet) {
+		// OWNER/REPO[/PATH] before or after the flags: "--force acme/x"
+		// switches repos as "acme/x --force" does
+		words, err := subFlagsArgs("config pull", args[1:], 1, func(fs *flag.FlagSet) {
 			fs.StringVar(&path, "config", "", "config path")
 			fs.StringVar(&host, "host", "", "GitHub host")
 			fs.BoolVar(&force, "force", false, "replace a hand-written config or switch repos")
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		spec := ""
+		if len(words) > 0 {
+			spec = words[0]
 		}
 		if path == "" {
 			path = config.InstallPath(os.Getenv)
@@ -750,7 +790,7 @@ func configCmd(args []string) error {
 		return pullConfig(context.Background(), gh, spec, path, force, os.Stdout)
 	case "init":
 		var path string
-		if _, err := subFlags("config init", args[1:], func(fs *flag.FlagSet) {
+		if err := subFlags("config init", args[1:], func(fs *flag.FlagSet) {
 			fs.StringVar(&path, "config", "", "config path")
 		}); err != nil {
 			return err
@@ -769,7 +809,7 @@ func configCmd(args []string) error {
 	case "migrate":
 		var src, dst string
 		var force bool
-		if _, err := subFlags("config migrate", args[1:], func(fs *flag.FlagSet) {
+		if err := subFlags("config migrate", args[1:], func(fs *flag.FlagSet) {
 			fs.StringVar(&src, "from", "", "the legacy config.ini")
 			fs.StringVar(&dst, "config", "", "config path")
 			fs.BoolVar(&force, "force", false, "overwrite an existing config")
@@ -831,7 +871,7 @@ func fontCmd(args []string) error {
 		return exitError{2, errors.New("font: install, check or license? (see gh dillodash help)")}
 	}
 	if args[0] == "license" || args[0] == "licence" {
-		if _, err := subFlags("font license", args[1:], nil); err != nil {
+		if err := subFlags("font license", args[1:], nil); err != nil {
 			return err
 		}
 		fmt.Printf("%s %s is redistributed under these licences:\n\n", fonts.Family, fonts.Version)
@@ -844,7 +884,7 @@ func fontCmd(args []string) error {
 		return exitError{2, fmt.Errorf("font: unknown subcommand %q (see gh dillodash help)", args[0])}
 	}
 	var force bool
-	if _, err := subFlags("font "+args[0], args[1:], func(fs *flag.FlagSet) {
+	if err := subFlags("font "+args[0], args[1:], func(fs *flag.FlagSet) {
 		fs.BoolVar(&force, "force", false, "reinstall even when current")
 	}); err != nil {
 		return err
@@ -914,7 +954,7 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 	}
 	data, sha, err := gh.FileContents(ctx, src.Repo, src.Path, "")
 	if err != nil {
-		return fmt.Errorf("could not read %s: %w", src.Spec(), err)
+		return fmt.Errorf("couldn't read %s: %w", src.Spec(), err)
 	}
 	data = config.StripHeader(data)
 	cfg, err := config.Parse(data, src.Spec(), config.Overrides{})

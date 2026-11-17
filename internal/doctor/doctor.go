@@ -87,9 +87,9 @@ func approversLine(ctx context.Context, w io.Writer, cfg *config.Config, gh Clie
 	}
 	switch {
 	case err != nil:
-		fmt.Fprintf(w, "  approvers: could not check @%s: %s; %s\n", team, err, unchecked)
+		fmt.Fprintf(w, "  approvers: couldn't check @%s: %s; %s\n", team, err, unchecked)
 	case !m.Readable:
-		fmt.Fprintf(w, "  approvers: could not read @%s with this token (it needs the organization's Members read); %s\n", team, unchecked)
+		fmt.Fprintf(w, "  approvers: couldn't read @%s with this token (it needs the organization's Members read); %s\n", team, unchecked)
 	case !m.Member:
 		fmt.Fprintf(w, "  approvers: %s is NOT in @%s; dillodash refuses to post /release-now, /release, /attend, /window-cancel and /approve as %s\n", me, team, me)
 	default:
@@ -151,7 +151,7 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 	}
 	if pulled {
 		if _, sha, err := gh.FileContents(ctx, src.Repo, src.Path, ""); err != nil {
-			fmt.Fprintf(w, "  source: could not check %s: %s\n", src.Spec(), err)
+			fmt.Fprintf(w, "  source: couldn't check %s: %s\n", src.Spec(), err)
 		} else if sha != src.SHA {
 			fmt.Fprintf(w, "  source: OUTDATED — %s has a newer %s; run: gh dillodash config pull\n", src.Repo, src.Path)
 		} else {
@@ -210,10 +210,12 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		fmt.Fprintf(w, "graphql budget: %d of %d points left (resets %s)\n", rate.Remaining, rate.Limit, rate.ResetAt.Local().Format("15:04"))
 	}
 	fmt.Fprintln(w, "workflows:")
+	workflowsOn := 0
 	on := func(name string, enabled bool, detail string) {
 		state := "off"
 		if enabled {
 			state = "on"
+			workflowsOn++
 		}
 		fmt.Fprintf(w, "  %-20s %s%s\n", name, state, detail)
 	}
@@ -256,7 +258,15 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 	if botErr != nil || failed {
 		return ErrFailed
 	}
+	fmt.Fprintf(w, "config check: OK (%s as %s, %s on)\n", plural(len(cfg.Reviews.Repos), "repo"), me, plural(workflowsOn, "workflow"))
 	return nil
+}
+
+func plural(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }
 
 // releaseReach is the release_pr line's tail: where /release-now is
