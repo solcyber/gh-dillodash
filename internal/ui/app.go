@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -183,12 +184,21 @@ func (m *Model) idleWakeMS() int {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	cmd := m.update(msg)
+	if pf := m.schedulePrefetch(); pf != nil {
+		cmd = tea.Batch(cmd, pf)
+	}
+	return m, cmd
+}
+
+// update is Update with the lock held.
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 	case tickMsg:
 		if msg.gen != m.tickGen {
-			return m, nil // orphaned by a retick
+			return nil // orphaned by a retick
 		}
 		if m.refreshDue() {
 			m.refresh(false) // no-ops while rate-limited
@@ -203,11 +213,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.checkConfig()
 		}
 		if m.restartQueued && m.modal == nil && !m.action {
-			return m, m.restartNow()
+			return m.restartNow()
 		}
-		return m, m.tick()
+		return m.tick()
+	case refreshListMsg:
+		m.applyList(msg)
 	case refreshDoneMsg:
 		m.applyRefresh(msg.out)
+	case detailLoadedMsg:
+		m.applyDetailLoaded(msg)
+	case prefetchMsg:
+		m.prefetch(msg)
+		return nil
 	case pollDoneMsg:
 		m.applyPoll(msg.out)
 	case buildCheckMsg:
@@ -224,27 +241,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case redrawMsg:
 	case execMsg:
-		return m, m.handleExec(msg)
+		return m.handleExec(msg)
 	case execDoneMsg:
 		msg.done <- msg.err
 	case actionDoneMsg:
 		m.action = false
+		m.clearAck()
+		// an action may have written: no kept read, nor one already on
+		// its way, may stand for the item after it (but the re-read the
+		// action set off after its write may)
+		m.dcache.settle()
 		if msg.panic != "" {
 			m.modal = nil // a modal the action left open has nobody to answer it
 			m.fail(msg.panic)
 		}
 	case tea.KeyPressMsg:
-		return m, tea.Batch(m.handleKey(toKey(msg)), m.retick())
+		return tea.Batch(m.handleKey(toKey(msg)), m.retick())
 	case tea.PasteMsg:
-		return m, tea.Batch(m.handleKey(widgets.T(msg.Content)), m.retick())
+		return tea.Batch(m.handleKey(widgets.T(msg.Content)), m.retick())
 	case tea.PasteStartMsg, tea.PasteEndMsg:
-		return m, nil
+		return nil
 	default:
-		return m, nil
+		return nil
 	}
 	// something changed: wake the clock so the next frame is drawn
 	// from the new state, not after an idle sleep
-	return m, m.retick()
+	return m.retick()
 }
 
 // View paints the frame.
@@ -312,6 +334,20 @@ func (m *Model) overlayKey(k widgets.Key) {
 	}
 }
 
+// workflowsLoading is the notice for a key that acts while the first
+// load shows only the list: a workflow may own the key, and it has not
+// read its state yet.
+const workflowsLoading = "still reading the workflows — press it again in a moment"
+
+// workflowsHeld is the notice for a key held while list-only: a moment,
+// or why the workflows never landed and what brings them back.
+func (m *Model) workflowsHeld() string {
+	if m.listOnlyErr == "" {
+		return workflowsLoading
+	}
+	return "the workflows didn't load (" + m.listOnlyErr + "); keys that act wait for a refresh that lands — r tries again"
+}
+
 func isEnter(k widgets.Key) bool { return k.Name == "enter" }
 func isEsc(k widgets.Key) bool   { return k.Name == "esc" }
 
@@ -327,6 +363,12 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 		if m.modal.Handle(k) {
 			close(m.modalDone)
 			m.modal, m.modalDone = nil, nil
+			if m.action {
+				// the answer is in: say so on this frame, before the
+				// action's first round trip (it replaces this with its
+				// own words, or a cancel notice)
+				m.ack()
+			}
 		}
 		return nil
 	}
@@ -361,9 +403,25 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	page := max(1, m.layoutH()-4)
 	app := &lockedApp{m}
 	if b := lookup(view, k); b != nil && b.Do != nil {
+		if b.Acts && m.listOnly && k.Rune != 'U' {
+			m.notice(m.workflowsHeld())
+			return nil
+		}
+		if why := m.heldForRead(); b.Acts && why != "" && k.Rune != 'U' {
+			m.notice(why)
+			return nil
+		}
 		return b.Do(m, k, page, app)
 	}
 	if wk, ok := m.wf.Key(view, string(k.Rune)); ok && k.Rune != 0 {
+		if m.listOnly && unicode.IsUpper(k.Rune) {
+			m.notice(m.workflowsHeld()) // a capital acts
+			return nil
+		}
+		if why := m.heldForRead(); why != "" && unicode.IsUpper(k.Rune) {
+			m.notice(why)
+			return nil
+		}
 		m.runAction(func() { wk.Handler(app) })
 		return nil
 	}
@@ -476,11 +534,9 @@ func doOpen(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	m.detailFrom = ViewList
 	switch v := row.Item.(type) {
 	case *model.PR:
-		repo, n := m.repoOf(v), v.Number
-		m.runAction(func() { m.openDetail(app, repo, n, "pr", v) })
+		m.openItem(m.repoOf(v), v.Number, "pr", v)
 	case *model.Issue:
-		repo, n := m.repoOf(v), v.Number
-		m.runAction(func() { m.openDetail(app, repo, n, "issue", nil) })
+		m.openItem(m.repoOf(v), v.Number, "issue", nil)
 	}
 	return nil
 }
@@ -507,6 +563,9 @@ func doBack(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 		m.detailFrom = ViewList
 		m.detail = nil
 		m.detailListed = nil
+		m.detailPartial = false
+		m.detailHeld = false
+		m.openSeq++ // a read still on its way only fills the cache
 		m.searchQ = ""
 	}
 	return nil

@@ -29,6 +29,10 @@ func (m *Model) decision(pr *model.PR, listed *model.PR) (label, style string, n
 	if c := m.wf.Classify(pr, listed, m.me, local); c != nil {
 		return c.Label, c.Style, c.NeedsYou, c.Done
 	}
+	if pr.State == "MERGED" {
+		// merged from here: the row says so until a refresh drops it
+		return "merged", "chip.state", false, true
+	}
 	if s := model.StuckOf(pr, listed, m.me); s.Kind != model.StuckNone {
 		if s.Mine {
 			return model.LabelReReview, model.ChipForLabel[model.LabelReReview], true, false
@@ -204,6 +208,7 @@ func (m *Model) refilter() {
 		}
 	}
 	rows = append(rows, m.wf.Sections(m, terms, m.me)...)
+	m.issuesListed = len(issues)
 	if len(issues) > 0 {
 		rows = append(rows, workflow.Row{Kind: "header", Item: fmt.Sprintf("issues (%d)", len(issues))})
 		for _, i := range issues {
@@ -237,6 +242,7 @@ func (m *Model) refilter() {
 	if m.selected < 0 {
 		m.selected = 0
 	}
+	m.overlayPending()
 	m.parkCursor()
 }
 
@@ -723,7 +729,11 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		if ic, ok := row.Meta["icon"].(string); ok && ic != "" {
 			icon = ic
 		}
-		segs = []text.Seg{text.S(" "+glyphs.Ico(icon), "section")}
+		ico := glyphs.Ico(icon)
+		if ico == "" {
+			ico = "  " // a set without this icon keeps the column: names line up
+		}
+		segs = []text.Seg{text.S(" "+ico, "section")}
 		tail := text.S("  "+count+" ", "section.count")
 		segs = append(segs, text.S(text.Ellip(name, w-2-text.SegsWidth(segs)-text.Width(tail.Text)), "section"), tail)
 	}

@@ -250,3 +250,52 @@ func TestShiftActsLowercaseLooks(t *testing.T) {
 		}
 	}
 }
+
+// TestNoRetiredKeysInProse: the README, the example config, the docs and
+// every message in the code name the keys as they are since 2.0
+// (Shift acts, lowercase looks), never the letters that moved. A message
+// that names a key builds it from internal/keymap.
+func TestNoRetiredKeysInProse(t *testing.T) {
+	// a retired letter named as a key: in backticks, or in the phrasings
+	// the messages and comments use
+	prose := regexp.MustCompile("`[actpR]`|\\b[actpR] (approves|tags|comments|promotes|moves|restarts|offers|posts|on its row)\\b|\\((A shows|W toggles|R in)|\\b(press|use|re-run) '?[actpR]'?( —| again|\\)|$)|\"[actpR]: |\\b[actpR] releases\\b")
+	files := []string{"README.md", "config.example.toml", "internal/config/example.toml", "CONTRIBUTING.md", "main.go"}
+	for _, dir := range []string{"docs", "docs/workflows"} {
+		ents, err := os.ReadDir(repoFile(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range ents {
+			// keys.md lists the moved letters on purpose; the changelog
+			// and the release-pr history paragraph tell what was
+			if strings.HasSuffix(e.Name(), ".md") && e.Name() != "keys.md" && e.Name() != "fortress.md" { // the fortress's own c, d
+				files = append(files, dir+"/"+e.Name())
+			}
+		}
+	}
+	err := filepath.WalkDir(repoFile("internal"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		rel, _ := filepath.Rel(repoFile("."), path)
+		files = append(files, rel)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		src, err := os.ReadFile(repoFile(f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if strings.Contains(line, "Before 1.5.3") || strings.Contains(line, "moved := map") || strings.Contains(line, "moved in 2.0") {
+				continue // history, and the table of moved letters itself
+			}
+			if m := prose.FindString(line); m != "" {
+				t.Errorf("%s:%d names a retired key (%q): %s", f, i+1, m, strings.TrimSpace(line))
+			}
+		}
+	}
+}

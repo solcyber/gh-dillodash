@@ -29,6 +29,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -256,7 +257,8 @@ type Workflow struct {
 	repoCache  []model.Repo
 	repoAt     time.Time
 	last       map[model.Repo]lastGood
-	stageCache map[model.Repo]stageCached
+	stageCache map[model.Repo]stageCached // under stageMu: the stage reads run side by side
+	stageMu    sync.Mutex
 
 	mu   sync.Mutex
 	cur  *State           // the last applied state (UI goroutine reads)
@@ -347,6 +349,10 @@ func (w *Workflow) Current() *State {
 
 // ---- refresh (worker goroutine) ----
 
+// ListFree: Refresh reads its own repos, not the list, so it starts
+// beside the list reads.
+func (w *Workflow) ListFree() bool { return true }
+
 // Refresh reads every enrolled repo's release PRs, the stage summary
 // per repo and the deploy state of each merged release. Anything but a
 // rate limit degrades to a warning; a repo that fails keeps its last
@@ -399,6 +405,35 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			return st, warns, rateLimit(err)
 		}
 	}
+	// every repo's stage row side by side (the compare and the tags):
+	// the loop below reads them in order
+	type stageRead struct {
+		stage *Stage
+		err   error
+	}
+	stages := make(map[model.Repo]stageRead, len(names))
+	var stagesMu sync.Mutex
+	var sg sync.WaitGroup
+	for _, repo := range names {
+		info, ok := data[repo]
+		if !ok || info.Err != nil || info.Archived {
+			continue
+		}
+		sg.Add(1)
+		go func() {
+			defer sg.Done()
+			var stage *Stage
+			var err error
+			func() {
+				defer workflow.Recover(&err)
+				stage, err = w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid)
+			}()
+			stagesMu.Lock()
+			stages[repo] = stageRead{stage, err}
+			stagesMu.Unlock()
+		}()
+	}
+	sg.Wait()
 	for _, repo := range names {
 		info, ok := data[repo]
 		if !ok {
@@ -436,7 +471,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			}
 			rows = append(rows, pr)
 		}
-		stage, err := w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid)
+		stage, err := stages[repo].stage, stages[repo].err
 		if err != nil {
 			if lg, ok := w.last[repo]; ok {
 				stage = lg.stage
@@ -458,15 +493,32 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	}
 	st.index()
 	w.annotate(st)
-	for _, pr := range st.Releases {
-		if pr.State != "MERGED" {
+	// the merged releases' deploys side by side, told in row order
+	type depRead struct {
+		dep deploys.State
+		err error
+	}
+	deps := make([]depRead, len(st.Releases))
+	var dg sync.WaitGroup
+	for i, pr := range st.Releases {
+		if pr.State != "MERGED" || MergeSHA(pr) == "" {
 			continue
 		}
-		sha := MergeSHA(pr)
-		if sha == "" {
+		dg.Add(1)
+		go func() {
+			defer dg.Done()
+			var r depRead
+			defer func() { deps[i] = r }()
+			defer workflow.Recover(&r.err)
+			r.dep, r.err = w.deploy.Fetch(ctx, gh, pr.Repo, MergeSHA(pr), false, now)
+		}()
+	}
+	dg.Wait()
+	for i, pr := range st.Releases {
+		if pr.State != "MERGED" || MergeSHA(pr) == "" {
 			continue
 		}
-		dep, err := w.deploy.Fetch(ctx, gh, pr.Repo, sha, false, now)
+		dep, err := deps[i].dep, deps[i].err
 		if err != nil {
 			warns = append(warns, fmt.Sprintf("%s#%d deploys: %s", pr.Repo.Name, pr.Number, err))
 			if ghapi.IsRateLimit(err) {
@@ -582,7 +634,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 			w.seen[key] = true
 			w.mu.Unlock()
 			if !seen {
-				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval — press D on its row", pr.Repo.Name, pr.Number, wt.EnvName))
+				app.Next(fmt.Sprintf("%s#%d: %s now waits for your approval — press %s on its row", pr.Repo.Name, pr.Number, wt.EnvName, keymap.S(keymap.Deploys)))
 			}
 		}
 	}

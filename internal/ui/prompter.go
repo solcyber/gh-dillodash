@@ -41,6 +41,8 @@ func (m *Model) runAction(fn func()) {
 		return
 	}
 	m.action = true
+	// only a re-read this action sets off may outlive its end (settle)
+	m.dcache.reread = 0
 	go func() {
 		// a panic in an action (any workflow's key handler runs here)
 		// must not kill the process outside Bubble Tea: that leaves the

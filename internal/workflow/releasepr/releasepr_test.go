@@ -260,6 +260,14 @@ func TestApproveAlreadyApprovedOffersNowOnly(t *testing.T) {
 	if len(comments(app)) != 1 || len(app.Menus) != 1 || !strings.Contains(app.Last(), "already on its way") {
 		t.Errorf("an in-flight release posts nothing more: %q menus %d %q", comments(app), len(app.Menus), app.Last())
 	}
+	// and the key bar no longer offers A on it, from the list or the detail
+	f := workflow.Focus{View: "list", Row: workflow.Row{Kind: RowRelease, Item: pr}, HasRow: true, Me: "alice", Now: app.Now()}
+	if label, ok := w.offerListApprove(f); ok {
+		t.Errorf("A is offered on a release already on its way: %q", label)
+	}
+	if label, ok := w.ApproveOffer(workflow.Focus{View: "detail", Detail: pr, Me: "alice", Now: app.Now()}); ok {
+		t.Errorf("A is offered in the detail of a release already on its way: %q", label)
+	}
 }
 
 func TestApproveAlreadyApprovedThisSession(t *testing.T) {
@@ -688,8 +696,8 @@ func TestMergeConfirm(t *testing.T) {
 	patchNow(t, outWindow)
 	w, app = newWF(t, true)
 	if ok, handled := w.MergeConfirm(app, mergeableRelease()); ok || !handled || len(app.Menus) != 0 || len(app.Questions) != 0 ||
-		!logHas(app, "notice", "use a — release NOW posts /release-now") {
-		t.Errorf("M outside the window points at a: %v %v %q", ok, handled, app.Log)
+		!logHas(app, "notice", "use A — release NOW posts /release-now") {
+		t.Errorf("M outside the window points at A: %v %v %q", ok, handled, app.Log)
 	}
 	// a command that has waited with no run for unpickedAfter (a restart
 	// forgot the failed dispatch) lets M merge by hand too; a fresh one
@@ -924,7 +932,7 @@ func TestRefreshAndSections(t *testing.T) {
 	}
 	// AfterApply: the waiting environment is announced once, refresh speeds up
 	w.AfterApply(app)
-	if !logHas(app, "notice", "web-portal#133: prod now waits for your approval — press D on its row") {
+	if !logHas(app, "next", "web-portal#133: prod now waits for your approval — press D on its row") {
 		t.Errorf("prod waiting is announced with D: %v", app.Log)
 	}
 	if len(app.Soon) != 1 || app.Soon[0] != 30*time.Second {

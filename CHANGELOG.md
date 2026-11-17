@@ -1,5 +1,85 @@
 # Changelog
 
+## [2.2.0]
+
+**Snappy.** The keys never wait on GitHub to say they were heard. Measured
+on one real configuration: opening a PR showed a spinner for 0.6–1.2 s and
+dropped every key meanwhile; it now paints on the next frame, and complete
+when the cursor rested on the row first. The check before an approval
+posts took 0.6–0.9 s after the `y`; it now reads only the head (0.2–0.4 s)
+while the question is still on screen.
+
+### Changed
+
+- **Enter opens at once.** The detail switches on the keypress: to a read
+  kept from a moment ago when it is as new as the list row, else to the
+  list's copy with the description and timeline marked as reading, while
+  the full read runs beside the UI. Keys that act wait for it (`still
+  reading #N`), so nothing posts on half the picture; looking, scrolling
+  and Esc work meanwhile, never "busy". A kept read older than 15 s shows
+  whole while it is read again, and keys that act wait for that read too;
+  any write forgets every kept read. A read that lands after Esc or
+  another open is kept, never shown.
+- **Every answer is acknowledged on the same frame.** A `y`, a pick or a
+  prompt answered while an action runs puts a spinner on the status line
+  at once, and every write says what it is sending (`approving #N…`,
+  `merging #N…`, `posting /approve on #N…`, `telling the manifest repo…`)
+  before its round trip. The status spinner turns at its own pace instead
+  of the idle loop's.
+- **The head check reads while you read the confirm.** It asks only for
+  the head commit. Before a review approval (pinned to the commit shown)
+  it starts when the question opens, and a read older than 5 s by the
+  answer is taken again; before an unpinned command (`/approve`,
+  release-now) it still reads after the answer. The approvers-team check is read ahead
+  the same way where it runs after a confirm.
+- **Writes show on the spot.** A merge flips the list row to `merged`;
+  labels, assignees and an issue's state change on the list as well as the
+  detail; a posted comment appears in the timeline when the post returns.
+  A refresh already in flight when the write went out can no longer put
+  the old state back for a few seconds. After an approval, a merge or a
+  comment the open detail alone is read again, so reviews and the timeline
+  settle in one round trip instead of with the next whole refresh.
+
+### Added
+
+- **Read-ahead.** Resting the cursor on a row for a quarter second reads
+  its detail ahead (one read at a time, never while rate-limited); an open
+  while that read is out takes its answer instead of asking twice. The
+  last 32 reads are kept.
+- A render benchmark (`go test -bench BenchmarkView ./internal/ui`): one
+  frame of the list, the detail or the help takes 0.5–3 ms at 120x40 and
+  240x70, well inside the 33 ms frame.
+
+## [2.1.0]
+
+**A faster refresh.** Measured on one real configuration (five workflows,
+five repos), a refresh that took 70 s cold and 39 s warm now takes about
+10 s and 6 s, and the first list shows in about 3 s.
+
+### Changed
+
+- **Reads run side by side.** The list, your review requests and the open
+  first-tier PRs are read at once. Workflows that read their own repos
+  (promote, releases) start beside the list; the others run together once
+  it lands. Inside each workflow, repos and their reads run at once. A
+  client-wide cap of eight requests in flight keeps GitHub's secondary
+  limits happy, and the first rate limit still stops the rest.
+- **Promote's searches are four requests, not one.** GitHub answers four
+  aliased searches about as slowly as four in a row, so each search is
+  its own request, 100 results a page instead of 50. The ancestry checks
+  that place whole-tier promotions are fetched together.
+- **The first load shows the list first.** The PRs and issues appear as
+  soon as they are read; workflow sections and CI follow. Until they land,
+  a key that acts says "still reading the workflows" instead of acting
+  without them.
+
+### Added
+
+- **Reads shared within a refresh.** Two workflows reading the same
+  compare or tags cost one request.
+- **Conditional requests.** REST reads send the last ETag; an unchanged
+  answer (304) is served from memory and costs no rate limit.
+
 ## [2.0.0]
 
 **Shift acts, lowercase looks.** Every key that changes something is now a

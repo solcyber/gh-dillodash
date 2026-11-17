@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,14 +20,20 @@ func prNode(n int) string {
 	return fmt.Sprintf(`{"number":%d,"title":"t%d","state":"MERGED","mergeCommit":{"oid":"m%d"},"author":{"login":"bob","__typename":"User"}}`, n, n, n)
 }
 
-// TestPromotePRsPages: the four searches go in one request; a search
-// past its page reads the next pages by cursor up to promoteMax, and a
-// note says what is still left out.
+// TestPromotePRsPages: each search is its own request (side by side);
+// a search past its page reads the next pages by cursor up to
+// promoteMax, and a note says what is still left out.
 func TestPromotePRsPages(t *testing.T) {
 	s := newServer(t)
+	var mu sync.Mutex
 	calls := 0
+	seen := map[string]bool{}
 	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		mu.Lock()
 		calls++
+		q, _ := req.Variables["q"].(string)
+		seen[q] = true
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		page := func(from, to int, next bool) string {
 			var nodes []string
@@ -35,25 +42,32 @@ func TestPromotePRsPages(t *testing.T) {
 			}
 			return fmt.Sprintf(`{"issueCount":260,"pageInfo":{"hasNextPage":%v,"endCursor":"c%d"},"nodes":[%s]}`, next, to, strings.Join(nodes, ","))
 		}
-		if after, ok := req.Variables["after"].(string); ok {
-			var from int
-			fmt.Sscanf(after, "c%d", &from)
-			io.WriteString(w, `{"data":{"s":`+page(from, from+50, true)+`}}`)
+		if !strings.Contains(q, "is:merged base:dev ") {
+			io.WriteString(w, `{"data":{"s":{"issueCount":0,"pageInfo":{"hasNextPage":false},"nodes":[]}}}`)
 			return
 		}
-		if !strings.Contains(req.Variables["first"].(string), "base:dev merged:>=2026-10-23") || !strings.Contains(req.Variables["open"].(string), "is:open base:stage") ||
-			!strings.Contains(req.Variables["prod"].(string), "is:merged base:main merged:>=2026-10-23") {
-			t.Errorf("searches %v", req.Variables)
+		from := 0
+		if after, ok := req.Variables["after"].(string); ok {
+			fmt.Sscanf(after, "c%d", &from)
 		}
-		empty := `{"issueCount":0,"pageInfo":{"hasNextPage":false},"nodes":[]}`
-		io.WriteString(w, `{"data":{"first":`+page(0, 50, true)+`,"stage":`+empty+`,"open":`+empty+`,"prod":`+empty+`}}`)
+		io.WriteString(w, `{"data":{"s":`+page(from, from+promoteFirst, true)+`}}`)
 	})
 	set, err := s.client(t).PromotePRs(context.Background(), webRepo, "dev", "stage", "main", time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(set.FirstMerged) != promoteMax || calls != 4 {
+	// first: two pages of 100 (then promoteMax); the other three: one each
+	if len(set.FirstMerged) != promoteMax || calls != 5 {
 		t.Fatalf("first %d PRs in %d calls", len(set.FirstMerged), calls)
+	}
+	for _, want := range []string{"is:pr is:merged base:dev merged:>=2026-10-23", "is:pr is:open base:stage", "is:pr is:merged base:main merged:>=2026-10-23", "is:pr is:merged base:stage merged:>=2026-10-23"} {
+		found := false
+		for q := range seen {
+			found = found || strings.Contains(q, want)
+		}
+		if !found {
+			t.Errorf("no search for %q in %v", want, seen)
+		}
 	}
 	if p := set.FirstMerged[199]; p.Number != 200 || p.Repo != webRepo || p.MergeCommit.Oid != "m200" || p.Author.IsApp() {
 		t.Errorf("last PR %+v", p)

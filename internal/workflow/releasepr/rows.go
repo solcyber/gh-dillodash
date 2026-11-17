@@ -12,6 +12,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -183,7 +184,13 @@ func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workfl
 		repos = append(repos, r)
 	}
 	sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
-	rows := []workflow.Row{{Kind: "header", Item: fmt.Sprintf("releases (%d)", count), Meta: map[string]any{"icon": "release"}}}
+	// "releases 0" over a stage row read as an empty section that wasn't:
+	// with no release in it, the section is the staging branches
+	title := fmt.Sprintf("releases (%d)", count)
+	if count == 0 {
+		title = fmt.Sprintf("staging (%d)", len(stages))
+	}
+	rows := []workflow.Row{{Kind: "header", Item: title, Meta: map[string]any{"icon": "release"}}}
 	for _, repo := range repos {
 		mine := byRepo[repo]
 		for _, pr := range mine {
@@ -226,6 +233,7 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 		},
 		RowStage: {
 			Icon:    "stage",
+			Browse:  "compare",
 			NumText: func(workflow.Row) string { return "stage" },
 			Layout:  w.stageLayout,
 			Segs:    w.stageSegs,
@@ -592,18 +600,21 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 		}
 	}
 	sep := text.S("  "+glyphs.G("sep")+"  ", "rule")
-	attn := func(n int, yes string) string {
-		if n > 0 {
-			return yes
+	var segs []text.Seg
+	add := func(s text.Seg) {
+		if len(segs) > 0 {
+			segs = append(segs, sep)
 		}
-		return "sum.muted"
+		segs = append(segs, s)
 	}
-	segs := []text.Seg{text.S(fmt.Sprintf("%s%d release%s need%s approval", glyphs.Ico("release"), need, plural(need, "", "s"), plural(need, "s", "")), attn(need, "sum.attn"))}
+	if need > 0 { // a count of nothing is left out
+		add(text.S(fmt.Sprintf("%s%d release%s need%s approval", glyphs.Ico("release"), need, plural(need, "", "s"), plural(need, "s", "")), "sum.attn"))
+	}
 	if waits > 0 {
-		segs = append(segs, sep, text.S(fmt.Sprintf("%s%d deploy%s wait%s on you (D)", glyphs.Ico("release"), waits, plural(waits, "", "s"), plural(waits, "s", "")), "sum.attn"))
+		add(text.S(fmt.Sprintf("%s%d deploy%s wait%s on you (D)", glyphs.Ico("release"), waits, plural(waits, "", "s"), plural(waits, "s", "")), "sum.attn"))
 	}
 	if stuck > 0 {
-		segs = append(segs, sep, text.S(fmt.Sprintf("%s%d deploy%s stuck or failed", glyphs.Ico("fail"), stuck, plural(stuck, "", "s")), "sum.fail"))
+		add(text.S(fmt.Sprintf("%s%d deploy%s stuck or failed", glyphs.Ico("fail"), stuck, plural(stuck, "", "s")), "sum.fail"))
 	}
 	return segs
 }
@@ -641,7 +652,7 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	ends = append(ends, sp)
 	ends = append(ends, scenes.Chip(markErr()+"release FAILED", "chip.fail")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("bumped — A: release NOW", "chip.act")...)
+	ends = append(ends, scenes.Chip("bumped — "+keymap.S(keymap.Approve)+": release NOW", "chip.act")...)
 	ends = append(ends, text.S(" yours to act on", "muted"))
 	return [][]text.Seg{row, rail, ends}
 }
@@ -718,10 +729,10 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	case (src.State == "" || src.State == "OPEN") && (workflow.IApproved(app, pr) || workflow.IApproved(app, src)):
 		rule = fmt.Sprintf("approved by you — A: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves the deployments waiting on the merge", cmd)
 	case w.cfg.ApprovalQueuesForWindow && w.win != nil:
-		rule = fmt.Sprintf("a: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
+		rule = fmt.Sprintf("A: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
 			w.NightPhrase(app.Now()), cmd)
 	default:
-		rule = fmt.Sprintf("a: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
+		rule = fmt.Sprintf("A: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
 	}
 	ruleLines := scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "faint"), text.S(rule, "faint")}, width, inner)
 	if p, ok := w.progressOf(src); ok {

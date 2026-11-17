@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
 )
@@ -64,8 +65,8 @@ var bindings = []binding{
 		Help: "g/G  top/bottom", Doc: "top / bottom", Do: doNav},
 	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch}, Keys: []widgets.Key{K("pgdn"), K("pgup"), R(' ')}, Group: "nav",
 		Help: "pgdn/pgup  page", Doc: "a page down / up", Do: doNav},
-	{Views: []string{ViewList}, Keys: []widgets.Key{K("enter"), R('l'), K("right")}, Bar: "↵", Label: "open", Group: "list", Prio: 10,
-		Help: "enter  open", Doc: "open the PR or issue (`l` and → too)", Do: doOpen},
+	{Views: []string{ViewList}, Keys: []widgets.Key{K("enter"), R('l'), K("right")}, Bar: "↵", Label: "open", Group: "list", Prio: 10, offer: (*Model).offerOpen,
+		Help: "enter  open", Doc: "open the PR or issue (`l` and → too), on the keypress: the list's copy shows while the rest is read (keys that act wait for it), and a row the cursor rested on is usually read already", Do: doOpen},
 	{Views: []string{ViewFiles}, Keys: []widgets.Key{K("enter"), R('l'), K("right")}, Bar: "↵", Label: "view diff", Group: "files", Prio: 10,
 		Help: "enter  the file's diff", Doc: "that file's diff in-app (`l` and → too)", Do: doOpen},
 	// list
@@ -74,40 +75,40 @@ var bindings = []binding{
 	{Views: []string{ViewList}, Keys: []widgets.Key{R(':')}, Bar: ":", Label: "go to #", Group: "any", Prio: 20, Do: doGoto}, // the chip; the "any" row below documents it
 	{Views: []string{ViewList}, Keys: []widgets.Key{K("esc")}, Group: "list",
 		Help: "esc  clear the filter", Doc: "clear the filter (Esc never quits: a stray escape from an Alt chord must not close the dashboard)", Do: doClearFilter},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('s')}, Bar: "s", Label: "approved", Group: "list", Prio: 65,
+	{Views: []string{ViewList}, Keys: []widgets.Key{R(keymap.ShowApproved)}, Bar: keymap.S(keymap.ShowApproved), Label: "approved", Group: "list", Prio: 65,
 		Help: "s  show PRs approved by others", Doc: "show / hide PRs others approved (issues are always all shown)", Do: doShowAll},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "approve deploys", Group: "list", Prio: 30, Acts: true, when: (*Model).providesDeploys, offer: (*Model).offerDeploysList,
+	{Views: []string{ViewList}, Keys: []widgets.Key{R(keymap.Deploys)}, Bar: keymap.S(keymap.Deploys), Label: "approve deploys", Group: "list", Prio: 30, Acts: true, when: (*Model).providesDeploys, offer: (*Model).offerDeploysList,
 		Help: "D  approve a merged row's or a waiting run's deployments", Doc: "approve the deployments waiting on the selected merged PR, or on the selected waiting run (the bar shows it while `release_pr` or `waiting_runs` is on)", Do: doDeploys},
-	{Views: []string{ViewList}, Keys: []widgets.Key{R('x')}, Bar: "x", Label: "runs", Group: "list", Prio: 85, offer: (*Model).offerRunsList,
+	{Views: []string{ViewList}, Keys: []widgets.Key{R(keymap.Runs)}, Bar: keymap.S(keymap.Runs), Label: "runs", Group: "list", Prio: 85, offer: (*Model).offerRunsList,
 		Help: "x  a run's log", Doc: "the Actions runs of the selected row (a release's run, a waiting run, the runs on a PR's commit): read a job's log in `$PAGER` (`X` re-runs, cancels or rejects)", Do: doRunsLook},
-	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R('X')}, Bar: "X", Label: "runs", Group: "any", Prio: 50, Acts: true, offer: (*Model).offerRunsAct,
+	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R(keymap.ActOnRuns)}, Bar: keymap.S(keymap.ActOnRuns), Label: "act on runs", Group: "any", Prio: 50, Acts: true, offer: (*Model).offerRunsAct,
 		Help: "X  re-run, cancel or reject a run; run a listed workflow", Doc: "act on Actions runs: re-run the failed jobs or every job of the selected row's run, cancel it, or reject the deployment it waits on; or run a workflow the config lists under `[[workflows.dispatch]]` (pick it, fill its inputs, confirm the exact payload; the status line follows the new run)", Do: doRunsAct},
-	{Views: []string{ViewList, ViewDetail, "issue"}, Keys: []widgets.Key{R('U')}, Bar: "U", Label: "update", Group: "any", Prio: 5, Acts: true, offer: (*Model).offerUpdate,
+	{Views: []string{ViewList, ViewDetail, "issue"}, Keys: []widgets.Key{R(keymap.Update)}, Bar: keymap.S(keymap.Update), Label: "update", Group: "any", Prio: 5, Acts: true, offer: (*Model).offerUpdate,
 		Help: "U  update: restart into the new build / pull the newer config", Doc: "update: restart into the dillodash release installed in the background, and pull the newer config when the header says it is outdated (`config pull`), keeping the view, the selected row and the open PR; it waits for an action in flight (the bar shows it while either is waiting)", Do: doUpdate},
 	{Views: []string{ViewList, ViewDetail}, Keys: []widgets.Key{R('u')}, Bar: "u", Label: "since approval", Group: "any", Prio: 15, when: (*Model).staleSelected,
 		Help: "u  changes since a stale approval", Doc: "open the compare view from a stale approval's commit to the head: what changed since the PR was approved, so a re-approve is a look at the delta (the bar shows it while the selected PR's approval is on an older commit)", Do: doSinceApproval},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('d')}, Bar: "d", Label: "fortress", Group: "list", Prio: 60, wfBefore: true,
 		Help: "d  fortress mode", Doc: "fortress mode: a Dwarf Fortress map of PRs, issues, branches and commits", Do: doFortress},
 	// detail (and the issue view where it applies)
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('A')}, Bar: "A", Label: "approve", Group: "detail", Prio: 10, Acts: true, offer: (*Model).offerApprove,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Approve)}, Bar: keymap.S(keymap.Approve), Label: "approve", Group: "detail", Prio: 10, Acts: true, offer: (*Model).offerApprove,
 		Help: "A  approve", Doc: "approve: a workflow may take over (`/approve` with a plan id, a release's queue-or-now choice, or release NOW alone on a release you already approved); otherwise a GitHub review approval after a confirm", Do: doApprove},
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('M')}, Bar: "M", Label: "merge", Group: "detail", Prio: 12, Acts: true, offer: (*Model).offerMerge,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Merge)}, Bar: keymap.S(keymap.Merge), Label: "merge", Group: "detail", Prio: 12, Acts: true, offer: (*Model).offerMerge,
 		Help: "M  merge an approved PR", Doc: "merge the open, approved PR, naming its head so a branch that moved is refused by GitHub; a workflow may refuse or ask its own question first", Do: doMerge},
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('D')}, Bar: "D", Label: "approve deploys", Group: "detail", Prio: 30, Acts: true, offer: (*Model).offerDeploysDetail,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Deploys)}, Bar: keymap.S(keymap.Deploys), Label: "approve deploys", Group: "detail", Prio: 30, Acts: true, offer: (*Model).offerDeploysDetail,
 		Help: "D  approve its waiting deployments", Doc: "approve the environment deployments waiting on the open merged PR", Do: doDeploys},
-	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('x')}, Bar: "x", Label: "runs", Group: "detail", Prio: 70,
+	{Views: []string{ViewDetail}, Keys: []widgets.Key{R(keymap.Runs)}, Bar: keymap.S(keymap.Runs), Label: "runs", Group: "detail", Prio: 70,
 		Help: "x  a run's log", Doc: "the Actions runs of the open PR (its head's, or its merge's once merged, and a release's run): read a job's log in `$PAGER` (`X` acts on them)", Do: doRunsLook},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('C')}, Bar: "C", Label: "comment", Group: "detail", Prio: 30, Acts: true,
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R(keymap.Comment)}, Bar: keymap.S(keymap.Comment), Label: "comment", Group: "detail", Prio: 30, Acts: true,
 		Help: "C  comment (Enter on an empty line: $EDITOR)", Doc: "comment: type it on the line and Enter posts it; Enter on an empty line opens `$EDITOR` for a longer one", Do: doComment},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('T')}, Bar: "T", Label: "tag someone", Group: "detail", Prio: 40, Acts: true,
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R(keymap.Tag)}, Bar: keymap.S(keymap.Tag), Label: "tag someone", Group: "detail", Prio: 40, Acts: true,
 		Help: "T  tag someone", Doc: "tag someone: pick a repo user, `$EDITOR` opens seeded with the mention, posts as a comment", Do: doTag},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('L')}, Bar: "L", Label: "labels", Group: "detail", Prio: 45, Acts: true,
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R(keymap.Labels)}, Bar: keymap.S(keymap.Labels), Label: "labels", Group: "detail", Prio: 45, Acts: true,
 		Help: "L  add or remove a label", Doc: "labels: pick one of the repo's labels to add, or one the item carries (`[x]`) to remove", Do: doLabels},
-	{Views: []string{"issue"}, Keys: []widgets.Key{R('S')}, Bar: "S", Label: "assign", Group: "detail", Prio: 45, Acts: true,
+	{Views: []string{"issue"}, Keys: []widgets.Key{R(keymap.Assign)}, Bar: keymap.S(keymap.Assign), Label: "assign", Group: "detail", Prio: 45, Acts: true,
 		Help: "S  assign or unassign (issues)", Doc: "assign an issue: pick a repo user to assign, or an assignee (`[x]`) to unassign", Do: doAssign},
-	{Views: []string{"issue"}, Keys: []widgets.Key{R('Z')}, Bar: "Z", Label: "close/reopen", Group: "detail", Prio: 50, Acts: true, offer: (*Model).offerIssueState,
+	{Views: []string{"issue"}, Keys: []widgets.Key{R(keymap.CloseReopen)}, Bar: keymap.S(keymap.CloseReopen), Label: "close/reopen", Group: "detail", Prio: 50, Acts: true, offer: (*Model).offerIssueState,
 		Help: "Z  close or reopen (issues)", Doc: "close an open issue as completed or as not planned; reopen a closed one (after a confirm)", Do: doIssueState},
-	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R('H')}, Bar: "H", Label: "to agent", Group: "detail", Prio: 25, Acts: true, when: (*Model).hasHandoff, offer: (*Model).offerHandoff,
+	{Views: []string{ViewDetail, "issue"}, Keys: []widgets.Key{R(keymap.Handoff)}, Bar: keymap.S(keymap.Handoff), Label: "to agent", Group: "detail", Prio: 25, Acts: true, when: (*Model).hasHandoff, offer: (*Model).offerHandoff,
 		Help: "H  hand to the agent", Doc: "hand the open PR or issue to the agent: adds `[agent] handoff_label` and, when set, posts `handoff_comment`, after a confirm (an agent that is a GitHub App's bot watches a label, not @-mentions; the bar shows it while `handoff_label` is set)", Do: doHandoff},
 	{Views: []string{ViewDetail}, Keys: []widgets.Key{R('f')}, Bar: "f", Label: "files", Group: "detail", Prio: 30, wfBefore: true,
 		Help: "f  changed files", Doc: "changed files", Do: doFiles},
@@ -124,7 +125,7 @@ var bindings = []binding{
 	// files
 	{Views: []string{ViewFiles}, Keys: []widgets.Key{R('v')}, Bar: "v", Label: "full diff", Group: "files", Prio: 30,
 		Help: "v  whole PR diff", Doc: "the whole PR diff in `$PAGER`", Do: doDiff},
-	{Views: []string{ViewFiles}, Keys: []widgets.Key{R('r')}, Bar: "r", Label: "reload", Group: "files", Prio: 60,
+	{Views: []string{ViewFiles}, Keys: []widgets.Key{R(keymap.Refresh)}, Bar: keymap.S(keymap.Refresh), Label: "reload", Group: "files", Prio: 60,
 		Help: "r  reload the file list", Doc: "reload the file list (not a dashboard refresh)", Do: doFilesReload},
 	{Views: []string{ViewFiles}, Keys: []widgets.Key{R('q'), R('h'), K("esc"), K("left")}, Bar: "q", Label: "back", Group: "files", Prio: 0,
 		Help: "q  back", Doc: "back to the PR (`h`, ← and Esc too)", Do: doBack},
@@ -149,20 +150,20 @@ var bindings = []binding{
 		Help: "+/-  zoom", Doc: "zoom to a street a day / fit the city (`=` is `+`)", Do: doFortressKey},
 	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('c')}, Bar: "c", Label: "city", Group: "fortress", Prio: 30,
 		Help: "c  the next city", Doc: "the next city: Manhattan, Chicago, the Kowloon Walled City, round again", Do: doFortressKey},
-	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('b')}, Bar: "b", Label: "Borges", Group: "fortress", Prio: 60,
+	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('b')}, Bar: "b", Label: "epigraph", Group: "fortress", Prio: 60,
 		Help: "b  the map's epigraph", Doc: "show / hide the map's epigraph, Borges's *On Exactitude in Science*, laid where it covers the least of the city (`[display] fortress_epigraph` sets where it starts)", Do: doFortressKey},
 	{Views: []string{ViewFortress}, Keys: []widgets.Key{R('d'), R('q'), K("esc")}, Bar: "d", Label: "back", Group: "fortress", Prio: 0,
 		Help: "d  back to the list", Doc: "back to the list (`q` and Esc too)", Do: doFortressKey},
 	// utilities, everywhere they make sense
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('y')}, Bar: "y", Label: "copy URL", Group: "any", Prio: 70,
 		Help: "y  copy the URL", Doc: "copy the URL (tmux buffer, the system clipboard, or OSC 52); the status line says which", Do: doCopyURL},
-	{Views: []string{ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('y')}, Bar: "y", Label: "URL", Group: "any", Prio: 70, wfBefore: true, Help: "", Doc: "copy the open PR's, issue's or file's URL, as in the list", Do: doCopyURL},
-	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('o')}, Group: "any",
+	{Views: []string{ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('y')}, Bar: "y", Label: "copy URL", Group: "any", Prio: 70, wfBefore: true, Help: "", Doc: "copy the open PR's, issue's or file's URL, as in the list", Do: doCopyURL},
+	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('o')}, Bar: "o", Label: "open in browser", Group: "any", Prio: 10, offer: (*Model).offerBrowse,
 		Help: "o  open the URL in a browser", Doc: "open the URL in a browser when this host has one; otherwise like `y`", Do: doOpenURL},
-	{Views: []string{ViewList, ViewDetail, "issue", ViewPatch, ViewFortress}, Keys: []widgets.Key{R('r')}, Bar: "r", Label: "refresh", Group: "any", Prio: 60,
+	{Views: []string{ViewList, ViewDetail, "issue", ViewPatch, ViewFortress}, Keys: []widgets.Key{R(keymap.Refresh)}, Bar: keymap.S(keymap.Refresh), Label: "refresh", Group: "any", Prio: 60,
 		Help: "r  refresh now", Doc: "refresh now (also re-checks CI that already finished, and re-tries a repo whose token was fixed)", Do: doRefresh},
-	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R('w')}, Bar: "w", Label: "room", Group: "any", Prio: 55, when: (*Model).roomChipInWindow, Do: doRoom}, // the window's reminder chip; the "any" row below documents w
-	{Views: []string{anyView}, Keys: []widgets.Key{R('w')}, Bar: "w", Label: "room", Group: "any", Prio: 75, when: (*Model).roomChipOutside,
+	{Views: []string{ViewList, ViewDetail, "issue", ViewFiles, ViewPatch, ViewFortress}, Keys: []widgets.Key{R(keymap.Room)}, Bar: keymap.S(keymap.Room), Label: "room", Group: "any", Prio: 55, when: (*Model).roomChipInWindow, Do: doRoom}, // the window's reminder chip; the "any" row below documents w
+	{Views: []string{anyView}, Keys: []widgets.Key{R(keymap.Room)}, Bar: keymap.S(keymap.Room), Label: "room", Group: "any", Prio: 75, when: (*Model).roomChipOutside,
 		Help: "w  the room: the view out of a window", Doc: "the room: while the release window is open the dashboard is the view out of a window, behind the glass in the middle of a room, as a reminder; `w` steps out to the plain dashboard and back in (the plaque on the wall says so, and the bar shows `w` while you are out). The next window opens in the room again. Outside the window the dashboard is plain and `w` steps into the room any time (the bar shows `w` there too, among the first chips to go when the bar is short)", Do: doRoom},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('q')}, Bar: "q", Label: "quit", Group: "list", Prio: 0,
 		Help: "q  quit", Doc: "quit (press twice while an action is still talking to GitHub)", Do: doQuit},
@@ -179,9 +180,9 @@ var bindings = []binding{
 // providesDeploys gates D in the list bar.
 func (m *Model) providesDeploys() bool { return m.wf.ProvidesDeploys() }
 
-// keymap is the dispatch table: view -> key -> binding, built once from
+// dispatch is the dispatch table: view -> key -> binding, built once from
 // bindings ("any" rows under anyView; a view's own row wins).
-var keymap = func() map[string]map[widgets.Key]*binding {
+var dispatch = func() map[string]map[widgets.Key]*binding {
 	km := map[string]map[widgets.Key]*binding{}
 	for i := range bindings {
 		b := &bindings[i]
@@ -201,15 +202,15 @@ var keymap = func() map[string]map[widgets.Key]*binding {
 // "any" one; the issue view falls back to the detail's (its actions
 // refuse an issue with a reason, which beats silence).
 func lookup(view string, k widgets.Key) *binding {
-	if b := keymap[view][k]; b != nil {
+	if b := dispatch[view][k]; b != nil {
 		return b
 	}
 	if view == "issue" {
-		if b := keymap[ViewDetail][k]; b != nil {
+		if b := dispatch[ViewDetail][k]; b != nil {
 			return b
 		}
 	}
-	return keymap[anyView][k]
+	return dispatch[anyView][k]
 }
 
 // has reports whether the binding applies in view.
@@ -505,7 +506,7 @@ func KeysDoc() string {
 	b.WriteString("| prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |\n")
 	b.WriteString("| menus | `j`/`k` + enter, `1`–`9` | choose; esc, `q`, Ctrl-C cancel |\n")
 	b.WriteString("| confirms | `y` | anything else is no |\n")
-	b.WriteString("| moved in 2.0 | `a` `c` `t` `s` `p` `R` `P` | do nothing but say where they went: `A` `C` `T` `S` `P` `U` `U` (and `w`/`W` swapped: `W` is the window's commands, `w` the room) |\n")
+	b.WriteString("| moved in 2.0 | `a` `c` `t` `p` `R`; `s` in an issue; `P` in the list without `promote` | do nothing but say where they went: `A` `C` `T` `P` `U`; `S`; `U` (and `w`/`W` swapped: `W` is the window's commands, `w` the room) |\n")
 	b.WriteString("\nEsc never quits the list: Alt+key and some terminals' Ctrl+arrow sequences\nbegin with an escape, so a stray one must never quit.\n")
 	b.WriteString("\n## The screens\n\nRendered from the offline demo fixture by `go run ./cmd/screenshot`.\n")
 	for _, sc := range docScreens {

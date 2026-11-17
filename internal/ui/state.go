@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -142,7 +143,18 @@ type Model struct {
 	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
 	ci              *ghapi.CIFallback
 	ahead           *aheadCache // commits a head is ahead of a stale approval
-	ciClusters      map[model.Ident]model.CICluster
+	// listOnly: the first load's list is on screen but the rest of that
+	// refresh (workflows, CI) has not landed; the keys that act wait
+	// issuesListed is the issues section's count (the summary says the
+	// same number as the section's header)
+	issuesListed int
+	listOnly     bool
+	// listOnlyErr: the refresh that was to land the workflows failed;
+	// the held keys say so instead of "a moment"
+	listOnlyErr string
+	// sigQuiet: the next noteDeltas takes the baseline without effects
+	sigQuiet   bool
+	ciClusters map[model.Ident]model.CICluster
 
 	approvedByMe map[model.Ident]string // ident -> head SHA at the time
 
@@ -158,8 +170,24 @@ type Model struct {
 	// any other change to the detail clears it.
 	mdMemo         map[mdKey][]text.Line
 	detailLoadedAt float64
-	scroll         int
-	raw            bool
+	// detailPartial: the open detail is the list's copy, its full read
+	// in flight; keys that act wait for it (detailread.go)
+	detailPartial bool
+	detailHeld    bool // a kept read shown whole, its re-read in flight: acting keys wait
+	dcache        detailCache
+	openSeq       int // the latest open; an older open's read only fills dcache
+	reading       int // detail reads in flight
+	prefetchFor   model.Ident
+	prefetchGen   int
+	prefetching   bool
+	prefetchID    model.Ident // the item the prefetch in flight reads
+	prefetchAt    float64     // when it set off
+	adoptSeq      int         // an open waiting on that prefetch instead of a read of its own
+	// pending: writes this session a refresh may not have read yet,
+	// laid over the list (pending.go)
+	pending map[model.Ident]*pendingEdit
+	scroll  int
+	raw     bool
 
 	// files / patch
 	files       []model.PRFile
@@ -330,17 +358,56 @@ func (m *Model) setStatus(msg string) {
 	}
 }
 
+// ackText is the status the instant a modal is answered while an
+// action runs; the action's own Flash, OK, Notice or Fail replaces it.
+const ackText = "working..."
+
+// ack puts the answer's acknowledgment on the status line (lock held).
+func (m *Model) ack() {
+	m.status = ackText
+	m.statusKind = "spin"
+	m.statusAt = fx.Now()
+}
+
+// clearAck drops an acknowledgment nothing replaced: an action that
+// ended without a word (a filter, a pick that only moved the view) must
+// not leave a spinner turning.
+func (m *Model) clearAck() {
+	if m.statusKind == "spin" && m.status == ackText {
+		m.status = ""
+		m.statusKind = "info"
+	}
+}
+
 func (m *Model) ok(msg string) {
 	m.setStatus(msg)
 	m.statusKind = "ok"
 }
 
-// notice is a refusal or a cancellation: gold, with a shake, so it is seen.
+// next is what to do next ("press D on its row"): its own color, no
+// shake (nothing went wrong), and a routine refresh's "refreshed at"
+// doesn't replace it while it is up.
+func (m *Model) next(msg string) {
+	m.setStatus(msg)
+	m.statusKind = "next"
+}
+
+// notice is a refusal: gold, with a shake, so it is seen. A
+// cancellation ("approve cancelled") is the answer you just gave, not a
+// refusal: it is said plainly.
 func (m *Model) notice(msg string) {
 	m.setStatus(msg)
+	if cancelRE.MatchString(msg) {
+		return
+	}
 	m.statusKind = "warn"
 	m.fx.Start("toast.shake", 0.3, nil)
 }
+
+// cancelRE is a plain cancellation: "cancelled" or "<what> cancelled",
+// nothing after it. One with a reason ("approve cancelled (destroy count
+// not confirmed)") was refused, and is said as a refusal.
+var cancelRE = regexp.MustCompile(`^([a-z][a-z -]* )?cancelled$`)
 
 func (m *Model) fail(msg string) {
 	m.errText = msg

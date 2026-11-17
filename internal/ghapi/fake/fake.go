@@ -7,6 +7,8 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -119,10 +121,12 @@ type Client struct {
 	// CommitOnBranch moves it to "c0mmit<n>".
 	Promote   map[model.Repo]ghapi.PromoteSet
 	Ancestors map[string]bool
-	Changes   map[string]model.CommitChange
-	BlobSHAs  map[string]string
-	BlobData  map[string]string
-	Heads     map[string]string
+	// Commits are PRCommits' answers (absent: none).
+	Commits  map[model.Ident][]ghapi.CompareCommit
+	Changes  map[string]model.CommitChange
+	BlobSHAs map[string]string
+	BlobData map[string]string
+	Heads    map[string]string
 	// NextPR is the number CreatePR hands back (0: 900).
 	NextPR int
 
@@ -355,10 +359,28 @@ func (f *Client) PRDetail(ctx context.Context, repo model.Repo, number int) (*mo
 	if !ok {
 		return nil, &ghapi.Error{Message: fmt.Sprintf("#%d is not a pull request in %s", number, repo)}
 	}
-	if p.Repo.IsZero() {
-		p.Repo = repo
+	// a copy, as the real client's every read is a new object: the
+	// caller enriches its answer, and two reads run side by side
+	c := *p
+	c.Ext = maps.Clone(p.Ext)
+	if c.Repo.IsZero() {
+		c.Repo = repo
 	}
-	return p, nil
+	return &c, nil
+}
+
+// PRHead serves the head and state of PRs.
+func (f *Client) PRHead(ctx context.Context, repo model.Repo, number int) (string, string, error) {
+	if err := f.fail("pr_head"); err != nil {
+		return "", "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	p, ok := f.PRs[model.Ident{Repo: repo, Number: number}]
+	if !ok {
+		return "", "", &ghapi.Error{Message: fmt.Sprintf("#%d is not a pull request in %s", number, repo)}
+	}
+	return p.HeadRefOid, p.State, nil
 }
 
 // IssueDetail serves Issues.
@@ -372,10 +394,11 @@ func (f *Client) IssueDetail(ctx context.Context, repo model.Repo, number int) (
 	if !ok {
 		return nil, &ghapi.Error{Message: fmt.Sprintf("#%d is not an issue in %s", number, repo)}
 	}
-	if i.Repo.IsZero() {
-		i.Repo = repo
+	c := *i // a new object per read, as the real client's
+	if c.Repo.IsZero() {
+		c.Repo = repo
 	}
-	return i, nil
+	return &c, nil
 }
 
 // AssignableUsers serves Users.
@@ -463,6 +486,13 @@ func (f *Client) AddLabels(ctx context.Context, repo model.Repo, number int, lab
 		return err
 	}
 	f.record(Call{Op: "add_labels", Repo: repo, Number: number, Names: append([]string(nil), labels...)})
+	f.editItem(repo, number, func(ls *[]string, _ *[]string, _ *string) {
+		for _, l := range labels {
+			if !slices.Contains(*ls, l) {
+				*ls = append(*ls, l)
+			}
+		}
+	})
 	return nil
 }
 
@@ -472,6 +502,9 @@ func (f *Client) RemoveLabel(ctx context.Context, repo model.Repo, number int, l
 		return err
 	}
 	f.record(Call{Op: "remove_label", Repo: repo, Number: number, Names: []string{label}})
+	f.editItem(repo, number, func(ls *[]string, _ *[]string, _ *string) {
+		*ls = slices.DeleteFunc(*ls, func(x string) bool { return x == label })
+	})
 	return nil
 }
 
@@ -481,6 +514,13 @@ func (f *Client) AddAssignees(ctx context.Context, repo model.Repo, number int, 
 		return err
 	}
 	f.record(Call{Op: "add_assignees", Repo: repo, Number: number, Names: append([]string(nil), logins...)})
+	f.editItem(repo, number, func(_ *[]string, as *[]string, _ *string) {
+		for _, l := range logins {
+			if !slices.Contains(*as, l) {
+				*as = append(*as, l)
+			}
+		}
+	})
 	return nil
 }
 
@@ -490,6 +530,9 @@ func (f *Client) RemoveAssignees(ctx context.Context, repo model.Repo, number in
 		return err
 	}
 	f.record(Call{Op: "remove_assignees", Repo: repo, Number: number, Names: append([]string(nil), logins...)})
+	f.editItem(repo, number, func(_ *[]string, as *[]string, _ *string) {
+		*as = slices.DeleteFunc(*as, func(x string) bool { return slices.Contains(logins, x) })
+	})
 	return nil
 }
 
@@ -499,7 +542,56 @@ func (f *Client) SetIssueState(ctx context.Context, repo model.Repo, number int,
 		return err
 	}
 	f.record(Call{Op: "set_state", Repo: repo, Number: number, State: state, Reason: reason})
+	f.editItem(repo, number, func(_ *[]string, _ *[]string, st *string) { *st = strings.ToUpper(state) })
 	return nil
+}
+
+// editItem applies a write to what the detail reads serve, as GitHub
+// would: the issue or PR is replaced by an edited copy, never edited in
+// place (a list may hold the old object).
+func (f *Client) editItem(repo model.Repo, number int, edit func(labels, assignees *[]string, state *string)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := model.Ident{Repo: repo, Number: number}
+	if i, ok := f.Issues[id]; ok && i != nil {
+		c := *i
+		ls, as, st := c.Labels.Names(), actorLogins(c.Assignees.Nodes), c.State
+		edit(&ls, &as, &st)
+		c.Labels.Nodes, c.State = labelsOf(ls), st
+		c.Assignees.Nodes = actorsOf(as)
+		f.Issues[id] = &c
+	}
+	if p, ok := f.PRs[id]; ok && p != nil {
+		c := *p
+		ls, as, st := c.Labels.Names(), []string(nil), c.State
+		edit(&ls, &as, &st)
+		c.Labels.Nodes, c.State = labelsOf(ls), st
+		f.PRs[id] = &c
+	}
+}
+
+func labelsOf(names []string) []model.Label {
+	out := make([]model.Label, len(names))
+	for i, n := range names {
+		out[i] = model.Label{Name: n}
+	}
+	return out
+}
+
+func actorsOf(logins []string) []model.Actor {
+	out := make([]model.Actor, len(logins))
+	for i, l := range logins {
+		out[i] = model.Actor{Login: l}
+	}
+	return out
+}
+
+func actorLogins(as []model.Actor) []string {
+	out := make([]string, len(as))
+	for i, a := range as {
+		out[i] = a.Login
+	}
+	return out
 }
 
 // Dispatch records the repository_dispatch event.
@@ -845,6 +937,16 @@ func (f *Client) PromotePRs(ctx context.Context, repo model.Repo, first, stage, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.Promote[repo], nil
+}
+
+// PRCommits serves Commits[repo#number].
+func (f *Client) PRCommits(ctx context.Context, repo model.Repo, number int) ([]ghapi.CompareCommit, error) {
+	if err := f.fail("pr_commits"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]ghapi.CompareCommit(nil), f.Commits[model.Ident{Repo: repo, Number: number}]...), nil
 }
 
 // IsAncestor serves Ancestors["a..b"]; a == b is always true.

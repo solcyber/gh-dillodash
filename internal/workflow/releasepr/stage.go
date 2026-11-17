@@ -24,7 +24,10 @@ func (w *Workflow) stageSummary(ctx context.Context, gh ghapi.Client, repo model
 		return row, nil
 	}
 	var compare ghapi.CompareResult
-	switch cached, ok := w.stageCache[repo]; {
+	w.stageMu.Lock()
+	cached, ok := w.stageCache[repo]
+	w.stageMu.Unlock()
+	switch {
 	case prod == stage:
 		compare = ghapi.CompareResult{}
 	case ok && cached.prod == prod && cached.stage == stage:
@@ -35,7 +38,15 @@ func (w *Workflow) stageSummary(ctx context.Context, gh ghapi.Client, repo model
 			return row, err
 		}
 		compare = c
-		w.stageCache[repo] = stageCached{prod: prod, stage: stage, compare: c}
+		// the compare reads the branches, which may have moved since the
+		// oids were read: kept under those oids only when its head is the
+		// staging oid (else the next refresh asks again, an ETag 304 when
+		// nothing moved)
+		if n := len(c.Commits); n > 0 && c.Commits[n-1].SHA == stage {
+			w.stageMu.Lock()
+			w.stageCache[repo] = stageCached{prod: prod, stage: stage, compare: c}
+			w.stageMu.Unlock()
+		}
 	}
 	goTags, err := gh.TagRefs(ctx, repo, w.cfg.GoTagPrefix)
 	if err != nil {

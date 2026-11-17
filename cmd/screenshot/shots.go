@@ -53,7 +53,7 @@ var shots = []shot{
 	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j"}, Expect: []string{"waiting approvals", "approve: prod"}},
 	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
 	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "P"}, Expect: []string{"#910 on stage", "go/910"}},
-	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy run 7101"}},
+	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy #412"}},
 	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},
 	{Name: "fortress-chicago", Steps: []string{"d"}, Opts: ui.SnapshotOptions{City: "chicago"}, Expect: []string{"Chicago"}},
@@ -70,7 +70,7 @@ var shots = []shot{
 	{Name: "night-5-stg", Night: true, Steps: nightSteps(5), Expect: []string{"deploy waiting · D", "stg (migrate, run 801)"}},
 	{Name: "night-6-done", Night: true, Steps: nightSteps(6), Expect: []string{"approved 1 deployment of db-migrations#64 (prod)"}},
 	// the room: the window is open, so the dashboard is the view out of
-	// it; W steps out of the room to the plain dashboard
+	// it; w steps out of the room to the plain dashboard
 	{Name: "room", Night: true, Cols: 160, Rows: 48, Steps: nightSteps(1), Expect: []string{"back to work", "#212"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Advance: 1.3}},
 	{Name: "room-off", Night: true, Cols: 160, Rows: 48, Steps: append(nightSteps(1), "w"), Expect: []string{"#212", "steps back into the room"}},

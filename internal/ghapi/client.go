@@ -144,6 +144,9 @@ type Client interface {
 	LastRate() *model.RateLimit
 
 	PRDetail(ctx context.Context, repo model.Repo, number int) (*model.PR, error)
+	// PRHead is a PR's head commit and state only: the cheap read the
+	// guards make right before a post.
+	PRHead(ctx context.Context, repo model.Repo, number int) (oid, state string, err error)
 	IssueDetail(ctx context.Context, repo model.Repo, number int) (*model.Issue, error)
 	AssignableUsers(ctx context.Context, repo model.Repo) ([]model.Actor, error)
 	PRComments(ctx context.Context, repo model.Repo, number int) ([]model.Comment, error)
@@ -238,11 +241,13 @@ type Client interface {
 
 	// Promotion (the promote workflow). PromotePRs reads one repo's PRs
 	// merged into first and stage since a date and open into stage.
-	// IsAncestor reports a on b's history. CommitChange is a commit's
+	// IsAncestor reports a on b's history. PRCommits is a PR's own
+	// commits with their parents (up to 250, as GitHub lists them). CommitChange is a commit's
 	// parents and files; BlobAt a path's blob sha at a ref (exists false
 	// on a 404); BlobBase64 a blob's content; BranchHead a branch's tip.
 	PromotePRs(ctx context.Context, repo model.Repo, first, stage, prod string, since time.Time) (PromoteSet, error)
 	IsAncestor(ctx context.Context, repo model.Repo, a, b string) (bool, error)
+	PRCommits(ctx context.Context, repo model.Repo, number int) ([]CompareCommit, error)
 	CommitChange(ctx context.Context, repo model.Repo, sha string) (model.CommitChange, error)
 	BlobAt(ctx context.Context, repo model.Repo, path, ref string) (sha string, exists bool, err error)
 	BlobBase64(ctx context.Context, repo model.Repo, sha string) (string, error)
@@ -286,6 +291,10 @@ type GitHub struct {
 	restBase    string // with trailing slash
 	graphqlURL  string
 	lastRate    atomic.Pointer[model.RateLimit]
+	// slots caps the requests in flight (maxInFlight); nil: no cap
+	slots chan struct{}
+	// etags remembers REST GETs for conditional requests
+	etags etagCache
 }
 
 var _ Client = (*GitHub)(nil)
@@ -341,6 +350,7 @@ func New(opts Options) (*GitHub, error) {
 		http:        hc,
 		restBase:    restBase(host),
 		graphqlURL:  graphQLURL(host),
+		slots:       make(chan struct{}, maxInFlight),
 	}
 	if opts.BaseURL != "" {
 		base := strings.TrimRight(opts.BaseURL, "/")
@@ -422,6 +432,10 @@ func (c *GitHub) doH(ctx context.Context, method, rawURL string, payload any, ac
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
+	if err := c.acquire(ctx); err != nil {
+		return nil, nil, &Error{Method: method, URL: rawURL, Message: "network error: " + netErrorText(err)}
+	}
+	defer c.release()
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, nil, &Error{Method: method, URL: rawURL, Message: "network error: " + netErrorText(err)}
@@ -480,7 +494,14 @@ func netErrorText(err error) string {
 // (nil to discard). An empty body is fine when out is nil.
 func (c *GitHub) restJSON(ctx context.Context, method, path string, payload, out any) error {
 	rawURL := c.restURL(path)
-	body, _, err := c.do(ctx, method, rawURL, payload, acceptJSON)
+	var body []byte
+	var err error
+	if method == http.MethodGet && payload == nil {
+		// a read: shared within a refresh, conditional across them
+		body, err = c.getShared(ctx, rawURL, acceptJSON)
+	} else {
+		body, _, err = c.do(ctx, method, rawURL, payload, acceptJSON)
+	}
 	if err != nil {
 		return err
 	}

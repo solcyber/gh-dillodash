@@ -89,9 +89,27 @@ func (it *Item) Envs() []string {
 
 func envName(p model.PendingDeployment) string { return text.OrQ(p.Environment.Name) }
 
-// where names the run in status text: "infra deploy run 4242".
+// where names the run as its row does: repo, workflow and "#412" (the
+// run number the Actions page shows), else "run <id>".
 func (it *Item) where() string {
-	return fmt.Sprintf("%s %s run %d", it.Repo.Name, text.Ellip(it.Name(), 40), it.Run.ID)
+	n := it.Num()
+	if n == "run" {
+		n = fmt.Sprintf("run %d", it.Run.ID)
+	}
+	return fmt.Sprintf("%s %s %s", it.Repo.Name, text.Ellip(it.Name(), 40), n)
+}
+
+// ships is what the run deploys, for a confirm: "main @3f888d2 — the
+// run's title", as much of it as GitHub gave.
+func (it *Item) ships() string {
+	s := it.Trigger()
+	if t := it.Run.DisplayTitle; t != "" && t != it.Run.Name {
+		if s != "" {
+			s += " — "
+		}
+		s += text.Ellip(t, 60)
+	}
+	return s
 }
 
 // Num is the run's number as the Actions page shows it ("#412"), else
@@ -203,16 +221,36 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 		st.Warnings = warns
 		return st, warns, err
 	}
-	for _, repo := range w.cfg.Repos {
-		runs, err := gh.RepoWaitingRuns(ctx, repo)
-		if err != nil {
+	// every repo's waiting runs side by side, then every run's pending
+	// environments side by side; warnings and items keep repo order
+	runsOf := make([][]model.WorkflowRun, len(w.cfg.Repos))
+	runErrs := make([]error, len(w.cfg.Repos))
+	var wg sync.WaitGroup
+	for i, repo := range w.cfg.Repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer workflow.Recover(&runErrs[i])
+			runsOf[i], runErrs[i] = gh.RepoWaitingRuns(ctx, repo)
+		}()
+	}
+	wg.Wait()
+	type want struct {
+		repo model.Repo
+		run  model.WorkflowRun
+		pend []model.PendingDeployment
+		err  error
+	}
+	var wants []*want
+	for i, repo := range w.cfg.Repos {
+		if err := runErrs[i]; err != nil {
 			if ghapi.IsRateLimit(err) {
 				return limited(err)
 			}
 			warns = append(warns, fmt.Sprintf("waiting runs in %s: %s%s", repo.Name, err, tokenHint(err, "Actions: Read", repo)))
 			continue
 		}
-		for _, r := range runs {
+		for _, r := range runsOf[i] {
 			if r.Status != "" && r.Status != "waiting" {
 				continue
 			}
@@ -221,17 +259,29 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 			if listed.covers(repo, r) {
 				continue
 			}
-			pend, err := gh.PendingDeployments(ctx, repo, r.ID)
-			if err != nil {
-				if ghapi.IsRateLimit(err) {
-					return limited(err)
-				}
-				// still listed: D reads the environments again anyway
-				warns = append(warns, fmt.Sprintf("waiting runs in %s: run %d's environments: %s%s", repo.Name, r.ID, err, tokenHint(err, "Actions: Read", repo)))
-			}
-			sort.SliceStable(pend, func(i, j int) bool { return envName(pend[i]) < envName(pend[j]) })
-			st.Items = append(st.Items, &Item{Repo: repo, Run: r, Pending: pend})
+			wants = append(wants, &want{repo: repo, run: r})
 		}
+	}
+	for _, x := range wants {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer workflow.Recover(&x.err)
+			x.pend, x.err = gh.PendingDeployments(ctx, x.repo, x.run.ID)
+		}()
+	}
+	wg.Wait()
+	for _, x := range wants {
+		repo, r, pend, err := x.repo, x.run, x.pend, x.err
+		if err != nil {
+			if ghapi.IsRateLimit(err) {
+				return limited(err)
+			}
+			// still listed: D reads the environments again anyway
+			warns = append(warns, fmt.Sprintf("waiting runs in %s: run %d's environments: %s%s", repo.Name, r.ID, err, tokenHint(err, "Actions: Read", repo)))
+		}
+		sort.SliceStable(pend, func(i, j int) bool { return envName(pend[i]) < envName(pend[j]) })
+		st.Items = append(st.Items, &Item{Repo: repo, Run: r, Pending: pend})
 	}
 	sortItems(st.Items)
 	st.Warnings = warns
@@ -448,6 +498,7 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 	return map[string]workflow.RowKind{
 		RowRun: {
 			Icon:   "shield",
+			Browse: "run",
 			Layout: w.layout,
 			Segs:   w.segs,
 			URL: func(app workflow.App, row workflow.Row) string {
@@ -711,7 +762,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	var theirs []string
 	for _, p := range pend {
 		if p.CurrentUserCanApprove {
-			lines = append(lines, fmt.Sprintf("%s (%s, run %d)", envName(p), text.Ellip(it.Name(), 40), it.Run.ID))
+			lines = append(lines, envName(p))
 		} else {
 			theirs = append(theirs, envName(p))
 		}
@@ -719,10 +770,15 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	if len(theirs) > 0 {
 		lines = append(lines, "not yours: "+strings.Join(theirs, ", "))
 	}
-	if !app.Confirm(fmt.Sprintf("approve %s of %s as %s?\n%s", plural(len(mine), "deployment"), where, me, strings.Join(lines, "\n"))) {
+	q := fmt.Sprintf("approve %s of %s as %s?", plural(len(mine), "deployment"), where, me)
+	if s := it.ships(); s != "" {
+		q += "\nships " + s
+	}
+	if !app.Confirm(q + "\n" + strings.Join(lines, "\n")) {
 		app.Notice("deployment approval cancelled")
 		return true
 	}
+	app.Flash(fmt.Sprintf("approving %s of %s...", plural(len(mine), "deployment"), where))
 	comment := w.cfg.Comment(it.Repo, it.Name(), it.Run.ID)
 	var done, failed []string
 	for _, p := range mine {

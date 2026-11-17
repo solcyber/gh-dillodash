@@ -26,30 +26,6 @@ import (
 // refuses a blocked PR).
 var mergeable = map[string]bool{"CLEAN": true, "HAS_HOOKS": true, "UNSTABLE": true, "UNKNOWN": true, "": true}
 
-// openDetail fetches an item and shows it.
-func (m *Model) openDetail(app *lockedApp, repo model.Repo, number int, kind string, listed *model.PR) {
-	app.Flash(fmt.Sprintf("opening %s...", m.where(repo, number)))
-	started := fx.Now()
-	var detail any
-	var err error
-	if kind == "issue" {
-		detail, err = m.gh.IssueDetail(m.ctx, repo, number)
-		if i, ok := detail.(*model.Issue); ok && i != nil {
-			i.Repo = repo
-		}
-	} else {
-		detail, err = m.fetchPRDetail(m.ctx, repo, number, listed)
-		kind = "pr"
-	}
-	if err != nil {
-		app.Fail(err.Error())
-		return
-	}
-	m.mu.Lock()
-	m.showDetail(detail, kind, started, listed)
-	m.mu.Unlock()
-}
-
 // showDetail switches to the detail view (lock held).
 func (m *Model) showDetail(detail any, kind string, started float64, listed *model.PR) {
 	if m.status != "" && m.statusKind == "spin" {
@@ -57,6 +33,8 @@ func (m *Model) showDetail(detail any, kind string, started float64, listed *mod
 	}
 	m.detailKind = kind
 	m.detail = detail
+	m.detailPartial = false // openItem marks a partial one after
+	m.detailHeld = false
 	m.detailListed = listed
 	m.detailLoadedAt = started
 	m.detailVer++
@@ -118,10 +96,13 @@ func (m *Model) doApprove(app *lockedApp) {
 		app.Notice(fmt.Sprintf("%s is already approved by you for this head — a second review changes nothing", where))
 		return
 	}
+	workflow.PrimeHead(app, pr) // the head check runs while the question is read
 	if !app.Confirm(fmt.Sprintf("submit a GitHub review approval of %s as %s?", where, m.me)) {
+		workflow.ForgetHead(pr)
 		app.Notice("approve cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("approving %s as %s...", where, m.me))
 	if !workflow.HeadStill(app, pr, "approval") {
 		return
 	}
@@ -132,6 +113,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	app.MarkApproved(pr)
 	app.OK(fmt.Sprintf("review-approved %s as %s", where, m.me))
 	app.Celebrate(false)
+	app.ReloadDetail()
 	app.Refresh(true)
 }
 
@@ -195,10 +177,15 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 	}
 	// one endpoint for both kinds: the issue-comment API is the
 	// conversation thread for issues AND pull requests
+	app.Flash(fmt.Sprintf("posting the comment on %s...", where))
 	if err := m.gh.Comment(m.ctx, repo, number, body); err != nil {
 		app.Fail("comment not posted: " + err.Error())
 		return
 	}
+	m.mu.Lock()
+	m.appendMyComment(model.Ident{Repo: repo, Number: number}, body)
+	m.reloadDetail()
+	m.mu.Unlock()
 	app.OK("commented on " + where)
 	app.Celebrate(false)
 	app.Refresh(true)
@@ -312,6 +299,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		app.Notice("merge cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("merging %s at %s...", where, model.ShortSHA(head)))
 	res, err := m.gh.MergePR(m.ctx, repo, pr.Number, head, "", m.mergeMethod(repo))
 	if err != nil {
 		app.Fail(fmt.Sprintf("merge of %s failed: %s%s", where, err, deploys.TokenHint(err, "Contents", repo)))
@@ -321,6 +309,8 @@ func (m *Model) doMerge(app *lockedApp) {
 	pr.State = "MERGED"
 	pr.MergeCommit = &model.MergeCommit{Oid: res.SHA}
 	m.detailVer++
+	m.noteEdit(model.Ident{Repo: repo, Number: pr.Number}, func(e *pendingEdit) { e.state, e.mergeSHA = "MERGED", res.SHA })
+	m.reloadDetail()
 	m.mu.Unlock()
 	app.OK(fmt.Sprintf("merged %s as %s; D approves a deployment that waits on an environment", where, model.ShortSHA(res.SHA)))
 	app.Celebrate(true)
@@ -453,6 +443,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	if comment == "" {
 		comment = fmt.Sprintf("dillodash: %s merged as %s", where, model.ShortSHA(sha))
 	}
+	app.Flash(fmt.Sprintf("approving %s of %s...", plural(len(mine), "deployment"), where))
 	done := 0
 	var failed []string
 	for _, w := range mine {
@@ -607,11 +598,25 @@ func (m *Model) doGoto(app *lockedApp) {
 			return
 		}
 	}
+	m.mu.Lock()
+	if p, i := m.listedCopy(model.Ident{Repo: repo, Number: n}); p != nil || i != nil {
+		// listed: it opens on this frame, its full read behind it
+		kind := "pr"
+		if i != nil {
+			kind = "issue"
+		}
+		m.openItem(repo, n, kind, listed)
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Unlock()
 	app.Flash(fmt.Sprintf("opening %s...", m.where(repo, n)))
 	started := fx.Now()
 	pr, err := m.fetchPRDetail(m.ctx, repo, n, listed)
 	if err == nil {
 		m.mu.Lock()
+		m.openSeq++ // an open still on its way must not replace this one
+		m.dcache.put(pr.Ident(), pr, started)
 		m.showDetail(pr, "pr", started, listed)
 		m.mu.Unlock()
 		return
@@ -627,6 +632,7 @@ func (m *Model) doGoto(app *lockedApp) {
 	}
 	iss.Repo = repo
 	m.mu.Lock()
+	m.openSeq++
 	m.showDetail(iss, "issue", started, nil)
 	m.mu.Unlock()
 }

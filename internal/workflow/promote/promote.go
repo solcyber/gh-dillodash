@@ -2,7 +2,7 @@
 // merged into the first tier (dev), the PR that carries it into staging
 // (stage) and the go/hold tag it gets there, to production (main), which
 // it reaches through the release PR (the release_pr workflow). One row
-// per change shows where it is and what its tier's deploy did; p moves it
+// per change shows where it is and what its tier's deploy did; P moves it
 // one tier on (opens the promotion PR, merges it, tags the unit) and D
 // approves the deployment its tier waits on.
 package promote
@@ -15,10 +15,13 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -77,6 +80,9 @@ type Workflow struct {
 	// every run on it completed
 	ancestry map[string]bool
 	runs     map[string]runsCached
+	// commits: a PR's own commits by repo, number and head; a merged PR's
+	// never change, and an open one's change only with its head
+	commits map[string][]ghapi.CompareCommit
 }
 
 var (
@@ -96,7 +102,7 @@ func init() {
 
 // New builds the workflow from its config.
 func New(cfg *config.PromoteConfig) *Workflow {
-	return &Workflow{cfg: cfg, last: map[model.Repo]RepoState{}, ancestry: map[string]bool{}, runs: map[string]runsCached{}}
+	return &Workflow{cfg: cfg, last: map[model.Repo]RepoState{}, ancestry: map[string]bool{}, runs: map[string]runsCached{}, commits: map[string][]ghapi.CompareCommit{}}
 }
 
 // Name is "promote".
@@ -115,6 +121,10 @@ func (w *Workflow) ProvidesDeploys() bool { return true }
 
 // ---- refresh (worker goroutine) ----
 
+// ListFree: Refresh reads its own repos, not the list, so it starts
+// beside the list reads.
+func (w *Workflow) ListFree() bool { return true }
+
 // Refresh reads each repo's promotion PRs, staging's units ahead of
 // production and their tags, places every change, and reads the runs on
 // each change's tier commit. A repo that can't be read keeps its last
@@ -124,12 +134,31 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	st := &State{}
 	var warns []string
 	since := clock.Now().AddDate(0, 0, -w.cfg.LookbackDays)
-	for _, repo := range w.cfg.Repos {
-		rs, notes, err := w.readRepo(ctx, gh, repo, since)
-		if err != nil {
+	// the repos side by side (the client caps what is in flight); a rate
+	// limit cancels the rest, which would only meet the same wall
+	type read struct {
+		rs    RepoState
+		notes []string
+		err   error
+	}
+	reads := make([]read, len(w.cfg.Repos))
+	g, gctx := errgroup.WithContext(ctx)
+	for i, repo := range w.cfg.Repos {
+		g.Go(func() error {
+			rs, notes, err := w.readRepo(gctx, gh, repo, since)
+			reads[i] = read{rs, notes, err}
 			if ghapi.IsRateLimit(err) {
-				return w.lastState(warns), warns, err
+				return err
 			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return w.lastState(warns), warns, err
+	}
+	for i, repo := range w.cfg.Repos {
+		rs, notes, err := reads[i].rs, reads[i].notes, reads[i].err
+		if err != nil {
 			warns = append(warns, fmt.Sprintf("promote: %s: %s", repo.Name, err))
 			if prev, ok := w.lastRepo(repo); ok {
 				st.Repos = append(st.Repos, prev)
@@ -165,35 +194,62 @@ func (w *Workflow) lastState(warns []string) *State {
 
 func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Repo, since time.Time) (RepoState, []string, error) {
 	rs := RepoState{Repo: repo}
-	set, err := gh.PromotePRs(ctx, repo, w.cfg.First(), w.cfg.Stage(), w.cfg.Prod(), since)
-	if err != nil {
-		return rs, nil, err
+	// four independent reads at once; the first error in this order wins
+	var (
+		set              ghapi.PromoteSet
+		cmp              ghapi.CompareResult
+		goTags, holdTags []string
+		errs             [4]error
+		wg               sync.WaitGroup
+	)
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[0])
+		set, errs[0] = gh.PromotePRs(ctx, repo, w.cfg.First(), w.cfg.Stage(), w.cfg.Prod(), since)
+	}()
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[1])
+		cmp, errs[1] = gh.Compare(ctx, repo, w.cfg.Prod(), w.cfg.Stage())
+	}()
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[2])
+		goTags, errs[2] = gh.TagRefs(ctx, repo, w.cfg.GoTagPrefix)
+	}()
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[3])
+		holdTags, errs[3] = gh.TagRefs(ctx, repo, w.cfg.HoldTagPrefix)
+	}()
+	wg.Wait()
+	if errs[1] != nil {
+		errs[1] = fmt.Errorf("comparing %s...%s: %w", w.cfg.Prod(), w.cfg.Stage(), errs[1])
 	}
-	cmp, err := gh.Compare(ctx, repo, w.cfg.Prod(), w.cfg.Stage())
-	if err != nil {
-		return rs, nil, fmt.Errorf("comparing %s...%s: %w", w.cfg.Prod(), w.cfg.Stage(), err)
+	if err := firstErr(errs[:]...); err != nil {
+		return rs, nil, err
 	}
 	units, ahead, ok := StageOrder(cmp)
-	goTags, err := gh.TagRefs(ctx, repo, w.cfg.GoTagPrefix)
-	if err != nil {
-		return rs, nil, err
+	in := Inputs{
+		Repo: repo, First: w.cfg.First(), Stage: w.cfg.Stage(), Prod: w.cfg.Prod(),
+		Set: set, Units: units, Ahead: ahead, AheadOK: ok,
+		Go: tagNumbers(goTags, w.cfg.GoTagPrefix), Hold: tagNumbers(holdTags, w.cfg.HoldTagPrefix),
+		BackmergeTitle: w.cfg.BackmergeTitle,
 	}
-	holdTags, err := gh.TagRefs(ctx, repo, w.cfg.HoldTagPrefix)
-	if err != nil {
+	if err := w.prefetchAncestry(ctx, gh, in); err != nil {
 		return rs, nil, err
 	}
 	var limit error
-	contains := func(sha, head string) bool {
+	in.Contains = func(sha, head string) bool {
 		if sha == "" || head == "" || limit != nil {
 			return false
 		}
-		key := repo.String() + "|" + sha + "|" + head
-		w.mu.Lock()
-		v, hit := w.ancestry[key]
-		w.mu.Unlock()
-		if hit {
+		if v, hit := w.ancestryOf(repo, sha, head); hit {
 			return v
 		}
+		// the prefetch asks for every pair Locate can reach; this is the
+		// backstop, one at a time as before
 		v, err := gh.IsAncestor(ctx, repo, sha, head)
 		if err != nil {
 			if ghapi.IsRateLimit(err) {
@@ -201,33 +257,190 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 			}
 			return false
 		}
-		w.mu.Lock()
-		w.ancestry[key] = v
-		w.mu.Unlock()
+		w.noteAncestry(repo, sha, head, v)
 		return v
 	}
-	changes, released := Locate(Inputs{
-		Repo: repo, First: w.cfg.First(), Stage: w.cfg.Stage(), Prod: w.cfg.Prod(),
-		Set: set, Units: units, Ahead: ahead, AheadOK: ok,
-		Go: tagNumbers(goTags, w.cfg.GoTagPrefix), Hold: tagNumbers(holdTags, w.cfg.HoldTagPrefix),
-		Contains: contains,
-	})
+	// the prefetch read every PR's commits Locate asks for; a read that
+	// failed is unknown, and the PR stays listed
+	asked := map[string]bool{}
+	in.Commits = func(p *model.PR) []ghapi.CompareCommit {
+		asked[commitsKey(repo, p)] = true
+		v, _ := w.commitsOf(repo, p)
+		return v
+	}
+	changes, released := Locate(in)
+	if limit == nil {
+		w.pruneCommits(repo, asked)
+	}
 	if limit != nil {
 		return rs, nil, limit
 	}
-	for _, c := range changes {
-		runs, err := w.tierRuns(ctx, gh, repo, c.SHA())
-		if err != nil {
-			if ghapi.IsRateLimit(err) {
-				return rs, nil, err
+	// each change's tier runs side by side
+	runs := make([][]model.WorkflowRun, len(changes))
+	runErrs := make([]error, len(changes))
+	g, gctx := errgroup.WithContext(ctx)
+	for i, c := range changes {
+		g.Go(func() error {
+			runs[i], runErrs[i] = w.tierRuns(gctx, gh, repo, c.SHA())
+			if ghapi.IsRateLimit(runErrs[i]) {
+				return runErrs[i]
 			}
-			set.Notes = append(set.Notes, fmt.Sprintf("promote: %s #%d's runs: %s", repo.Name, c.Number(), err))
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return rs, nil, err
+	}
+	for i, c := range changes {
+		if runErrs[i] != nil {
+			set.Notes = append(set.Notes, fmt.Sprintf("promote: %s #%d's runs: %s", repo.Name, c.Number(), runErrs[i]))
 			continue
 		}
-		c.Runs = runs
+		c.Runs = runs[i]
 	}
 	rs.Changes, rs.Released = changes, released
 	return rs, set.Notes, nil
+}
+
+// ancestryRounds bounds the prefetch's dry runs of Locate.
+const ancestryRounds = 4 // commits, then the ancestry that proves a back-merge, then the linking it frees
+
+// prefetchAncestry asks, side by side, every ancestry question Locate
+// will ask that the cache can't answer: a dry run of Locate records the
+// misses (answering no, which only widens what it asks), they are
+// fetched at once, and the dry run repeats until nothing is missing.
+// The answers are fixed points (two commits), so they are kept for good.
+// Only a rate limit is an error; any other failure leaves the pair to
+// Locate's own backstop.
+func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inputs) error {
+	type pair struct{ sha, head string }
+	var failedMu sync.Mutex
+	failed := map[int]bool{} // commit reads that failed: unknown this refresh
+	for round := 0; round < ancestryRounds; round++ {
+		var misses []pair
+		var prMisses []*model.PR
+		seen := map[pair]bool{}
+		seenPR := map[int]bool{}
+		in.Commits = func(p *model.PR) []ghapi.CompareCommit {
+			if v, hit := w.commitsOf(in.Repo, p); hit {
+				return v
+			}
+			if !seenPR[p.Number] && !failed[p.Number] {
+				seenPR[p.Number] = true
+				prMisses = append(prMisses, p)
+			}
+			return nil
+		}
+		in.Contains = func(sha, head string) bool {
+			if sha == "" || head == "" {
+				return false
+			}
+			if v, hit := w.ancestryOf(in.Repo, sha, head); hit {
+				return v
+			}
+			if p := (pair{sha, head}); !seen[p] {
+				seen[p] = true
+				misses = append(misses, p)
+			}
+			return false
+		}
+		Locate(in)
+		if len(misses) == 0 && len(prMisses) == 0 {
+			return nil
+		}
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(16) // the client sends 8 at a time; this bounds the goroutines
+		for _, p := range prMisses {
+			g.Go(func() error {
+				v, err := gh.PRCommits(gctx, in.Repo, p.Number)
+				if err != nil {
+					if ghapi.IsRateLimit(err) {
+						return err
+					}
+					failedMu.Lock()
+					failed[p.Number] = true // unknown: listed, asked again next refresh
+					failedMu.Unlock()
+					return nil
+				}
+				w.noteCommits(in.Repo, p, v)
+				return nil
+			})
+		}
+		for _, p := range misses {
+			g.Go(func() error {
+				v, err := gh.IsAncestor(gctx, in.Repo, p.sha, p.head)
+				if err != nil {
+					if ghapi.IsRateLimit(err) {
+						return err
+					}
+					return nil
+				}
+				w.noteAncestry(in.Repo, p.sha, p.head, v)
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// commitsKey keys a PR's commits by its head, so an open PR pushed to
+// is read again.
+func commitsKey(repo model.Repo, p *model.PR) string {
+	return fmt.Sprintf("%s#%d@%s", repo, p.Number, p.HeadRefOid)
+}
+
+// commitsOf is a PR's kept commits; hit false when they were never read
+// (or the read failed).
+func (w *Workflow) commitsOf(repo model.Repo, p *model.PR) ([]ghapi.CompareCommit, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	v, hit := w.commits[commitsKey(repo, p)]
+	return v, hit
+}
+
+func (w *Workflow) noteCommits(repo model.Repo, p *model.PR, cs []ghapi.CompareCommit) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.commits[commitsKey(repo, p)] = append([]ghapi.CompareCommit{}, cs...) // never nil: read
+}
+
+// pruneCommits keeps only the commits of the PRs a repo's Locate asked
+// about this refresh (the rest left the lookback or moved their head).
+func (w *Workflow) pruneCommits(repo model.Repo, asked map[string]bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	prefix := repo.String() + "#"
+	for k := range w.commits {
+		if strings.HasPrefix(k, prefix) && !asked[k] {
+			delete(w.commits, k)
+		}
+	}
+}
+
+func (w *Workflow) ancestryOf(repo model.Repo, sha, head string) (bool, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	v, hit := w.ancestry[repo.String()+"|"+sha+"|"+head]
+	return v, hit
+}
+
+func (w *Workflow) noteAncestry(repo model.Repo, sha, head string, v bool) {
+	w.mu.Lock()
+	w.ancestry[repo.String()+"|"+sha+"|"+head] = v
+	w.mu.Unlock()
+}
+
+// firstErr is the first non-nil error.
+func firstErr(errs ...error) error {
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 // tierRuns is the newest run of each workflow on sha, cached once every
@@ -361,7 +574,7 @@ func (w *Workflow) whereChip(c *Change) (string, string) {
 		switch c.Tag {
 		case "go":
 			if c.BlockedBy > 0 {
-				return fmt.Sprintf("%s · go · after #%d", w.cfg.Stage(), c.BlockedBy), "chip.state"
+				return fmt.Sprintf("%s · go · after %s", w.cfg.Stage(), c.blocker()), "chip.state"
 			}
 			return w.cfg.Stage() + " · go", "chip.approved"
 		case "hold":
@@ -618,7 +831,7 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 
 // Keys is P.
 func (w *Workflow) Keys() []workflow.Key {
-	return []workflow.Key{{View: "list", Ch: "P", Label: "promote", Priority: 25, Handler: w.doPromote, Offer: w.offerPromote}}
+	return []workflow.Key{{View: "list", Ch: keymap.S(keymap.Promote), Label: "promote", Priority: 25, Handler: w.doPromote, Offer: w.offerPromote}}
 }
 
 // offerPromote: P acts on a change row, and says which step it takes.

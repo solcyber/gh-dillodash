@@ -32,6 +32,7 @@ first_tier_reviews = "open"            # every open PR into dev joins the list
 | `go_tag_prefix`, `hold_tag_prefix` | `release_pr`'s, else `"go/"`, `"hold/"` | A staging unit's tags. |
 | `branch_prefix` | `"promote/"` | A promotion branch is `<prefix><number>-<staging tier>`, for example `promote/206-stage`. |
 | `approval_comment` | `"dillodash: approved {workflow} run {run} in {repo}"` | The comment GitHub records with a deployment `D` approves from a promote row. |
+| `backmerge_title` | unset | A regular expression, for example `"^Back-merge"`. A PR whose title matches is a back-merge and isn't listed, whatever its branch or commits. Back-merges made straight from the tier branch, or through a side branch, are found without it; set it when a team cherry-picks its back-merges. |
 
 ### Why `"open"` and not "needs my review"
 
@@ -71,8 +72,29 @@ change, the changes furthest along first:
   title, the author, the tier and the tag.
 
 A change reaches production when its staging unit's commit is no longer
-ahead of production. It then leaves the list. Back-merges (a PR from
-staging or production into a lower tier) are not changes.
+ahead of production. It then leaves the list.
+
+Back-merges (staging or production merged back into a lower tier) are
+not changes, and aren't listed:
+
+- **Straight from the tier branch:** a PR whose head is the staging or
+  production branch.
+- **Through a side branch,** the usual fix when the direct form
+  conflicts. A back-merge brings the lower tier nothing of its own: its
+  own commits carry a later tier's merge commits (staging or production
+  PRs merged back down), and every other one is a merge commit or already
+  in one of those merges' history. That is checked once per PR, with the
+  ancestry reads the workflow keeps for good, never against a branch
+  that moves. A change that merely touches a later tier stays listed: a
+  branch cut from production, one that merged staging in to settle a
+  conflict, a hotfix opened into staging first. So does any PR whose
+  commits can't be read, or with more than 60 commits of its own that
+aren't merges, or 250 or more in all (GitHub lists no more). A
+  promotion of the whole first tier is never taken for one.
+- **By title,** when `backmerge_title` is set.
+
+A `go` unit behind an untagged back-merge on staging, direct or through
+a side branch, says so: `stage · go · after back-merge #307`.
 
 ### How a change is followed
 
@@ -121,18 +143,32 @@ in a promotion PR, `D` says that its checks are on the PR.
 
 Each refresh, for each repo, costs:
 
-- **One GraphQL request** of four searches: PRs merged into the first
+- **Four GraphQL searches**, sent side by side: PRs merged into the first
   tier since `lookback_days`, PRs merged into staging and into production
-  since then, and open PRs into staging. A search that hits its page of
-  50 is a warning. A first-tier change that no staging PR carried but a
-  production PR names (`#N`: a hotfix cherry-picked straight to
-  production) counts as released and is not listed.
+  since then, and open PRs into staging. Each reads 100 a page, up to 200;
+  a search with more is a warning. A first-tier change that no staging PR
+  carried but a production PR names (`#N`: a hotfix cherry-picked straight
+  to production) counts as released and is not listed.
 - **One compare** of production and staging.
-- **Two tag listings.**
+- **Two tag listings.** The compare and the tags are shared with the
+  releases workflow within one refresh, and sent with the last ETag: an
+  unchanged answer costs no rate limit.
 - **The runs on each listed change's tier commit.** A commit whose runs
   have all finished is read once, then cached.
 - **An ancestry compare** for each first-tier PR that only a whole-tier
-  promotion can carry, once per pair (the answer never changes).
+  promotion can carry, once per pair (the answer never changes), all of a
+  refresh's new pairs at once.
+- **A PR's commit list** for each PR that no `#N` places (a first-tier
+  PR no staging or production PR names, a staging PR no first-tier PR
+  links to), to tell a side-branch back-merge. It's read once per head
+  and kept, all of a refresh's new ones at once. A suspect (one whose
+  commits carry a later tier's merge commit) costs an ancestry compare
+  per commit of its own that isn't a merge, once, kept for good. A read
+  that fails leaves the PR listed and is asked again next refresh.
+
+The repos are read side by side, and the workflow starts beside the
+dashboard's list rather than after it. A shorter `lookback_days` means
+fewer search pages.
 
 A repo that can't be read keeps its last rows, with a warning. A rate
 limit pauses the workflow with the rest of the dashboard.

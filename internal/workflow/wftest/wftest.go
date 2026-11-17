@@ -27,6 +27,11 @@ type App struct {
 	User    string
 	RepoL   []model.Repo
 
+	// PrimeHeads lets workflow.PrimeHead read ahead on its own goroutine;
+	// off, HeadStill reads in line, so a test may edit Fake between steps
+	// with no read in flight.
+	PrimeHeads bool
+
 	// Scripted answers, consumed in order; an empty queue answers false /
 	// "" (cancel) / -1.
 	Confirms []bool
@@ -147,9 +152,14 @@ func (a *App) Pick(title string, labels []string) int {
 
 func (a *App) OK(msg string)     { a.log("ok: " + msg) }
 func (a *App) Notice(msg string) { a.log("notice: " + msg) }
+func (a *App) Next(msg string)   { a.log("next: " + msg) }
 func (a *App) Fail(msg string)   { a.log("fail: " + msg) }
 func (a *App) Status(msg string) { a.log("status: " + msg) }
-func (a *App) Flash(msg string)  { a.log("flash: " + msg) }
+
+// PrimesHeads gates workflow.PrimeHead (see PrimeHeads).
+func (a *App) PrimesHeads() bool { return a.PrimeHeads }
+
+func (a *App) Flash(msg string) { a.log("flash: " + msg) }
 func (a *App) Celebrate(big bool) {
 	a.mu.Lock()
 	a.Celebrated = append(a.Celebrated, big)

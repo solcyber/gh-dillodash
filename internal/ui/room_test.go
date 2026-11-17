@@ -138,8 +138,27 @@ func TestRoomScreen(t *testing.T) {
 	if !strings.Contains(s, "#101") {
 		t.Errorf("the dashboard is not behind the glass:\n%s", s)
 	}
-	if mid := []rune(lines[l.Y+l.H/2]); string(mid[l.X+l.W/2]) != "+" {
-		t.Errorf("no mullion cross at the middle of the glass: %q", string(mid))
+	// the mullions cross near the middle, where the dashboard is blankest
+	crossed := false
+	for y := l.Y + l.H*2/5; y <= l.Y+l.H*3/5; y++ {
+		r := []rune(lines[y])
+		for x := l.X + l.W*2/5; x <= l.X+l.W*3/5; x++ {
+			crossed = crossed || string(r[x]) == "+"
+		}
+	}
+	if !crossed {
+		t.Errorf("no mullion cross near the middle of the glass:\n%s", s)
+	}
+	// and never over the dashboard: the plain frame's letters are all
+	// there, in place, under the glass
+	inner := h.m.roomInner.Lines()
+	for y, want := range inner {
+		got := []rune(lines[l.Y+y])
+		for x, ch := range []rune(want) {
+			if ch != ' ' && x < l.W && got[l.X+x] != ch {
+				t.Fatalf("row %d col %d: the dashboard's %q is covered by %q:\n%s", y, x, string(ch), string(got[l.X+x]), s)
+			}
+		}
 	}
 	// the list is laid out to the glass: its rows end inside it
 	for y, ln := range lines {

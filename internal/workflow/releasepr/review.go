@@ -20,7 +20,7 @@ import (
 const changesMinReason = 10
 
 // refireAfter is how long a posted command may wait for its run before
-// a offers to fire the dispatch for it again: the run usually shows
+// A offers to fire the dispatch for it again: the run usually shows
 // within a minute of a dispatch, and a command posted from the PR page
 // fires none at all.
 const refireAfter = 2 * time.Minute
@@ -39,6 +39,7 @@ func (w *Workflow) requestChanges(app workflow.App, pr *model.PR, wh string) {
 		app.Notice("request changes cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("requesting changes on %s...", wh))
 	if err := app.GH().RequestChanges(app.Context(), pr.Repo, pr.Number, strings.TrimSpace(reason)); err != nil {
 		app.Fail(fmt.Sprintf("request changes on %s failed: %s", wh, err))
 		return
@@ -84,7 +85,7 @@ func (w *Workflow) myApproval(app workflow.App, pr *model.PR) int64 {
 }
 
 // dismissMine dismisses the viewer's approval of pr. Withdrawn, the
-// release leaves the queue; a approves it again (and so queues it again)
+// release leaves the queue; A approves it again (and so queues it again)
 // whenever it should go.
 func (w *Workflow) dismissMine(app workflow.App, pr *model.PR, wh string) {
 	app.Flash(fmt.Sprintf("reading your review of %s...", wh))
@@ -98,6 +99,7 @@ func (w *Workflow) dismissMine(app workflow.App, pr *model.PR, wh string) {
 		app.Notice("dismiss cancelled")
 		return
 	}
+	app.Flash(fmt.Sprintf("dismissing your approval of %s...", wh))
 	if err := app.GH().DismissReview(app.Context(), pr.Repo, pr.Number, id, msg); err != nil {
 		app.Fail(fmt.Sprintf("dismissing your review of %s failed: %s", wh, err))
 		return
@@ -149,6 +151,7 @@ func (w *Workflow) refire(app workflow.App, pr *model.PR, wh string, id int64) {
 		return
 	}
 	payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id}
+	workflow.WarmMembership(app)
 	if !app.Confirm(fmt.Sprintf("fire %s on %s for the %s comment on %s?\npayload: repo=%s pr=%d comment_id=%d",
 		w.cfg.ReleaseNowDispatchEvent, target, w.cfg.ReleaseNowCommand, wh, pr.Repo.Name, pr.Number, id)) {
 		app.Notice("dispatch cancelled")
@@ -157,6 +160,7 @@ func (w *Workflow) refire(app workflow.App, pr *model.PR, wh string, id int64) {
 	if !workflow.PostGuard(app, w.cfg.ReleaseNowDispatchEvent) {
 		return
 	}
+	app.Flash(fmt.Sprintf("firing %s on %s...", w.cfg.ReleaseNowDispatchEvent, target))
 	if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
 		app.Fail(fmt.Sprintf("%s: %s was not told (%s): press M to merge by hand", wh, target, err))
 		return

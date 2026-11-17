@@ -30,6 +30,7 @@ var _ workflow.App = (*lockedApp)(nil)
 
 func (m *Model) OK(msg string)       { m.ok(msg) }
 func (m *Model) Notice(msg string)   { m.notice(msg) }
+func (m *Model) Next(msg string)     { m.next(msg) }
 func (m *Model) Fail(msg string)     { m.fail(msg) }
 func (m *Model) Status(msg string)   { m.setStatus(msg) }
 func (m *Model) Celebrate(big bool)  { m.celebrate(big) }
@@ -118,8 +119,7 @@ func (m *Model) OpenDetail(repo model.Repo, number int, kind string, listed any)
 	if p, ok := listed.(*model.PR); ok {
 		lp = p
 	}
-	app := &lockedApp{m}
-	m.runAction(func() { m.openDetail(app, repo, number, kind, lp) })
+	m.openItem(repo, number, kind, lp)
 }
 
 // lockedApp is the action goroutine's view of the model.
@@ -132,6 +132,7 @@ func (a *lockedApp) lock() func() {
 
 func (a *lockedApp) OK(msg string)      { defer a.lock()(); a.m.ok(msg) }
 func (a *lockedApp) Notice(msg string)  { defer a.lock()(); a.m.notice(msg) }
+func (a *lockedApp) Next(msg string)    { defer a.lock()(); a.m.next(msg) }
 func (a *lockedApp) Fail(msg string)    { defer a.lock()(); a.m.fail(msg) }
 func (a *lockedApp) Status(msg string)  { defer a.lock()(); a.m.setStatus(msg) }
 func (a *lockedApp) Celebrate(big bool) { defer a.lock()(); a.m.celebrate(big) }
@@ -185,6 +186,7 @@ func (a *lockedApp) Selected() (workflow.Row, bool) {
 func (a *lockedApp) Refresh(again bool)          { defer a.lock()(); a.m.refresh(again) }
 func (a *lockedApp) RefreshSoon(d time.Duration) { defer a.lock()(); a.m.RefreshSoon(d) }
 func (a *lockedApp) BumpDetail()                 { defer a.lock()(); a.m.detailVer++ }
+func (a *lockedApp) ReloadDetail()               { defer a.lock()(); a.m.reloadDetail() }
 func (a *lockedApp) Confirm(q string) bool       { return a.m.Confirm(q) }
 func (a *lockedApp) Prompt(p string, o workflow.PromptOpts) (string, bool) {
 	return a.m.Prompt(p, o)
@@ -199,5 +201,6 @@ func (a *lockedApp) OpenDetail(repo model.Repo, number int, kind string, listed 
 	if p, ok := listed.(*model.PR); ok {
 		lp = p
 	}
-	a.m.openDetail(a, repo, number, kind, lp)
+	defer a.lock()()
+	a.m.openItem(repo, number, kind, lp)
 }

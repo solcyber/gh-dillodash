@@ -44,6 +44,9 @@ func (m *Model) openFortressCity(city string) {
 	}
 	if f.view == nil {
 		f.view = fortress.NewView(city)
+		// the announcements' times in the dashboard's zone from the first
+		// one ("Strike the earth!" is logged on Open, before a frame)
+		f.view.Clock = m.wallNow
 		f.view.Build = m.fortressBuild
 		f.view.Epigraph = m.cfg == nil || m.cfg.Display.FortressEpigraph
 	}
@@ -163,8 +166,7 @@ func (m *Model) fortressKey(k widgets.Key) bool {
 		case len(under) > 0 && under[0].Open != nil:
 			op := *under[0].Open
 			m.detailFrom = ViewFortress
-			app := &lockedApp{m}
-			m.runAction(func() { m.openDetail(app, op.Repo, op.Number, op.Kind, nil) })
+			m.openItem(op.Repo, op.Number, op.Kind, nil)
 		case len(under) > 0:
 			m.notice("nothing to open here: o opens it on GitHub")
 		default:
