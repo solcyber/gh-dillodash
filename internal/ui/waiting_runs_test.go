@@ -1,6 +1,7 @@
 package ui
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"errors"
 	"strings"
 	"testing"
@@ -47,10 +48,36 @@ func TestDOnAWaitingRun(t *testing.T) {
 	if s := h.screen(); !strings.Contains(s, " D  approve deploys ") {
 		t.Errorf("a waiting run selected: the bar lacks D:\n%s", s)
 	}
+	// a run has nothing to open in the dashboard: o opens it, not enter
+	if s := h.screen(); !strings.Contains(s, " o  run ") || strings.Contains(s, " ↵  open ") {
+		t.Errorf("a waiting run selected: the bar offers enter, or lacks o:\n%s", s)
+	}
+	// a short screen: the confirm keeps the row it names in view above it
+	h.m.Update(tea.WindowSizeMsg{Width: 50, Height: 12})
+	h.m.tp.Confirm = nil // the real confirm modal
+	h.key('D')
+	if h.m.modal == nil {
+		t.Fatal("no confirm")
+	}
+	lines := strings.Split(h.screen(), "\n")
+	rowAt, askAt := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "#17") && rowAt < 0 {
+			rowAt = i
+		}
+		if strings.Contains(l, "approve 1 deployment") {
+			askAt = i
+		}
+	}
+	if rowAt < 0 || askAt < 0 || rowAt >= askAt {
+		t.Errorf("the selected row (line %d) is not above the confirm (line %d):\n%s", rowAt, askAt, h.screen())
+	}
+	h.key('n')
+	h.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	var asked []string
 	h.m.tp.Confirm = func(q string) bool { asked = append(asked, q); return true }
 	h.key('D')
-	if len(asked) != 1 || !strings.HasPrefix(asked[0], "approve 1 deployment of infra deploy run 4242 as alice?") {
+	if len(asked) != 1 || !strings.HasPrefix(asked[0], "approve 1 deployment of infra deploy #17 as alice?\nships main @ddddddd") {
 		t.Errorf("asked %q", asked)
 	}
 	if got := h.gh.DeployApprovals; len(got) != 1 || got[0].RunID != 4242 || got[0].EnvIDs[0] != 55 ||

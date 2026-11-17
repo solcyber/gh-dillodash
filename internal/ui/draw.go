@@ -584,8 +584,11 @@ func (m *Model) drawStatus(c *canvas.Canvas, h, w int) {
 			style = "toast.fade"
 		}
 		icon := "info"
-		if kind == "ok" || kind == "warn" {
+		switch kind {
+		case "ok", "warn":
 			icon = kind
+		case "next":
+			icon = "arrow"
 		}
 		segs = []text.Seg{text.S(" "+glyphs.Ico(icon)+m.status, style)}
 	case m.warn != "" || m.upd.Stale() || m.upd.Pending():
@@ -856,6 +859,11 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 	}
 	top := 2
 	visible := max(1, h-4)
+	if cf, ok := m.modal.(*widgets.Confirm); ok {
+		// the question names the selected row: keep that row in view
+		// above it, not under it
+		visible = max(1, min(visible, cf.Top(h, w)-top))
+	}
 	n := len(m.rows)
 	// sticky viewport: scroll only when the cursor leaves it, and keep a
 	// section's header in view above its first row

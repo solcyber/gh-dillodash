@@ -152,6 +152,7 @@ func (a *App) Pick(title string, labels []string) int {
 
 func (a *App) OK(msg string)     { a.log("ok: " + msg) }
 func (a *App) Notice(msg string) { a.log("notice: " + msg) }
+func (a *App) Next(msg string)   { a.log("next: " + msg) }
 func (a *App) Fail(msg string)   { a.log("fail: " + msg) }
 func (a *App) Status(msg string) { a.log("status: " + msg) }
 

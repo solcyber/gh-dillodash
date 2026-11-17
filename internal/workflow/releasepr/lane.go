@@ -167,6 +167,14 @@ func (w *Workflow) approveLabel(f workflow.Focus, pr, listed *model.PR) (string,
 		return "", false
 	}
 	if pr.MyApprovalStands(f.Me) {
+		if w.inFlight(pr) {
+			// on its way: nothing to post, unless nobody picked the
+			// command up, and then A only tells the manifest repo
+			if _, _, ok := w.unpicked(pr, f.Now); ok {
+				return "fire the dispatch", true
+			}
+			return "", false
+		}
 		return "release NOW", true
 	}
 	return "approve release", true

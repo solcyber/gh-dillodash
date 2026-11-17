@@ -288,7 +288,8 @@ var Styles = map[string]Spec{
 	// status line, key bar, prompts
 	"toast.info": sp(G6, None, 0), "toast.ok": sp(Blue2, None, b),
 	"toast.warn": sp(Gold, None, b), "toast.fade": sp(G4, None, 0),
-	"keylabel": sp(G5, None, 0),
+	"toast.next": sp(Sky, None, b), // what to press next: not a warning
+	"keylabel":   sp(G5, None, 0),
 	// the key bar's action zone and the hint line above it: gold is "this
 	// changes something"
 	"chip.key.act": sp(K, Gold, b), "keylabel.act": sp(Gold, None, b),

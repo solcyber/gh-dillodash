@@ -70,6 +70,10 @@ type RowKind struct {
 	URL func(app App, row Row) string
 	// Open handles Enter on the row; false lets the core open the item.
 	Open func(app App, row Row) bool
+	// Browse, when set, says the row has nothing to open in the dashboard
+	// (a branch, not a PR): the key bar offers o with this label ("compare")
+	// instead of Enter, and the hint line says o opens it on GitHub.
+	Browse string
 	// Title is the row's plain title (the core renders rows through Segs
 	// and does not read it; a workflow may use it for its own rows).
 	Title func(row Row) string
@@ -176,6 +180,9 @@ type App interface {
 	// Status line.
 	OK(msg string)
 	Notice(msg string)
+	// Next says what to press next ("press D on its row"): not a
+	// refusal, so not gold and no shake.
+	Next(msg string)
 	Fail(msg string)
 	Status(msg string)
 	// Effects.

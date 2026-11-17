@@ -428,7 +428,7 @@ func TestRowURLOpenAndFilter(t *testing.T) {
 	if u := rk.URL(app, rows[2]); u != "https://github.com/acme/infra/actions/runs/4242" {
 		t.Errorf("built URL = %q", u)
 	}
-	if !rk.Open(app, rows[2]) || app.Last() != "notice: infra deploy run 4242 is an Actions run, not a PR — https://github.com/acme/infra/actions/runs/4242 — o opens it; D approves it" {
+	if !rk.Open(app, rows[2]) || app.Last() != "notice: infra deploy #318 is an Actions run, not a PR — https://github.com/acme/infra/actions/runs/4242 — o opens it; D approves it" {
 		t.Errorf("open: %q", app.Last())
 	}
 	if rk.Title(rows[2]) != "deploy from main" {
@@ -479,7 +479,7 @@ func TestDeployApprovesMyEnvironments(t *testing.T) {
 	if !w.DeployRow(app, row) {
 		t.Fatal("not handled")
 	}
-	wantQ := "approve 1 deployment of infra deploy run 4242 as alice?\nprod (deploy, run 4242)\nnot yours: staging"
+	wantQ := "approve 1 deployment of infra deploy run 4242 as alice?\nships main @s1 — deploy from main\nprod\nnot yours: staging"
 	if len(app.Questions) != 1 || app.Questions[0] != wantQ {
 		t.Errorf("question:\n got %q\nwant %q", app.Questions, wantQ)
 	}
