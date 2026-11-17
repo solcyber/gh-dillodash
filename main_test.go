@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -87,7 +89,9 @@ func TestVersionAndHelp(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		if out != "dillodash v9.9.9\n" {
+		// the release first (other installs are read by it), then what a
+		// bug report needs
+		if !strings.HasPrefix(out, "dillodash v9.9.9 (") || !strings.Contains(out, runtime.GOOS+"/"+runtime.GOARCH) || !strings.Contains(out, "go1.") {
 			t.Errorf("%v printed %q", args, out)
 		}
 	}
@@ -306,5 +310,26 @@ func TestAuthErrorsExit2(t *testing.T) {
 func TestDemoFlagsAreExclusive(t *testing.T) {
 	if _, err := parseFlags([]string{"--demo", "--demo-night"}); err == nil || !strings.Contains(err.Error(), "pass one") {
 		t.Errorf("err %v", err)
+	}
+}
+
+// TestSubcommandWords: a subcommand takes its words before or after its
+// flags (config pull --force acme/x is acme/x --force), and a word it
+// doesn't take is an error, never silently dropped.
+func TestSubcommandWords(t *testing.T) {
+	var force bool
+	define := func(fs *flag.FlagSet) { fs.BoolVar(&force, "force", false, "") }
+	for _, args := range [][]string{{"acme/x", "--force"}, {"--force", "acme/x"}} {
+		force = false
+		words, err := subFlagsArgs("config pull", args, 1, define)
+		if err != nil || len(words) != 1 || words[0] != "acme/x" || !force {
+			t.Errorf("%v: words %v force %v err %v", args, words, force, err)
+		}
+	}
+	if _, err := subFlagsArgs("config pull", []string{"acme/x", "acme/y"}, 1, define); err == nil || !strings.Contains(err.Error(), `unexpected "acme/y"`) {
+		t.Errorf("a second repo: %v", err)
+	}
+	if err := subFlags("update", []string{"now"}, nil); err == nil || !strings.Contains(err.Error(), `update: unexpected "now"`) {
+		t.Errorf("a stray word: %v", err)
 	}
 }

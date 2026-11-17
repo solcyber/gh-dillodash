@@ -233,7 +233,7 @@ func TestReportApprovers(t *testing.T) {
 		}
 	}
 	out, _ := report(t, "alice", "keyring", cfg) // no Teams: unreadable
-	if !strings.Contains(out, "could not read @acme/release-approvers with this token (it needs the organization's Members read)") {
+	if !strings.Contains(out, "couldn't read @acme/release-approvers with this token (it needs the organization's Members read)") {
 		t.Errorf("unreadable:\n%s", out)
 	}
 	if !strings.Contains(out, "commands are posted unchecked") || strings.Contains(out, "writes: only to") {
