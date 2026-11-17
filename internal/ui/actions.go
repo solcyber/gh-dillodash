@@ -342,7 +342,7 @@ func (m *Model) doMerge(app *lockedApp) {
 	m.noteEdit(model.Ident{Repo: repo, Number: pr.Number}, func(e *pendingEdit) { e.state, e.mergeSHA = "MERGED", res.SHA })
 	m.reloadDetail()
 	m.mu.Unlock()
-	app.OK(fmt.Sprintf("merged %s as %s; D approves a deployment that waits on an environment", where, model.ShortSHA(res.SHA)))
+	app.OK(fmt.Sprintf("merged %s as %s; D approves a deployment that waits on you", where, model.ShortSHA(res.SHA)))
 	app.Celebrate(true)
 	app.Refresh(true)
 }
@@ -465,7 +465,13 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 	for i, w := range mine {
 		lines[i] = fmt.Sprintf("%s (%s, run %d)", w.EnvName, text.Ellip(text.OrQ(w.Run.Name), 40), w.Run.ID)
 	}
-	if !app.Confirm(fmt.Sprintf("approve %s of %s on merge %s as %s?\n%s", plural(len(mine), "deployment"), where, model.ShortSHA(sha), m.me, strings.Join(lines, "\n"))) {
+	early := ""
+	if by, n := st.AutoBy(), len(st.Auto()); n > 0 && len(st.Due()) == 0 {
+		// every wait of mine is one automation reviews, still inside
+		// its grace: say so, and let the viewer decide
+		early = fmt.Sprintf("%s reviews %s and is expected to approve it — approve it yourself only if that isn't happening.\n", text.OrQ(by), strings.Join(st.Auto(), ", "))
+	}
+	if !app.Confirm(fmt.Sprintf("%sapprove %s of %s on merge %s as %s?\n%s", early, plural(len(mine), "deployment"), where, model.ShortSHA(sha), m.me, strings.Join(lines, "\n"))) {
 		app.Notice("deployment approval cancelled")
 		return
 	}

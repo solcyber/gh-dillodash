@@ -718,8 +718,11 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 			out = append(out, scenes.CardLines([]text.Seg{text.S("  no run seen — the outcome only, from the PR's "+p.Source, "faint")}, width, inner)...)
 		}
 		if p.Phase == PhasePending {
-			hint := fmt.Sprintf("  D approves the waiting environment (if you review it); then swap %s for %s by hand", w.pendingLabel(), w.appliedLabel())
-			out = append(out, scenes.CardLines([]text.Seg{text.S(hint, "sum.attn")}, width, inner)...)
+			hint, st := fmt.Sprintf("  D approves the waiting environment (if you review it); then swap %s for %s by hand", w.pendingLabel(), w.appliedLabel()), "sum.attn"
+			if autoOnly(pr) {
+				hint, st = "  the waiting environment is approved automatically; D is yours only if that doesn't happen", "muted"
+			}
+			out = append(out, scenes.CardLines([]text.Seg{text.S(hint, st)}, width, inner)...)
 		}
 		if p.MergeSHA != "" {
 			out = append(out, scenes.CardLines([]text.Seg{text.S("  merge: ", "faint"), text.S(model.ShortSHA(p.MergeSHA), "md.inline")}, width, inner)...)

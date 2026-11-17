@@ -163,6 +163,15 @@ Without the window workflow, an approving review is just an approval, and
   whose head is that merge, only environments you are a reviewer of. With
   nothing to approve it says what the deploy is doing instead. The
   approval carries `deploy_approval_comment`.
+- **An environment that automation approves is left to it.** When one of
+  an environment's required reviewers is a `[bots]` login (a release job
+  that approves its own merge's deploy, say), the row reads `waits: prod
+  · automatic`, nothing announces it, and `D` leaves the key bar. If it
+  still waits after `deploy_auto_grace_secs` (5 minutes by default) it
+  becomes `approve: prod` and is announced like any other. `D` works
+  throughout; inside the grace its question says who is expected to
+  approve. An environment reviewed only by people or teams is yours at
+  once.
 - `X` on a release (its row, or its detail) lists its runs: the release
   run in the manifest repo, then the runs on its merge (or head) commit.
   Pick one to re-run its failed jobs or every job, cancel it, reject the
@@ -172,8 +181,8 @@ Without the window workflow, an approving review is just an approval, and
 - While a deploy waits or runs dillodash refreshes every
   `deploy_refresh_secs` and says once per environment when one starts
   waiting for you (`web-portal#143: prod now waits for your approval —
-  press D on its row`). Approve `stg`, wait for the message, press `D`
-  again for `prod`.
+  press D on its row`). With two gated environments in a row, approve the
+  first, wait for the message, and press `D` again for the next.
 
 ## A manual release night
 
@@ -218,8 +227,8 @@ replays one offline; these shots are its steps.
 
 - **Environments.** A release whose deploy waits on an environment ends
   as `deploy waiting · D`, and its message names the environment. `D` on
-  its row approves it; the next one (`prod` after `stg`) is offered the
-  same way.
+  its row approves it; a second one is offered the same way. One that
+  automation approves reads `automatic` and asks nothing of you.
 - **The countdown.** With `apply_budget_mins` set, a release in flight
   counts down on its row (`deploying · 23m left`, then `over by 4m`).
 
@@ -300,7 +309,8 @@ new run.
   deploy run waits on a required-reviewer environment (the `WAITING`
   heading, or `pending_label`), the release ends as **`deploy waiting ·
   D`** in bold gold: the rail stops at *deploying*, the card
-  says `D` approves the waiting environment (if you review it) and that
+  says `D` approves the waiting environment (if you review it, and unless
+  automation is still expected to) and that
   `window:pending` is swapped for `window:applied` by hand, and one notice
   names the environment. Once someone swaps the label, the row follows it:
   `released` for `applied_label`, `release FAILED` for `failed_label`.

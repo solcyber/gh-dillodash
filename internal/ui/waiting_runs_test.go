@@ -214,3 +214,51 @@ func TestDApprovePathIsUnchanged(t *testing.T) {
 		t.Error("D never rejects")
 	}
 }
+
+// TestDLeavesAnAutomaticEnvironmentAlone: a merged PR's deploy waits on
+// an environment a bot login reviews. While automation still has its
+// grace the bar does not offer D and D's question says who is expected
+// to approve; once the wait has outlasted the grace it is offered like
+// any other.
+func TestDLeavesAnAutomaticEnvironmentAlone(t *testing.T) {
+	id := model.Ident{Repo: infra, Number: 101}
+	sha := strings.Repeat("e", 40)
+	open := func(waitingSince time.Time) (*harness, *string) {
+		h := newHarness(t)
+		run := model.WorkflowRun{ID: 77, Name: "deploy", Status: "waiting", HeadSHA: sha, HeadBranch: "main", Event: "push",
+			CreatedAt: waitingSince, UpdatedAt: waitingSince}
+		var prod model.PendingDeployment
+		prod.Environment.ID, prod.Environment.Name, prod.CurrentUserCanApprove = 9, "prod", true
+		var bot model.DeploymentReviewer
+		bot.Type, bot.Reviewer.Login = "User", "github-actions"
+		prod.Reviewers = []model.DeploymentReviewer{bot}
+		h.gh.Mutate(func() {
+			h.gh.PRs[id].State = "MERGED"
+			h.gh.PRs[id].MergeCommit = &model.MergeCommit{Oid: sha}
+			h.gh.Runs = map[string][]model.WorkflowRun{sha: {run}}
+			h.gh.Pending = map[int64][]model.PendingDeployment{77: {prod}}
+		})
+		h.load()
+		h.named("enter")
+		asked := new(string)
+		h.m.tp.Confirm = func(q string) bool { *asked = q; return false }
+		h.key('D')
+		return h, asked
+	}
+
+	h, asked := open(time.Now().Add(time.Hour)) // only just began to wait, on any clock
+	if !strings.HasPrefix(*asked, "github-actions reviews prod and is expected to approve it") {
+		t.Errorf("inside the grace D says who approves: %q", *asked)
+	}
+	if _, ok := h.m.offerDeploysDetail(); ok {
+		t.Error("the bar offers D on a wait automation takes")
+	}
+
+	h, asked = open(t0.Add(-48 * time.Hour)) // long past the grace
+	if strings.Contains(*asked, "is expected to approve") || !strings.HasPrefix(*asked, "approve 1 deployment") {
+		t.Errorf("past the grace it is an ordinary approval: %q", *asked)
+	}
+	if _, ok := h.m.offerDeploysDetail(); !ok {
+		t.Error("past the grace the bar offers D")
+	}
+}

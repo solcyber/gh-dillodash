@@ -839,6 +839,7 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.MergeMethod = t.choice("merge_method", w.MergeMethod, MergeChoices)
 	w.MergedKeepSecs = t.int("merged_keep_secs", w.MergedKeepSecs)
 	w.DeployStuckSecs = t.int("deploy_stuck_secs", w.DeployStuckSecs)
+	w.DeployAutoGraceSecs = t.int("deploy_auto_grace_secs", w.DeployAutoGraceSecs)
 	w.DeployRefreshSecs = t.int("deploy_refresh_secs", w.DeployRefreshSecs)
 	w.DeployApprovalComment = t.nonEmpty("deploy_approval_comment", w.DeployApprovalComment)
 	if lane, present := t.strs("lane_order", nil); present {

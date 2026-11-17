@@ -318,7 +318,7 @@ func New(ctx context.Context, o Options) *Model {
 		statusKind:      "info",
 		ci:              &ghapi.CIFallback{Recheck: time.Duration(o.Config.Reviews.CIRecheckSecs) * time.Second},
 		backoff:         ghapi.Backoff{Refresh: time.Duration(o.Config.Display.RefreshSecs) * time.Second},
-		deployCache:     deploys.Cache{StuckAfter: deployStuck(o.Config)},
+		deployCache:     deploys.Cache{StuckAfter: deployStuck(o.Config), IsBot: botCheck(o.Config), AutoGrace: deployAutoGrace(o.Config)},
 		ciClusters:      map[model.Ident]model.CICluster{},
 		approvedByMe:    map[model.Ident]string{},
 		ahead:           &aheadCache{},
@@ -509,6 +509,24 @@ func (m *Model) reviewReposText() string {
 func deployStuck(cfg *config.Config) time.Duration {
 	if cfg != nil && cfg.ReleasePR != nil && cfg.ReleasePR.DeployStuckSecs > 0 {
 		return time.Duration(cfg.ReleasePR.DeployStuckSecs) * time.Second
+	}
+	return 0
+}
+
+// botCheck is the [bots] test the deploy reads use to tell an
+// environment automation approves; nil without a config.
+func botCheck(cfg *config.Config) func(string) bool {
+	if cfg == nil {
+		return nil
+	}
+	return cfg.Bots.IsBot
+}
+
+// deployAutoGrace is the release config's deploy_auto_grace_secs, or
+// zero for the deploys package's default.
+func deployAutoGrace(cfg *config.Config) time.Duration {
+	if cfg != nil && cfg.ReleasePR != nil && cfg.ReleasePR.DeployAutoGraceSecs > 0 {
+		return time.Duration(cfg.ReleasePR.DeployAutoGraceSecs) * time.Second
 	}
 	return 0
 }

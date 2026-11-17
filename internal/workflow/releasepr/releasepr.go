@@ -312,6 +312,8 @@ func New(ctx *workflow.Context) *Workflow {
 	}
 	w.nowRE = ReleaseNowRE(cfg.ReleaseNowCommand, cfg.ReleaseNowMinReason)
 	w.deploy.StuckAfter = time.Duration(cfg.DeployStuckSecs) * time.Second
+	w.deploy.IsBot = ctx.Config.Bots.IsBot
+	w.deploy.AutoGrace = time.Duration(cfg.DeployAutoGraceSecs) * time.Second
 	return w
 }
 
@@ -625,7 +627,9 @@ func (w *Workflow) AfterApply(app workflow.App) {
 			live = true
 		}
 		for _, wt := range dep.Waits {
-			if !wt.Mine {
+			// an environment automation approves is not announced
+			// until automation has left it past the grace
+			if !wt.Due {
 				continue
 			}
 			key := seenKey{pr.Repo.Name, dep.SHA, wt.EnvName}

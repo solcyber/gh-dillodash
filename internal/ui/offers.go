@@ -88,6 +88,15 @@ func deploysDone(pr *model.PR) bool {
 	return pr.MergedAt != nil && clock.Now().Sub(*pr.MergedAt) > deploysSettledAfter
 }
 
+// deploysNotMine: the merged PR's deploy waits, and nothing it waits on
+// is the viewer's to approve now (somebody else reviews it, or
+// automation does and still has its grace), so D is not offered. The
+// key still reads the deploys and says so.
+func deploysNotMine(pr *model.PR) bool {
+	st, ok := pr.Get("deploy").(deploys.State)
+	return ok && st.Phase == "waiting" && len(st.Waits) > 0 && len(st.Due()) == 0
+}
+
 // browseLabel is what o opens on the selected row when the row has
 // nothing to open in the dashboard (RowKind.Browse); "" otherwise.
 func (m *Model) browseLabel() string {
@@ -125,7 +134,7 @@ func (m *Model) offerDeploysList() (string, bool) {
 		return "", false
 	}
 	if pr, ok := row.Item.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
-		if deploysDone(pr) {
+		if deploysDone(pr) || deploysNotMine(pr) {
 			return "", false
 		}
 		return "approve deploys", true
@@ -138,7 +147,7 @@ func (m *Model) offerDeploysList() (string, bool) {
 
 func (m *Model) offerDeploysDetail() (string, bool) {
 	if pr, ok := m.detail.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
-		if deploysDone(pr) {
+		if deploysDone(pr) || deploysNotMine(pr) {
 			return "", false
 		}
 		return "approve deploys", true

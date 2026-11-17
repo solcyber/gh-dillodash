@@ -405,8 +405,11 @@ type ReleasePRConfig struct {
 	MergeMethod             string // merge | squash | rebase
 	MergedKeepSecs          int
 	DeployStuckSecs         int
-	DeployRefreshSecs       int
-	DeployApprovalComment   string // placeholders {repo} {number} {sha}
+	// DeployAutoGraceSecs is how long an environment that a [bots] login
+	// reviews may wait before it is put to the viewer to approve.
+	DeployAutoGraceSecs   int
+	DeployRefreshSecs     int
+	DeployApprovalComment string // placeholders {repo} {number} {sha}
 	// LaneOrder is the release repos' order on a manual night (short
 	// names): after one is released, the next one's open release is
 	// offered; empty = no order
@@ -532,6 +535,7 @@ func DefaultReleasePR() *ReleasePRConfig {
 		MergeMethod:             "merge",
 		MergedKeepSecs:          43200,
 		DeployStuckSecs:         2700,
+		DeployAutoGraceSecs:     300,
 		DeployRefreshSecs:       30,
 		DeployApprovalComment:   "dillodash: release {repo}#{number} merged as {sha}",
 	}

@@ -165,6 +165,7 @@ enabled = false
 # merge_method = "merge"                    # merge | squash | rebase
 # merged_keep_secs = 43200                  # keep a merged release listed this long
 # deploy_stuck_secs = 2700                  # flag a deploy still running after this long
+# deploy_auto_grace_secs = 300              # an environment a [bots] login reviews is left to it this long
 # deploy_refresh_secs = 30                  # poll a running deploy this often
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
 # lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, A offers the next
