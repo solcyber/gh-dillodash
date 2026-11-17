@@ -51,6 +51,18 @@ methods = { "acme/infra" = { default = "rebase", stage = "squash" }, "acme/etl-j
 	}
 }
 
+// TestMergeMethodEdges: one repo spelled twice is an error; a rebase
+// into the promote workflow's staging branch warns.
+func TestMergeMethodEdges(t *testing.T) {
+	if _, err := Parse([]byte(actionsBase+"[merge]\nmethods = { \"acme/infra\" = \"squash\", \"Acme/Infra\" = \"merge\" }\n"), "t", Overrides{}); err == nil || !strings.Contains(err.Error(), "are the same repo") {
+		t.Errorf("a repo listed twice: %v", err)
+	}
+	c, err := Parse([]byte(actionsBase+"[merge]\nmethods = { \"acme/infra\" = { stage = \"rebase\" } }\n[workflows.promote]\nenabled = true\n"), "t", Overrides{})
+	if err != nil || !strings.Contains(strings.Join(c.Warnings, "\n"), "merges into stage with a rebase") {
+		t.Errorf("rebase into staging warns: %v %v", err, c.Warnings)
+	}
+}
+
 func TestReservedWindow(t *testing.T) {
 	c, err := Parse([]byte(actionsBase+`
 [workflows.maintenance_window]
