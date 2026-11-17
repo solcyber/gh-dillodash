@@ -412,7 +412,7 @@ func Client() *fake.Client {
 	// since release #91 was cut: two changes landed on the first tier and
 	// one more unit on staging, so the two branches differ
 	gh.Sinces = map[model.Repo]ghapi.Since{portal: {
-		First:     []ghapi.MergedPR{{Number: 912, Title: "feat: saved filters", MergedAt: at(40 * time.Minute)}, {Number: 913, Title: "fix: empty state copy", MergedAt: at(20 * time.Minute)}},
+		First:     []ghapi.MergedPR{{Number: 914, Title: "feat: saved filters", MergedAt: at(40 * time.Minute)}, {Number: 915, Title: "fix: empty state copy", MergedAt: at(20 * time.Minute)}},
 		Stage:     []ghapi.MergedPR{{Number: 910, Title: "chore: bump deps", MergedAt: at(30 * time.Minute)}},
 		FirstTree: "7a11000000000000000000000000000000000001", StageTree: "7a11000000000000000000000000000000000002",
 	}}
