@@ -84,6 +84,45 @@ func (c *GitHub) ListRequested(ctx context.Context, repos []model.Repo) (ListRes
 	return c.listSearches(ctx, repos, requestedSearches(repos), "requested repos")
 }
 
+// orgSearches is the search text for each org times each of
+// requestedWhose.
+func orgSearches(orgs []string) []string {
+	var out []string
+	for _, o := range orgs {
+		for _, w := range requestedWhose {
+			out = append(out, "is:pr is:open archived:false "+w+" org:"+o)
+		}
+	}
+	return out
+}
+
+// ListRequestedOrgs reads the same PRs as ListRequested across whole
+// organizations (`[reviews] requested_orgs`), whichever repo they are
+// in, so a repo that starts asking for a review needs no config change.
+// PRs of the skip repos are left out: something else already reads
+// those in full.
+func (c *GitHub) ListRequestedOrgs(ctx context.Context, orgs []string, skip []model.Repo) (ListResult, error) {
+	if len(orgs) == 0 {
+		return ListResult{}, nil
+	}
+	skipped := map[string]bool{}
+	for _, r := range skip {
+		skipped[strings.ToLower(r.String())] = true
+	}
+	owners := map[string]bool{}
+	for _, o := range orgs {
+		owners[strings.ToLower(o)] = true
+	}
+	keep := func(nameWithOwner string) (model.Repo, bool) {
+		r, ok := model.ParseRepo(nameWithOwner)
+		if !ok || skipped[strings.ToLower(nameWithOwner)] || !owners[strings.ToLower(r.Owner)] {
+			return model.Repo{}, false
+		}
+		return r, true
+	}
+	return c.runSearches(ctx, orgSearches(orgs), "requested orgs", keep)
+}
+
 // ListOpenInto reads every open, non-draft PR into base in repos (the
 // promote workflow's first_tier_reviews = "open"): PRs only, de-duped.
 func (c *GitHub) ListOpenInto(ctx context.Context, repos []model.Repo, base string) (ListResult, error) {
@@ -93,10 +132,23 @@ func (c *GitHub) ListOpenInto(ctx context.Context, repos []model.Repo, base stri
 // listSearches runs searches in one request of aliases and keeps the PRs
 // of repos; what names them in notes.
 func (c *GitHub) listSearches(ctx context.Context, repos []model.Repo, searches []string, what string) (ListResult, error) {
-	var out ListResult
 	if len(repos) == 0 {
-		return out, nil
+		return ListResult{}, nil
 	}
+	want := map[string]model.Repo{}
+	for _, r := range repos {
+		want[strings.ToLower(r.String())] = r
+	}
+	return c.runSearches(ctx, searches, what, func(nameWithOwner string) (model.Repo, bool) {
+		r, ok := want[strings.ToLower(nameWithOwner)]
+		return r, ok // search never strays, but a renamed repo could
+	})
+}
+
+// runSearches runs searches in one request of aliases; keep says which
+// repo a result belongs to, or drops it.
+func (c *GitHub) runSearches(ctx context.Context, searches []string, what string, keep func(nameWithOwner string) (model.Repo, bool)) (ListResult, error) {
+	var out ListResult
 	vars := make(map[string]any, len(searches))
 	for i, q := range searches {
 		vars[fmt.Sprintf("q%d", i)] = q
@@ -104,10 +156,6 @@ func (c *GitHub) listSearches(ctx context.Context, repos []model.Repo, searches 
 	data, errs, err := c.graphql(ctx, requestedQuery(len(searches)), vars)
 	if err != nil {
 		return out, err
-	}
-	want := map[string]model.Repo{}
-	for _, r := range repos {
-		want[strings.ToLower(r.String())] = r
 	}
 	seen := map[model.Ident]bool{}
 	for i := range searches {
@@ -138,9 +186,9 @@ func (c *GitHub) listSearches(ctx context.Context, repos []model.Repo, searches 
 			if json.Unmarshal(raw, &where) != nil || json.Unmarshal(raw, &pr) != nil || pr.Number == 0 {
 				continue
 			}
-			repo, ok := want[strings.ToLower(where.Repository.NameWithOwner)]
+			repo, ok := keep(where.Repository.NameWithOwner)
 			if !ok {
-				continue // search never strays, but a renamed repo could
+				continue
 			}
 			pr.Repo = repo
 			if seen[pr.Ident()] {

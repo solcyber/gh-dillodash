@@ -803,3 +803,20 @@ func TestPromote(t *testing.T) {
 		t.Errorf("backmerge_title = %v", re)
 	}
 }
+
+// TestRequestedOrgs: organization names, de-duped; anything that is not
+// a bare name is an error; an org alone makes refs carry the repo.
+func TestRequestedOrgs(t *testing.T) {
+	c, err := Parse([]byte(minimal+"requested_orgs = [\"acme\", \"ACME\", \"widgets\"]\n"), "t", Overrides{})
+	if err != nil || len(c.Reviews.RequestedOrgs) != 2 || c.Reviews.RequestedOrgs[1] != "widgets" || !c.Reviews.Multi() {
+		t.Fatalf("orgs %v multi %v err %v", c.Reviews.RequestedOrgs, c.Reviews.Multi(), err)
+	}
+	if c, err := Parse([]byte(minimal+"requested_orgs = [\"acme\"]\n"), "t", Overrides{Repos: []string{"x/y"}}); err != nil || len(c.Reviews.RequestedOrgs) != 0 {
+		t.Errorf("--repo is just those repos: orgs %v err %v", c.Reviews.RequestedOrgs, err)
+	}
+	for _, bad := range []string{"acme/infra", "two words", "", "-acme", "ac(me", "@me", "*"} {
+		if _, err := Parse([]byte(minimal+"requested_orgs = [\""+bad+"\"]\n"), "t", Overrides{}); err == nil || !strings.Contains(err.Error(), "not an organization name") {
+			t.Errorf("%q should be refused: %v", bad, err)
+		}
+	}
+}

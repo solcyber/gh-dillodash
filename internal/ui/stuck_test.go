@@ -8,6 +8,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 var oldHead = strings.Repeat("1", 40)
@@ -121,6 +122,54 @@ func TestRequestedReposListOnlyMyPRs(t *testing.T) {
 	h.key('r')
 	if s := h.screen(); !strings.Contains(s, "#101") {
 		t.Errorf("the review repo's list must survive a failed search:\n%s", s)
+	}
+}
+
+// TestRequestedOrgsListAnUnlistedRepo: with requested_orgs, a PR that
+// asks for my review shows though no list names its repo; a repo read
+// in full is not read twice; another organization's PR never joins.
+func TestRequestedOrgsListAnUnlistedRepo(t *testing.T) {
+	h := newHarness(t)
+	scope := model.Repo{Owner: "acme", Name: "agent-scope"}
+	asked := pr(scope, 77, "widen the agent's scope file", "infra-bot", false)
+	own := pr(infra, 555, "a PR the full list already reads", "bob", false)
+	other := pr(model.Repo{Owner: "elsewhere", Name: "thing"}, 9, "not ours", "bob", false)
+	h.gh.Requested = []*model.PR{asked, own, other}
+	h.m.cfg.Reviews.RequestedOrgs = []string{"acme"}
+	h.m.multi = h.m.cfg.Reviews.Multi() // as New does: an organization makes refs carry the repo
+	h.load()
+	s := h.screen()
+	if !strings.Contains(s, "agent-scope#77") || !strings.Contains(s, "widen the agent's scope file") {
+		t.Errorf("the unlisted repo's PR should list:\n%s", s)
+	}
+	if strings.Contains(s, "#555") || strings.Contains(s, "not ours") {
+		t.Errorf("a full-list repo's PR and another org's PR stay out:\n%s", s)
+	}
+	if n := h.gh.Reads["requested_orgs"]; n != 1 {
+		t.Errorf("org reads %d", n)
+	}
+	if !h.m.multi || !strings.Contains(s, "infra#101") {
+		t.Errorf("with an organization every ref carries its repo:\n%s", s)
+	}
+	if !orgsSpanOwners([]model.Repo{infra}, []string{"widgets"}) || orgsSpanOwners([]model.Repo{infra}, []string{"ACME"}) {
+		t.Error("another owner's organization makes refs carry the owner; the same owner does not")
+	}
+	// a failed search warns; the list still lands
+	h.gh.Fail = map[string]error{"requested_orgs": &ghapi.Error{Message: "boom"}}
+	h.key('r')
+	if s := h.screen(); !strings.Contains(s, "#101") {
+		t.Errorf("the review repo's list must survive a failed org search:\n%s", s)
+	}
+	h.gh.Fail = nil
+	h.key('r')
+	// : takes the ref as the row shows it
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "agent-scope#77", true }
+	h.key(':')
+	if strings.Contains(h.m.status, "no repo named") {
+		t.Errorf("go to an organization's repo: %q", h.m.status)
+	}
+	if h.m.view != ViewDetail {
+		t.Errorf("go to opens the PR: view %s", h.m.view)
 	}
 }
 

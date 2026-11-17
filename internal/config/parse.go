@@ -511,6 +511,21 @@ func (p *parser) parseReviews(top *table, cfg *Config, ov Overrides) {
 	t, _ := top.sub("reviews")
 	repos, present := t.repos("repos")
 	requested, _ := t.repos("requested_repos")
+	if orgs, ok := t.strs("requested_orgs", nil); ok {
+		seen := map[string]bool{}
+		for _, o := range orgs {
+			o = strings.TrimSpace(o)
+			// an org name goes into a search: nothing but a login's letters
+			if !orgNameRE.MatchString(o) {
+				t.errf("requested_orgs", "%q is not an organization name", o)
+				continue
+			}
+			if !seen[strings.ToLower(o)] {
+				seen[strings.ToLower(o)] = true
+				cfg.Reviews.RequestedOrgs = append(cfg.Reviews.RequestedOrgs, o)
+			}
+		}
+	}
 	applies, _ := t.repos("merge_applies")
 	cfg.Reviews.MergeApplies = applies
 	cfg.Reviews.CIRecheckSecs = t.int("ci_recheck_secs", cfg.Reviews.CIRecheckSecs)
@@ -521,6 +536,7 @@ func (p *parser) parseReviews(top *table, cfg *Config, ov Overrides) {
 		repos = p.parseRepos("--repo", ov.Repos)
 		present = true
 		requested = nil
+		cfg.Reviews.RequestedOrgs = nil
 	}
 	for _, r := range requested {
 		for _, full := range repos {
@@ -1074,3 +1090,6 @@ func weekday(s string) (time.Weekday, bool) {
 	}
 	return 0, false
 }
+
+// orgNameRE is a GitHub organization login.
+var orgNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`)

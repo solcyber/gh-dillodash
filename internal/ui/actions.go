@@ -661,7 +661,15 @@ func (m *Model) doGoto(app *lockedApp) {
 	}
 	if mm[1] != "" {
 		found := false
-		for _, r := range append(append(append([]model.Repo(nil), m.repos...), m.requested...), m.wf.ExtraRepos()...) {
+		known := append(append(append([]model.Repo(nil), m.repos...), m.requested...), m.wf.ExtraRepos()...)
+		// and the repos of the PRs on screen: an organization's search
+		// lists repos no config names, and a row reads "repo#N"
+		m.mu.Lock()
+		for _, p := range m.allPRs {
+			known = append(known, p.Repo)
+		}
+		m.mu.Unlock()
+		for _, r := range known {
 			if strings.EqualFold(r.Name, mm[1]) || strings.EqualFold(r.String(), mm[1]) {
 				repo, found = r, true
 				break
