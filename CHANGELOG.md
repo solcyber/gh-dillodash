@@ -1,5 +1,61 @@
 # Changelog
 
+## [2.5.0] — 2026-11-17
+
+**Nothing you have to remember.** A review request shows in whichever
+repo it is, a blocked merge says what it waits for, and the stage row
+names who is running the release.
+
+### Added
+
+- **Review requests from a whole organization.** `[reviews]
+  requested_orgs = ["acme"]` runs the three review-request searches over
+  the organization, so a PR that asks for you shows without its repo
+  being listed. Repos read in full are left out, every reference then
+  carries its repo, `:` takes a repo as its row shows it, and `--repo`
+  drops the organizations with the other lists. ([#97], [#103])
+- **A blocked merge says what it waits for.** The stuck chip, `M` and
+  the promotion merge read the base branch's rules and name the required
+  check that failed, still runs or never reported, or the review that is
+  owed: `blocked: required check "build" hasn't reported`, `needs a code
+  owner's review`, `changes requested by carol`. A review is named only
+  when GitHub says one is owed (or, where the branch gives no verdict,
+  when nobody approved and every required check is in); a check is
+  called unreported only when the whole check list was read; two runs of
+  one check that disagree are left out. Rules that can't be read leave
+  the general text. ([#98], [#104])
+- **Who is running the release.** With `[workflows.release_pr]
+  lease_label`, an open issue carrying that label can say who is cutting
+  which repo's release. The stage row's tail starts `lease: carol 42m`,
+  `P` names the holder before merging into that repo's staging branch as
+  anyone else, and with no release open yet the counts read `since the
+  lease`. Broken entries are skipped with a warning; nothing is blocked.
+  ([#99], [#105])
+
+### Changed
+
+- **One author column width for every section**, set by the widest
+  author or run actor on screen. ([#100], [#107])
+- **The demo night has one environment people approve**: production's
+  migration. Nothing below production waits in it. ([#101], [#108])
+- **Merge methods.** A repo spelled twice in `[merge] methods` is an
+  error; a rebase into the promote workflow's staging branch warns (the
+  unit's number is then on no commit); `P` falls back to the same method
+  as `M`. ([#102], [#106])
+
+[#97]: https://github.com/solcyber/gh-dillodash/issues/97
+[#98]: https://github.com/solcyber/gh-dillodash/issues/98
+[#99]: https://github.com/solcyber/gh-dillodash/issues/99
+[#100]: https://github.com/solcyber/gh-dillodash/issues/100
+[#101]: https://github.com/solcyber/gh-dillodash/issues/101
+[#102]: https://github.com/solcyber/gh-dillodash/issues/102
+[#103]: https://github.com/solcyber/gh-dillodash/pull/103
+[#104]: https://github.com/solcyber/gh-dillodash/pull/104
+[#105]: https://github.com/solcyber/gh-dillodash/pull/105
+[#106]: https://github.com/solcyber/gh-dillodash/pull/106
+[#107]: https://github.com/solcyber/gh-dillodash/pull/107
+[#108]: https://github.com/solcyber/gh-dillodash/pull/108
+
 ## [2.4.0] — 2026-11-17
 
 **Who has to act.** For teams whose branch rules ask for a review only
@@ -1219,6 +1275,7 @@ dashboard, as a GitHub CLI extension.
 - Fortress mode, the splash, wipes, confetti, the release launch, and Amos.
 - The bundled Hack Nerd Font Mono and `font install`.
 
+[2.5.0]: https://github.com/solcyber/gh-dillodash/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/solcyber/gh-dillodash/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/solcyber/gh-dillodash/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/solcyber/gh-dillodash/compare/v2.1.0...v2.2.0

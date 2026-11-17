@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -327,6 +328,40 @@ func TestMergeWithoutAReviewRuleStops(t *testing.T) {
 		if len(h.gh.Merges) != 0 || !strings.Contains(h.m.status, tc.want) {
 			t.Errorf("%s: no merge and %q, got %+v, %q", name, tc.want, h.gh.Merges, h.m.status)
 		}
+	}
+}
+
+// TestBlockedMergeNamesWhatItWaitsFor: the list's stuck reason and M's
+// refusal name the required check from the base branch's rules; rules
+// that can't be read leave the plain reason.
+func TestBlockedMergeNamesWhatItWaitsFor(t *testing.T) {
+	id := model.Ident{Repo: infra, Number: 101}
+	h := newHarness(t)
+	h.gh.Rules = map[string]model.BranchRules{infra.String() + "@main": {RequiredChecks: []string{"apply-gate"}}}
+	h.gh.Mutate(func() {
+		// the list's PR and the detail's are separate reads
+		for _, p := range []*model.PR{h.gh.PRs[id], h.gh.Open[infra].PRs[0]} {
+			p.ReviewDecision, p.MergeStateStatus, p.BaseRefName = "APPROVED", "BLOCKED", "main"
+			p.Opinions.Nodes = []model.Review{{Author: model.Actor{Login: "bob"}, State: "APPROVED"}}
+			r := &model.Rollup{State: "SUCCESS"}
+			r.Contexts.Nodes = []model.CheckContext{{Typename: "CheckRun", Name: "build", Status: "COMPLETED", Conclusion: "SUCCESS"}}
+			r.Contexts.TotalCount = 1
+			p.Commits = model.NewCommits(model.Commit{Rollup: r})
+		}
+	})
+	h.load()
+	if s := h.screen(); !strings.Contains(s, `blocked: required check "apply-gate"`) {
+		t.Errorf("the row names the check:\n%s", s)
+	}
+	h.named("enter")
+	h.key('M')
+	if len(h.gh.Merges) != 0 || !strings.Contains(h.m.status, `can't merge yet: required check "apply-gate" hasn't reported`) {
+		t.Errorf("M names the check: %q", h.m.status)
+	}
+	h.gh.Fail = map[string]error{"rules": &ghapi.Error{Message: "boom"}}
+	h.key('M')
+	if !strings.Contains(h.m.status, "GitHub blocks it") {
+		t.Errorf("unreadable rules leave the plain reason: %q", h.m.status)
 	}
 }
 

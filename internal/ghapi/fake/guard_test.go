@@ -85,7 +85,7 @@ func TestWithAllowedReposCoversEveryWrite(t *testing.T) {
 		"IssueDetail": true, "AssignableUsers": true, "PRComments": true, "IssuesWithLabel": true,
 		"WaitingRuns": true, "RepoWaitingRuns": true, "PendingDeployments": true, "JobLogs": true,
 		"WorkflowRuns": true, "WorkflowFileRuns": true, "RunJobs": true, "PRFiles": true, "PRDiff": true,
-		"Compare": true, "TagRefs": true, "MergedSince": true, "ListRequestedOrgs": true, "OrgRepos": true, "Rulesets": true, "FileContents": true,
+		"Compare": true, "TagRefs": true, "MergedSince": true, "BranchRules": true, "ListRequestedOrgs": true, "OrgRepos": true, "Rulesets": true, "FileContents": true,
 		"Fortress": true, "ReleasePRs": true, "RepoLabels": true,
 		"PromotePRs": true, "ListOpenInto": true, "IsAncestor": true, "PRCommits": true, "CommitChange": true, "BlobAt": true, "BlobBase64": true, "BranchHead": true,
 	}

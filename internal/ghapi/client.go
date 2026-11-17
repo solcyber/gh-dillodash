@@ -235,6 +235,8 @@ type Client interface {
 	TagRefs(ctx context.Context, repo model.Repo, prefix string) ([]string, error)
 	OrgRepos(ctx context.Context, org string) ([]model.RepoListing, error)
 	Rulesets(ctx context.Context, repo model.Repo) ([]model.Ruleset, error)
+	// BranchRules is what the active rules ask of a PR into branch.
+	BranchRules(ctx context.Context, repo model.Repo, branch string) (model.BranchRules, error)
 	// FileContents reads one file from a repo (its default branch, or ref):
 	// the bytes and the blob sha.
 	FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error)

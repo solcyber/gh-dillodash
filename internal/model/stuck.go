@@ -120,9 +120,17 @@ func StuckOf(pr, listed *PR, me string) Stuck {
 	case f.mergeable == "CONFLICTING" || f.mergeState == "DIRTY":
 		return Stuck{Kind: StuckConflicts, Reason: "conflicts with base", HeadSHA: f.head}
 	case f.mergeState == "BLOCKED" && f.red:
-		return Stuck{Kind: StuckRed, Reason: "blocked: a check failed", HeadSHA: f.head}
+		reason := "blocked: a check failed"
+		if strings.HasSuffix(f.why, " failed") {
+			reason = "blocked: " + f.why // the required one, by name
+		}
+		return Stuck{Kind: StuckRed, Reason: reason, HeadSHA: f.head}
 	case f.mergeState == "BLOCKED":
-		return Stuck{Kind: StuckBlocked, Reason: "blocked: a required check or rule has not passed", HeadSHA: f.head}
+		reason := "blocked: a required check or rule has not passed"
+		if f.why != "" {
+			reason = "blocked: " + f.why
+		}
+		return Stuck{Kind: StuckBlocked, Reason: reason, HeadSHA: f.head}
 	}
 	return Stuck{}
 }
@@ -132,6 +140,7 @@ type stuckInput struct {
 	opinions, latest            []Review
 	red                         bool
 	ahead                       int
+	why                         string // BlockedWhy, when the rules were read
 }
 
 // stuckFields reads pr, falling back to listed for what pr lacks.
@@ -139,6 +148,7 @@ func stuckFields(pr, listed *PR) stuckInput {
 	in := stuckInput{
 		head: pr.HeadRefOid, mergeable: pr.Mergeable, mergeState: pr.MergeStateStatus,
 		opinions: pr.Opinions.Nodes, latest: pr.LatestReviews.Nodes, ahead: pr.ApprovalAhead,
+		why: pr.BlockedWhy,
 	}
 	rollupOf := func(p *PR) *Rollup {
 		if c := p.Commits.Last(); c != nil {
@@ -164,6 +174,9 @@ func stuckFields(pr, listed *PR) stuckInput {
 			}
 			if in.ahead == 0 {
 				in.ahead = listed.ApprovalAhead
+			}
+			if in.why == "" {
+				in.why = listed.BlockedWhy
 			}
 			if ro == nil {
 				ro = rollupOf(listed)

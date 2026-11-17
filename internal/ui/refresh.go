@@ -280,6 +280,7 @@ func (m *Model) refresh(again bool) {
 			}
 		}
 		ahead.annotate(ctx, gh, out.allPRs, me)
+		annotateBlocked(ctx, gh, out.allPRs)
 		sort.SliceStable(out.allPRs, func(i, j int) bool {
 			return out.allPRs[i].CreatedAt.Before(out.allPRs[j].CreatedAt)
 		})

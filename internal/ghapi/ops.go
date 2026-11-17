@@ -555,6 +555,47 @@ func (c *GitHub) Rulesets(ctx context.Context, repo model.Repo) ([]model.Ruleset
 	return out, nil
 }
 
+// BranchRules reads what the active rules ask of a PR into branch: the
+// required status checks, the approvals and a code owner's review. A
+// repeat is a conditional request. Classic branch protection is not
+// read (it needs an admin token), so a repo without rulesets answers
+// Known with nothing asked.
+func (c *GitHub) BranchRules(ctx context.Context, repo model.Repo, branch string) (model.BranchRules, error) {
+	var raw []struct {
+		Type       string `json:"type"`
+		Parameters struct {
+			RequiredStatusChecks []struct {
+				Context string `json:"context"`
+			} `json:"required_status_checks"`
+			Approvals int  `json:"required_approving_review_count"`
+			CodeOwner bool `json:"require_code_owner_review"`
+		} `json:"parameters"`
+	}
+	if err := c.restJSON(ctx, http.MethodGet, repoPath(repo, "rules/branches/"+url.PathEscape(branch)+"?per_page=100"), nil, &raw); err != nil {
+		return model.BranchRules{}, err
+	}
+	out := model.BranchRules{Known: true}
+	seen := map[string]bool{}
+	for _, r := range raw {
+		switch r.Type {
+		case "required_status_checks":
+			for _, c := range r.Parameters.RequiredStatusChecks {
+				if c.Context != "" && !seen[c.Context] {
+					seen[c.Context] = true
+					out.RequiredChecks = append(out.RequiredChecks, c.Context)
+				}
+			}
+		case "pull_request":
+			// several rulesets on one branch: the strictest of each
+			if r.Parameters.Approvals > out.Approvals {
+				out.Approvals = r.Parameters.Approvals
+			}
+			out.CodeOwner = out.CodeOwner || r.Parameters.CodeOwner
+		}
+	}
+	return out, nil
+}
+
 // FileContents reads one file through the contents API.
 func (c *GitHub) FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error) {
 	var out struct {

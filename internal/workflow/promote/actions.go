@@ -291,7 +291,13 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 	case "UNSTABLE":
 		extra = "\nsome checks that aren't required fail"
 	case "BLOCKED":
-		app.Notice(fmt.Sprintf("#%d can't merge yet: a required check or review is missing", n))
+		why := "a required check or review is missing"
+		if rules, err := gh.BranchRules(ctx, c.Repo, w.cfg.Stage()); err == nil {
+			if named := model.BlockedWhy(pr, rules); named != "" {
+				why = named
+			}
+		}
+		app.Notice(fmt.Sprintf("#%d can't merge yet: %s", n, why))
 		return
 	case "BEHIND":
 		app.Notice(fmt.Sprintf("#%d is behind %s: update its branch first", n, w.cfg.Stage()))
