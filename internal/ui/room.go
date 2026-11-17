@@ -17,9 +17,9 @@ import (
 )
 
 // The room: while the release window is open the dashboard is drawn as
-// the view out of a window (scenes.Room). W steps out of it to the plain
-// dashboard and back in; outside the window W shows the room too. A
-// change of the window (it opens, it closes) forgets W, so every night's
+// the view out of a window (scenes.Room). w steps out of it to the plain
+// dashboard and back in; outside the window w shows the room too. A
+// change of the window (it opens, it closes) forgets w, so every night's
 // window starts in the room ([display] room = false starts it outside).
 
 // inReleaseWindow: the maintenance window workflow says the release span

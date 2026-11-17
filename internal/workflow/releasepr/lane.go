@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/solcyber/gh-dillodash/internal/deploys"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -85,7 +86,7 @@ func (w *Workflow) laneNote(pr *model.PR) string {
 	if deploying(pr) {
 		return fmt.Sprintf("; next in lane: %s, once %s's deploys are green", where(next), where(pr))
 	}
-	return fmt.Sprintf("; next in lane: %s — a on its row: release NOW", where(next))
+	return fmt.Sprintf("; next in lane: %s — %s on its row: release NOW", where(next), keymap.S(keymap.Approve))
 }
 
 // laneWait asks before NOW on a release while another in its lane is
@@ -107,7 +108,7 @@ func (w *Workflow) laneWait(app workflow.App, pr *model.PR) bool {
 // Keys binds a in the list: on a release row (under releases or under a
 // night) it is the detail's a, without opening the release first.
 func (w *Workflow) Keys() []workflow.Key {
-	return []workflow.Key{{View: "list", Ch: "A", Label: "approve", Priority: 15, Handler: w.listApprove, Offer: w.offerListApprove}}
+	return []workflow.Key{{View: "list", Ch: keymap.S(keymap.Approve), Label: "approve", Priority: 15, Handler: w.listApprove, Offer: w.offerListApprove}}
 }
 
 func (w *Workflow) listApprove(app workflow.App) {
@@ -118,7 +119,7 @@ func (w *Workflow) listApprove(app workflow.App) {
 		return
 	}
 	if _, sure := w.classify(pr, pr, w.stateOf(app)); sure == NotRelease {
-		app.Notice(fmt.Sprintf("A in the list approves a release row; enter opens %s, then A", where(pr)))
+		app.Notice(fmt.Sprintf("%[1]s in the list approves a release row; enter opens %[2]s, then %[1]s", keymap.S(keymap.Approve), where(pr)))
 		return
 	}
 	if !workflow.StaleGate(app, "approve") { // the detail's a asks the same

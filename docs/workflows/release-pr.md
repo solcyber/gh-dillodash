@@ -203,7 +203,7 @@ replays one offline; these shots are its steps.
 - **The lane.** `lane_order` lists the release repos in the order a
   manual night releases them. When a release in the lane lands, its
   message names the next approved release in the lane (`next in lane:
-  <repo>#<n> — a on its row: release NOW`), or says to wait while its own
+  <repo>#<n> — A on its row: release NOW`), or says to wait while its own
   deploys are still running. NOW on a release while another in the lane
   is still on its way asks first.
 

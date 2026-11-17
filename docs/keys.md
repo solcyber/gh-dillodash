@@ -68,7 +68,7 @@
 | prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |
 | menus | `j`/`k` + enter, `1`–`9` | choose; esc, `q`, Ctrl-C cancel |
 | confirms | `y` | anything else is no |
-| moved in 2.0 | `a` `c` `t` `s` `p` `R` `P` | do nothing but say where they went: `A` `C` `T` `S` `P` `U` `U` (and `w`/`W` swapped: `W` is the window's commands, `w` the room) |
+| moved in 2.0 | `a` `c` `t` `p` `R`; `s` in an issue; `P` in the list without `promote` | do nothing but say where they went: `A` `C` `T` `P` `U`; `S`; `U` (and `w`/`W` swapped: `W` is the window's commands, `w` the room) |
 
 Esc never quits the list: Alt+key and some terminals' Ctrl+arrow sequences
 begin with an escape, so a stray one must never quit.

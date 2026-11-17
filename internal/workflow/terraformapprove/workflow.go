@@ -12,6 +12,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
@@ -390,7 +391,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		span := cw.Local().Span(cw.From, cw.To)
 		i := app.Pick(fmt.Sprintf("ceremony %s is disruptive — a plain %s outside %s is REFUSED (ceremonies are never queued)",
 			cand.Stack, cmd, span),
-			[]string{fmt.Sprintf("cancel — re-run 'a' between %s and %s %s", cw.From, cw.To, cw.Local().LabelAt(now)),
+			[]string{fmt.Sprintf("cancel — press %s again between %s and %s %s", keymap.S(keymap.Approve), cw.From, cw.To, cw.Local().LabelAt(now)),
 				fmt.Sprintf("run NOW, outside the window (%s) — real emergencies only", cfg.OutsideWindowFlag)})
 		if i != 1 {
 			app.Notice("approve cancelled")
@@ -445,7 +446,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		span := w.window.Local().Span(r.From, r.To)
 		i := app.Pick(fmt.Sprintf("%s is reserved for the maintenance window and it is inside %s — a plain %s is REFUSED until %s",
 			cand.Stack, span, cmd, r.To),
-			[]string{fmt.Sprintf("cancel — re-run 'a' after %s", r.To),
+			[]string{fmt.Sprintf("cancel — press %s again after %s", keymap.S(keymap.Approve), r.To),
 				fmt.Sprintf("apply NOW, outside the window (%s) — real emergencies only", cfg.OutsideWindowFlag)})
 		if i != 1 {
 			app.Notice("approve cancelled")
