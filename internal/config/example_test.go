@@ -50,7 +50,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		"confirm_destroys_flag", "outside_window_flag", "outside_window_min_reason", "ceremony_window",
 		"manifest_repo", "timezone", "tz_label", "cutoff", "start", "release_from", "end", "queued_label",
 		"scheduled_label", "rolled_label", "applied_label", "failed_label", "pending_label", "manifest_label", "manifest_title", "conductor_bot", "team",
-		"attend_command", "release_command", "cancel_command", "missed_freeze_marker", "missed_freeze_grace_mins", "missed_freeze_hint", "late_skip", "closer",
+		"attend_command", "release_command", "cancel_command", "missed_freeze_marker", "missed_freeze_grace_mins", "attended_days", "missed_freeze_hint", "late_skip", "closer",
 		"org", "ruleset", "discover_ttl_secs", "cache", "production_branch", "staging_branch", "release_prefix",
 		"hotfix_prefix", "go_tag_prefix", "hold_tag_prefix", "list_other_prs", "release_now_command",
 		"release_now_min_reason", "release_now_dispatch", "release_now_dispatch_event", "apply_workflow", "apply_run_match",
@@ -110,7 +110,7 @@ func TestExampleCoversEveryKey(t *testing.T) {
 	}
 	mw := DefaultMaintenanceWindow()
 	mw.ManifestRepo = c.Reviews.Repos[0]
-	if *c.MaintenanceWindow != *mw {
+	if !reflect.DeepEqual(*c.MaintenanceWindow, *mw) {
 		t.Errorf("maintenance_window defaults differ:\n got %+v\nwant %+v", *c.MaintenanceWindow, *mw)
 	}
 	rp := DefaultReleasePR()
