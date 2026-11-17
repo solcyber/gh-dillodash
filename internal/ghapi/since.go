@@ -28,8 +28,8 @@ type MergedPR struct {
 // same content.
 type Since struct {
 	// First and Stage are the PRs merged into each branch after the
-	// moment, oldest first, at most sinceFirst of them; the counts are
-	// the totals.
+	// moment, at most the sinceFirst oldest of them, oldest merge first;
+	// the counts are the totals.
 	First, Stage           []MergedPR
 	FirstCount, StageCount int
 	// FirstTree and StageTree are the branches' root tree ids: equal
@@ -45,19 +45,21 @@ func (s Since) Same() bool { return s.FirstTree != "" && s.FirstTree == s.StageT
 // Known reports both trees were read.
 func (s Since) Known() bool { return s.FirstTree != "" && s.StageTree != "" }
 
-const sinceQuery = `
+// sinceQuery reads both branches' trees and both searches in one
+// request.
+var sinceQuery = fmt.Sprintf(`
 query($owner: String!, $name: String!, $firstRef: String!, $stageRef: String!,
       $qFirst: String!, $qStage: String!) {
-  ` + rateLimitField + `
+  %s
   r0: repository(owner: $owner, name: $name) {
     first: ref(qualifiedName: $firstRef) { target { ... on Commit { tree { oid } } } }
     stage: ref(qualifiedName: $stageRef) { target { ... on Commit { tree { oid } } } }
   }
-  mFirst: search(query: $qFirst, type: ISSUE, first: 30) {
+  mFirst: search(query: $qFirst, type: ISSUE, first: %[2]d) {
     issueCount nodes { ... on PullRequest { number title mergedAt author { login } } } }
-  mStage: search(query: $qStage, type: ISSUE, first: 30) {
+  mStage: search(query: $qStage, type: ISSUE, first: %[2]d) {
     issueCount nodes { ... on PullRequest { number title mergedAt author { login } } } }
-}`
+}`, rateLimitField, sinceFirst)
 
 type sinceTree struct {
 	Target struct {
@@ -75,7 +77,7 @@ type sinceSearch struct {
 // SinceSearch is the search text MergedSince sends for one branch (tests
 // and the fake read it).
 func SinceSearch(repo model.Repo, branch string, since time.Time) string {
-	return fmt.Sprintf("repo:%s is:pr is:merged base:%s merged:>%s", repo, branch, since.UTC().Format(time.RFC3339))
+	return fmt.Sprintf("repo:%s is:pr is:merged base:%s merged:>%s sort:created-asc", repo, branch, since.UTC().Format(time.RFC3339))
 }
 
 // MergedSince reads, in one query, the PRs merged into first and into
@@ -106,8 +108,20 @@ func (c *GitHub) MergedSince(ctx context.Context, repo model.Repo, first, stage 
 	}
 	read := func(key string) ([]MergedPR, int, error) {
 		var s sinceSearch
-		if _, err := data.get(key, &s); err != nil {
+		ok, err := data.get(key, &s)
+		if err != nil {
 			return nil, 0, &Error{Message: "bad response: " + err.Error()}
+		}
+		if !ok {
+			// a search that did not answer is not "nothing merged"
+			msg := "the search did not answer"
+			for _, e := range errs {
+				if e.pathIs(key) && e.Message != "" {
+					msg = e.Message
+					break
+				}
+			}
+			return nil, 0, &Error{Message: msg}
 		}
 		// a non-PR node decodes to a zero entry: drop it
 		prs := s.Nodes[:0]

@@ -39,10 +39,18 @@ func sinceWF(t *testing.T, prs []*model.PR, trees [2]string) (*Workflow, *wftest
 	return w, app, st
 }
 
+// cutRelease is an open release pinned on a staging merge commit: the
+// commit is stamped two seconds before the staging PR's merge time, as
+// GitHub does, and the merge time is the cut.
 func cutRelease(number int, cut time.Time) *model.PR {
 	pr := makeRelease(relOpts{number: number})
 	pr.Set(ExtRel, nil)
-	pr.Commits = model.NewCommits(model.Commit{CommittedDate: cut})
+	c := model.Commit{Oid: pr.HeadRefOid, CommittedDate: cut.Add(-2 * time.Second)}
+	c.Landed.Nodes = []model.LandedPR{
+		{Number: 500, BaseRefName: "main", MergedAt: &cut, MergeCommit: &model.MergeCommit{Oid: "other"}},
+		{Number: 610, BaseRefName: "stage", MergedAt: &cut, MergeCommit: &model.MergeCommit{Oid: pr.HeadRefOid}},
+	}
+	pr.Commits = model.NewCommits(c)
 	return pr
 }
 
@@ -60,7 +68,7 @@ func TestStageRowSinceTheCut(t *testing.T) {
 		t.Errorf("since the cut at 01:00: %+v", c)
 	}
 	if asked := app.Fake.SinceAsked; len(asked) != 1 || !asked[0].Equal(utc(1, 0)) {
-		t.Errorf("asked from the release head's commit time: %v", asked)
+		t.Errorf("asked from the merge time of the staging PR behind the release head: %v", asked)
 	}
 	row := workflow.Row{Kind: RowStage, Item: st.Stages[0]}
 	kinds := w.RowKinds()
@@ -77,7 +85,7 @@ func TestStageRowSinceTheCut(t *testing.T) {
 	if !kinds[RowStage].Open(app, row) {
 		t.Fatal("Enter on the stage row is handled")
 	}
-	want := "notice: web-portal since release #44 was cut (3h ago): merged into dev #602 #603; into stage #612 — dev and stage differ"
+	want := "status: web-portal: dev and stage differ — since release #44 was cut (3h ago): merged into dev #602 #603; into stage #612"
 	if app.Last() != want {
 		t.Errorf("Enter names the PRs:\n got %q\nwant %q", app.Last(), want)
 	}
@@ -99,7 +107,7 @@ func TestStageRowSameContent(t *testing.T) {
 	}
 	row := workflow.Row{Kind: RowStage, Item: st.Stages[0]}
 	w.RowKinds()[RowStage].Open(app, row)
-	if !strings.HasSuffix(app.Last(), "nothing merged — dev and stage hold the same content") {
+	if app.Last() != "status: web-portal: dev and stage hold the same content — since release #44 was cut (60m ago): nothing merged" {
 		t.Errorf("notice %q", app.Last())
 	}
 }
@@ -139,9 +147,67 @@ func TestSinceReadFails(t *testing.T) {
 	app.Fake.Releases = map[model.Repo]ghapi.ReleaseRepo{portal: {PRs: []*model.PR{cutRelease(44, utc(1, 0))}, ProdOid: "m", StageOid: "s"}}
 	app.Fake.Compares = map[string]ghapi.CompareResult{"main...stage": {AheadBy: 4, Commits: stageCommits()}}
 	app.Fake.Fail = map[string]error{"since": context.DeadlineExceeded}
-	s, _, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	s, warns, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
 	st := s.(*State)
 	if len(st.Stages) != 1 || st.Stages[0].Units == nil || st.Stages[0].Since != nil {
 		t.Errorf("the stage row stands without a tail: %+v", st.Stages)
+	}
+	said := false
+	for _, wn := range warns {
+		said = said || strings.Contains(wn, "web-portal since the cut:")
+	}
+	if !said {
+		t.Errorf("the failed read is a warning: %v", warns)
+	}
+}
+
+// TestSinceIsNotResurrected: a good refresh, then the stage read fails.
+// The last good units come back; what merged since the cut does not, so
+// a count that stopped moving is never shown as current.
+func TestSinceIsNotResurrected(t *testing.T) {
+	w, app, st := sinceWF(t, []*model.PR{cutRelease(44, utc(1, 0))}, [2]string{"a", "b"})
+	if st.Stages[0].Since == nil {
+		t.Fatal("the first refresh has a tail")
+	}
+	app.Fake.Fail = map[string]error{"tags": context.DeadlineExceeded}
+	s, _, _ := w.Refresh(context.Background(), app.Fake, nil, nil, nil)
+	again := s.(*State)
+	if len(again.Stages) != 1 || again.Stages[0].Units == nil || again.Stages[0].Since != nil {
+		t.Errorf("last good units, no tail: %+v", again.Stages[0])
+	}
+	if st.Stages[0].Since == nil {
+		t.Error("the earlier snapshot was changed under its reader")
+	}
+}
+
+// TestCutMoment: the cut is the merge time of the staging PR whose merge
+// commit is the release head; a head that is no staging merge falls back
+// to its commit time; a last commit that is not the head, to the PR's
+// creation.
+func TestCutMoment(t *testing.T) {
+	w, _, _ := sinceWF(t, nil, [2]string{"a", "b"})
+	pr := cutRelease(44, utc(1, 0))
+	if _, at := w.cutOf([]*model.PR{pr}); !at.Equal(utc(1, 0)) {
+		t.Errorf("the staging PR's merge time: %v", at)
+	}
+	moved := cutRelease(44, utc(1, 0))
+	c := moved.Commits.Last()
+	c.Landed.Nodes = nil
+	moved.Commits = model.NewCommits(*c)
+	if _, at := w.cutOf([]*model.PR{moved}); !at.Equal(utc(1, 0).Add(-2 * time.Second)) {
+		t.Errorf("no staging merge behind the head: its commit time: %v", at)
+	}
+	long := cutRelease(44, utc(1, 0))
+	c = long.Commits.Last()
+	c.Oid = "not-the-head"
+	long.Commits = model.NewCommits(*c)
+	if _, at := w.cutOf([]*model.PR{long}); !at.Equal(long.CreatedAt) {
+		t.Errorf("the last commit read is not the head: the PR's creation: %v", at)
+	}
+	// two open releases: the newer one is the cut
+	older := cutRelease(43, utc(0, 10))
+	older.CreatedAt = utc(0, 0).Add(-time.Hour)
+	if rel, _ := w.cutOf([]*model.PR{older, pr}); rel == nil || rel.Number != 44 {
+		t.Errorf("the newest release: %+v", rel)
 	}
 }

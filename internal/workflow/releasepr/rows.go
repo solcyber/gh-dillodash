@@ -248,7 +248,7 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				// with a release open the row has something to say:
 				// what merged below production since its cut, by number
 				if s, ok := row.Item.(*Stage); ok && s.Since != nil {
-					app.Notice(w.sinceNotice(s, app.Now()))
+					app.Status(w.sinceNotice(s, app.Now()))
 					return true
 				}
 				app.Notice(fmt.Sprintf("%s is a branch, not a PR — o opens its compare with %s on GitHub", w.cfg.StagingBranch, w.cfg.ProductionBranch))

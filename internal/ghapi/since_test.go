@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,7 +36,7 @@ func TestMergedSince(t *testing.T) {
 	if len(got.Stage) != 0 || got.StageCount != 0 || !got.Same() || !got.Known() {
 		t.Errorf("stage and trees: %+v", got)
 	}
-	want := "repo:" + webRepo.String() + " is:pr is:merged base:dev merged:>2026-10-23T09:00:00Z"
+	want := "repo:" + webRepo.String() + " is:pr is:merged base:dev merged:>2026-10-23T09:00:00Z sort:created-asc"
 	if vars["qFirst"] != want || vars["firstRef"] != "refs/heads/dev" || vars["stageRef"] != "refs/heads/stage" {
 		t.Errorf("variables: %v", vars)
 	}
@@ -48,5 +49,15 @@ func TestMergedSince(t *testing.T) {
 	got, err = s.client(t).MergedSince(context.Background(), webRepo, "dev", "stage", at)
 	if err != nil || got.Same() || got.Known() {
 		t.Errorf("a missing branch: %+v %v", got, err)
+	}
+
+	// a search that did not answer is an error, never "nothing merged"
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"data":{"r0":{"first":{"target":{"tree":{"oid":"t1"}}},"stage":{"target":{"tree":{"oid":"t2"}}}},"mFirst":null,"mStage":{"issueCount":0,"nodes":[]}},
+			"errors":[{"path":["mFirst"],"message":"the search timed out"}]}`)
+	})
+	if _, err = s.client(t).MergedSince(context.Background(), webRepo, "dev", "stage", at); err == nil || !strings.Contains(err.Error(), "the search timed out") {
+		t.Errorf("a search with no answer: %v", err)
 	}
 }
