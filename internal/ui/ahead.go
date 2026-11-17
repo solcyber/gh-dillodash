@@ -49,6 +49,7 @@ func (a *aheadCache) annotate(ctx context.Context, gh ghapi.Client, prs []*model
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { _ = recover() }() // a panic is an unanswered compare: the chip waits
 			c, err := gh.Compare(ctx, q.repo, q.base, q.head)
 			if err != nil {
 				return

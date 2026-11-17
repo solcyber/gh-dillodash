@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -206,6 +207,7 @@ type timed struct {
 	free      bool
 	started   chan struct{}
 	release   chan struct{} // nil: return at once
+	ended     chan struct{} // closed when Refresh returns (nil: none)
 	err       error
 	gotPRs    int
 	annotated *[]string
@@ -215,6 +217,9 @@ func (w *timed) Name() string   { return w.name }
 func (w *timed) ListFree() bool { return w.free }
 func (w *timed) Refresh(ctx context.Context, _ ghapi.Client, _ []model.Repo, prs []*model.PR, _ []*model.Issue) (State, []string, error) {
 	w.gotPRs = len(prs)
+	if w.ended != nil {
+		defer close(w.ended)
+	}
 	close(w.started)
 	if w.release != nil {
 		select {
@@ -309,5 +314,63 @@ func TestRefreshingAbort(t *testing.T) {
 	}
 	if len(annotated) != 0 {
 		t.Errorf("an aborted refresh annotated: %v", annotated)
+	}
+}
+
+// panicky is a workflow whose Refresh panics.
+type panicky struct{ Base }
+
+func (panicky) Name() string { return "boom" }
+func (panicky) Refresh(context.Context, ghapi.Client, []model.Repo, []*model.PR, []*model.Issue) (State, []string, error) {
+	panic("a bug in a workflow")
+}
+
+// TestRefreshingPanicIsAWarning: a workflow whose Refresh panics (on its
+// own goroutine, which the refresh worker's recover never sees) fails
+// alone: no state, a warning naming it, and the others land as usual.
+func TestRefreshingPanicIsAWarning(t *testing.T) {
+	var annotated []string
+	ok := &timed{name: "a", started: make(chan struct{}), annotated: &annotated}
+	s, err := NewSet(nil, panicky{}, ok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, warns, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
+	if err != nil {
+		t.Fatalf("a panic is not a rate limit: err %v", err)
+	}
+	if _, has := states["boom"]; has {
+		t.Errorf("the panicked workflow has a state: %v", states)
+	}
+	if states["a"] != "a state" {
+		t.Errorf("the other workflow lost its state: %v", states)
+	}
+	if len(warns) == 0 || !strings.Contains(warns[0], "boom refresh failed: panic:") {
+		t.Errorf("warns %q", warns)
+	}
+}
+
+// TestRefreshingOtherErrorIsAWarning: only a rate limit is returned (it
+// sets the back-off); any other error is a warning, so it can never
+// hide a later workflow's rate limit.
+func TestRefreshingOtherErrorIsAWarning(t *testing.T) {
+	var annotated []string
+	limit := &ghapi.Error{Status: 403, Message: "API rate limit exceeded", RetryAt: time.Now().Add(time.Minute)}
+	broken := &timed{name: "a", started: make(chan struct{}), err: errors.New("bad gateway"), annotated: &annotated}
+	walled := &timed{name: "b", started: make(chan struct{}), err: limit, annotated: &annotated}
+	s, err := NewSet(nil, broken, walled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the error ends first (so it is not "late" and is weighed), then
+	// the limit: the limit is still what Finish returns
+	broken.ended, walled.release = make(chan struct{}), make(chan struct{})
+	go func() { <-broken.ended; close(walled.release) }()
+	_, warns, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
+	if !ghapi.IsRateLimit(err) {
+		t.Fatalf("the rate limit was hidden: err %v", err)
+	}
+	if !strings.Contains(strings.Join(warns, "; "), "a: bad gateway") {
+		t.Errorf("the other error is not a warning: %q", warns)
 	}
 }

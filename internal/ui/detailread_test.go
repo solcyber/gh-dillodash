@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
@@ -169,8 +170,11 @@ func TestAnswerIsAcknowledgedAtOnce(t *testing.T) {
 		t.Fatal("no confirm modal")
 	}
 	h.press(runeKey('y'))
-	if h.m.statusKind != "spin" || h.m.status == "" {
-		t.Errorf("after y: status %q (%s); want a spinner on the same frame", h.m.status, h.m.statusKind)
+	h.m.mu.Lock() // the action goroutine writes the status too
+	status, kind := h.m.status, h.m.statusKind
+	h.m.mu.Unlock()
+	if kind != "spin" || status == "" {
+		t.Errorf("after y: status %q (%s); want a spinner on the same frame", status, kind)
 	}
 	g.release()
 	h.pump()
@@ -251,8 +255,63 @@ func TestAgingKeptReadHoldsActingKeys(t *testing.T) {
 	before, _ := h.m.dcache.get(id)
 	was := before.started
 	h.key('A')
-	// only a read that set off with or after the write may be kept now
-	if e, ok := h.m.dcache.get(id); ok && e.started <= was {
+	// only a read that set off with or after the write may be kept now,
+	// and the re-read the approval set off is: the next open is whole
+	e, ok = h.m.dcache.get(id)
+	if !ok {
+		t.Fatal("the re-read after the write was not kept")
+	}
+	if e.started <= was {
 		t.Error("a read kept from before the write survived it")
+	}
+}
+
+// TestOpenSkipsAPrefetchFromBeforeAWrite: a read the rest set off before
+// a write (a merge from the list) must not answer an open after it: it
+// would put the item back as it was, and free the keys that act on it.
+func TestOpenSkipsAPrefetchFromBeforeAWrite(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	id := model.Ident{Repo: infra, Number: 101}
+	g := holdOp(h, "pr_detail")
+	h.m.Update(prefetchMsg{gen: h.m.prefetchGen, id: id})
+	if !h.m.prefetching {
+		t.Fatal("no prefetch set off")
+	}
+	time.Sleep(2 * time.Millisecond) // the write is later on the fx clock
+	h.m.mu.Lock()
+	h.m.noteEdit(id, func(e *pendingEdit) { e.state = "MERGED" })
+	h.m.mu.Unlock()
+	h.press(enterKey)
+	if h.m.adoptSeq != 0 {
+		t.Error("the open adopted a read that set off before the write")
+	}
+	if h.m.detailLoadedAt < h.m.dcache.epoch {
+		t.Errorf("the open would show a read from before the write (loadedAt %v < epoch %v)", h.m.detailLoadedAt, h.m.dcache.epoch)
+	}
+	if p, ok := h.m.detail.(*model.PR); !ok || p.State != "MERGED" {
+		t.Errorf("the open detail lost the write: %+v", h.m.detail)
+	}
+	g.release()
+	h.pump()
+	if n := h.gh.Reads["pr_detail"]; n != 2 {
+		t.Errorf("pr_detail reads = %d, want 2 (the open reads after the write)", n)
+	}
+}
+
+// TestRereadIsTheEndingActionsOwn: the re-read an earlier action set off
+// is not kept past a later action's end (that action may have written
+// without reading again).
+func TestRereadIsTheEndingActionsOwn(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	id := model.Ident{Repo: infra, Number: 101}
+	started := fx.Now()
+	h.m.dcache.reread = started
+	h.m.dcache.put(id, &model.PR{Number: 101}, started)
+	h.m.runAction(func() {}) // a later action that writes without a re-read
+	h.pump()
+	if _, ok := h.m.dcache.get(id); ok {
+		t.Error("an earlier action's re-read survived a later action's end")
 	}
 }

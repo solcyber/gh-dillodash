@@ -1041,3 +1041,21 @@ func TestNightLabelPastAndDST(t *testing.T) {
 	check(t, "Sunday's 23:00 after the fall-back says EST", strings.Contains(NightLabel("2026-11-01", sat, cfg), " EST, tomorrow night"))
 	check(t, "tonight's says EDT", strings.Contains(NightLabel("2026-10-31", sat, cfg), " EDT, tonight"))
 }
+
+// TestNightStripAcrossTheFallBack: a window that crosses midnight on the
+// night the clocks fall back ends at its wall clock (03:00 EST), not 24
+// hours after the night's 03:00 EDT, an hour early.
+func TestNightStripAcrossTheFallBack(t *testing.T) {
+	cfg := testCfg()
+	cfg.MaintenanceWindow.Timezone = "America/New_York"
+	cfg.MaintenanceWindow.Start = clock.HM{H: 23}
+	cfg.MaintenanceWindow.End = clock.HM{H: 3}
+	_, w := newApp(cfg)
+	const mn = "2026-10-31"           // New York falls back at 02:00 on 2026-11-01
+	now := at("2026-11-01T07:30:00Z") // 02:30 EST, inside the window
+	segs := w.stripSegs(&Night{Issue: 1, Phase: "running"}, mn, now, 60)
+	if segs == nil {
+		t.Fatal("02:30 EST is inside a 23:00–03:00 window, but the strip says the window is over")
+	}
+	check(t, "the right edge reads 03:00", strings.Contains(segsText(segs), "03:00"))
+}

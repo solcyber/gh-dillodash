@@ -148,6 +148,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, repos []model.R
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer workflow.Recover(&errs[i])
 			comments[i], errs[i] = gh.PRComments(ctx, p.Repo, p.Number)
 		}()
 	}

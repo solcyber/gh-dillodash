@@ -127,3 +127,52 @@ func TestInFlightCap(t *testing.T) {
 		t.Fatalf("peak in flight %d (cap %d)", p, maxInFlight)
 	}
 }
+
+// TestSharedFollowerOutlivesACancelledLeader: when the reader that set a
+// shared GET off is cancelled (a workflow stopped by another's rate
+// limit), a reader waiting on the same URL whose own context is live
+// asks for itself instead of failing with the leader's cancel.
+func TestSharedFollowerOutlivesACancelledLeader(t *testing.T) {
+	s := newServer(t)
+	started := make(chan struct{}, 4)
+	var hits atomic.Int32
+	s.handle("GET", "/repos/acme/web/git/matching-refs/tags/go/", func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) == 1 {
+			started <- struct{}{}
+			<-r.Context().Done() // the leader's read hangs until it is cancelled
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `[{"ref":"refs/tags/go/7"}]`)
+	})
+	c := s.client(t)
+	shared := WithShared(context.Background())
+	leaderCtx, cancel := context.WithCancel(shared)
+	leaderErr := make(chan error, 1)
+	go func() {
+		_, err := c.TagRefs(leaderCtx, webRepo, "go/")
+		leaderErr <- err
+	}()
+	<-started
+	follower := make(chan error, 1)
+	go func() {
+		tags, err := c.TagRefs(shared, webRepo, "go/")
+		if err == nil && (len(tags) != 1 || tags[0] != "go/7") {
+			t.Errorf("tags %v", tags)
+		}
+		follower <- err
+	}()
+	time.Sleep(20 * time.Millisecond) // the follower joins the leader's flight
+	cancel()
+	if err := <-leaderErr; err == nil {
+		t.Error("the cancelled leader succeeded")
+	}
+	select {
+	case err := <-follower:
+		if err != nil {
+			t.Errorf("the live follower failed with the leader's cancel: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the follower hung")
+	}
+}

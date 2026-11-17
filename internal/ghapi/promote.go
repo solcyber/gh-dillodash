@@ -94,6 +94,11 @@ func (c *GitHub) PromotePRs(ctx context.Context, repo model.Repo, first, stage, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if p := recover(); p != nil {
+					results[i] = result{err: fmt.Errorf("panic: %v", p)}
+				}
+			}()
 			prs, note, err := c.promoteSearch(ctx, repo, q[alias])
 			results[i] = result{prs, note, err}
 		}()
