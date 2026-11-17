@@ -145,7 +145,10 @@ type Model struct {
 	ahead           *aheadCache // commits a head is ahead of a stale approval
 	// listOnly: the first load's list is on screen but the rest of that
 	// refresh (workflows, CI) has not landed; the keys that act wait
-	listOnly bool
+	// issuesListed is the issues section's count (the summary says the
+	// same number as the section's header)
+	issuesListed int
+	listOnly     bool
 	// listOnlyErr: the refresh that was to land the workflows failed;
 	// the held keys say so instead of "a moment"
 	listOnlyErr string

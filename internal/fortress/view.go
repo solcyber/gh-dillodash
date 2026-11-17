@@ -367,7 +367,8 @@ func (v *View) Draw(c *canvas.Canvas, h, w int, f Frame) {
 			c.PutRaw(y, x0+vc, g, SGR(color, false, false, f.Tier))
 		}
 		if label, ok := m.StreetRows[mr]; ok {
-			c.PutSegs(y, 0, []text.Seg{text.S(text.Pad(label, x0-2)+glyphs.G("rule"), "faint")}, 0, false, false)
+			// a space always parts the name from its line ("Houston ─", not "Houston─")
+			c.PutSegs(y, 0, []text.Seg{text.S(text.Pad(text.Clip(label, x0-3), x0-2)+glyphs.G("rule"), "faint")}, 0, false, false)
 		}
 	}
 	for _, l := range m.Labels {

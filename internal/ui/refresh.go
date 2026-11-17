@@ -436,7 +436,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.noteDeltas()
 		nextUp := m.statusKind == "next" && m.status != "" && fx.Now()-m.statusAt < fx.ToastSecs
 		if m.manualPending && m.errText == "" && !spoke && !nextUp {
-			m.ok("refreshed at " + m.lastRefreshWall)
+			m.ok("refreshed at " + m.wallNow().Format("15:04:05 MST")) // the zone, as the header clock says it
 		}
 		m.manualPending = false
 	}

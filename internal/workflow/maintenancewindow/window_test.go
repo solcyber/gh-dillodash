@@ -526,7 +526,7 @@ func TestManifestRowsAndSections(t *testing.T) {
 		eq(rowShape(rows), []string{"header:queued for the maintenance window (1)", "header:window 2026-10-26 23:00 ET, tonight", "issue:3891", "queued:3922"}))
 	check(t, "the manifest row knows its night and its phase", rows[2].Meta[workflow.NightRow] == mn && rows[2].Meta["label"] == "manifest running")
 	rows = QueueRows(nil, nil, mans26, now26, []*model.Issue{m3891}, nil, mw)
-	check(t, "a manifest with no queued PR left keeps its night", eq(rowShape(rows), []string{"header:queued for the maintenance window (0)", "header:window 2026-10-26 23:00 ET, tonight", "issue:3891"}))
+	check(t, "a manifest with no queued PR left keeps its night", eq(rowShape(rows), []string{"header:the maintenance window", "header:window 2026-10-26 23:00 ET, tonight", "issue:3891"}))
 	check(t, "showAlone false (filtered out) drops a manifest-only night",
 		QueueRows(nil, nil, mans26, now26, []*model.Issue{m3891}, func(*model.Issue) bool { return false }, mw) == nil)
 	check(t, "nothing queued, no manifest: no section", QueueRows(nil, nil, map[string]*Manifest{}, now26, nil, nil, mw) == nil)

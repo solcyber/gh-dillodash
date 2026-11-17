@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -164,6 +165,10 @@ func Use(set Set) {
 	}
 	active, g = set, sets[set]
 	text.Ellipsis = g["more"]
+	text.Punct = nil
+	if set == ASCII {
+		text.Punct = strings.NewReplacer("·", "-", "—", "-", "–", "-")
+	}
 	mu.Unlock()
 }
 

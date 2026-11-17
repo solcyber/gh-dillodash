@@ -165,3 +165,16 @@ func TestRenderMergesRawRuns(t *testing.T) {
 		t.Errorf("render = %q, want %q", got, want)
 	}
 }
+
+// TestPunctOneCellForOne: the ascii set's punctuation rewrite keeps every
+// run's width, so nothing laid out around it moves.
+func TestPunctOneCellForOne(t *testing.T) {
+	was := text.Punct
+	t.Cleanup(func() { text.Punct = was })
+	text.Punct = strings.NewReplacer("·", "-", "—", "-")
+	c := New(20, 1)
+	c.PutStr(0, 0, "a · b — c|", "text")
+	if got := c.Text(0); !strings.HasPrefix(got, "a - b - c|") {
+		t.Errorf("got %q", got)
+	}
+}

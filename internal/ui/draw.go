@@ -10,12 +10,12 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/keymap"
+	"github.com/solcyber/gh-dillodash/internal/markdown"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
-	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 // draw paints one frame: the dashboard, or in the room (room.go) the
@@ -159,6 +159,16 @@ func (m *Model) clockSegs() []text.Seg {
 	}
 }
 
+// shortVersion is the header's version: a release as is; a build from
+// source ("v1.13.1-0.20261117014045-0574812c56ee+dirty", Go's
+// pseudo-version) as its base and "+dev", not 44 cells of it.
+func shortVersion(v string) string {
+	if i := strings.Index(v, "-0."); i > 0 {
+		return v[:i] + "+dev"
+	}
+	return v
+}
+
 // meSegs is the list header's " as alice".
 func (m *Model) meSegs() []text.Seg {
 	return []text.Seg{text.S(" as ", "faint"), text.S(m.me, "author.me")}
@@ -166,9 +176,10 @@ func (m *Model) meSegs() []text.Seg {
 
 // drawHeader: row 0, powerline style. Left: [ logo dillodash ][ repos ]
 // as me (list view), or [ icon #N ] and the title (inside a PR). Right,
-// by priority as the terminal narrows: the version, the clock, the
-// refresh state, the GraphQL budget meter, the draining countdown to the
-// next refresh.
+// by priority as the terminal narrows: a newer release (gold), the
+// clock, the refresh state, the GraphQL budget meter, the draining
+// countdown to the next refresh, and last the running version, which
+// matters least while it is current.
 func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	refreshing := m.refreshing
 	backoff := int(m.backoff.RateLimitWait(clock.Now()).Seconds())
@@ -176,7 +187,7 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	if m.upd.Stale() { // gold, in every view: a newer release is out
 		parts = append(parts, part{0, []text.Seg{text.S("  "+glyphs.Ico("warn")+m.ver+" → "+m.upd.Latest, "sum.attn")}})
 	} else if m.detail == nil {
-		parts = append(parts, part{0, []text.Seg{text.S("  "+m.ver, "build")}})
+		parts = append(parts, part{5, []text.Seg{text.S("  "+shortVersion(m.ver), "build")}})
 	}
 	if m.clockLoc != nil {
 		parts = append(parts, part{1, m.clockSegs()})
@@ -376,9 +387,9 @@ func (m *Model) drawSubheader(c *canvas.Canvas, w int) {
 }
 
 // fitSummary fits the summary row in room: the items with nothing to
-// count (all muted) go first, from the right, then the rest ends in an
-// ellipsis instead of a cut-off separator. The first item (what needs
-// you) always stays.
+// count (all muted) go first, from the right, then whole items from the
+// right, with an ellipsis for what no longer shows. The first item (what
+// needs you) always stays.
 func fitSummary(segs []text.Seg, room int) []text.Seg {
 	if text.SegsWidth(segs) <= room {
 		return segs
@@ -418,7 +429,18 @@ func fitSummary(segs []text.Seg, room int) []text.Seg {
 			items = append(items[:i], items[i+1:]...)
 		}
 	}
-	return text.EllipSegs(join(items), room)
+	// then whole items from the right, never one cut mid-word, and a
+	// mark that more is counted than shows
+	more := text.S("  "+text.Ellipsis, "faint")
+	dropped := false
+	for len(items) > 1 && text.SegsWidth(join(items))+boolW(dropped, text.Width(more.Text)) > room {
+		items, dropped = items[:len(items)-1], true
+	}
+	out := join(items)
+	if dropped {
+		out = append(out, more)
+	}
+	return text.EllipSegs(out, room)
 }
 
 // summarySegs: the list's summary row.
@@ -444,12 +466,7 @@ func (m *Model) summarySegs() []text.Seg {
 			failing++
 		}
 	}
-	issues := 0
-	for _, i := range m.issues {
-		if !m.wf.Claims(workflow.Row{Kind: "issue", Item: i}) {
-			issues++
-		}
-	}
+	issues := m.issuesListed
 	sep := text.S("  "+glyphs.G("sep")+"  ", "rule")
 	attn := func(n int, yes string) string {
 		if n > 0 {
@@ -464,18 +481,54 @@ func (m *Model) summarySegs() []text.Seg {
 		segs = append(segs, text.S("  ", "text"))
 		segs = append(segs, scenes.Chip(glyphs.Ico("filter")+m.filter, "chip.filter")...)
 	}
-	segs = append(segs, sep)
-	if wf := m.wf.SummarySegs(m); len(wf) > 0 {
-		segs = append(segs, wf...)
-		segs = append(segs, sep)
+	if m.filter != "" {
+		// the workflows count their whole sections; under a filter the
+		// row count is the one number that is the filter's
+		n := 0
+		for _, r := range m.rows {
+			if r.Kind != "header" {
+				n++
+			}
+		}
+		verb := " match"
+		if n == 1 {
+			verb = " matches"
+		}
+		return append(segs, sep, text.S(plural(n, "row")+verb, "sum.info"))
 	}
-	segs = append(segs,
-		text.S(fmt.Sprintf("%s%d failing CI", glyphs.Ico("fail"), failing), attn(failing, "sum.fail")), sep,
-		text.S(fmt.Sprintf("%s%d issues", glyphs.Ico("issue"), issues), "sum.muted"))
+	// a count of nothing is left out: the row says what there is
+	var items [][]text.Seg
+	if wf := m.wf.SummarySegs(m); len(wf) > 0 {
+		items = append(items, wf)
+	}
+	if failing > 0 {
+		items = append(items, []text.Seg{text.S(fmt.Sprintf("%s%d failing CI", glyphs.Ico("fail"), failing), "sum.fail")})
+	}
+	if issues > 0 {
+		items = append(items, []text.Seg{text.S(fmt.Sprintf("%s%s", glyphs.Ico("issue"), plural(issues, "issue")), "sum.muted")})
+	}
 	if m.showAll {
-		segs = append(segs, sep, text.S("showing approved (A)", "sum.info"))
+		items = append(items, []text.Seg{text.S("showing approved ("+keymap.S(keymap.ShowApproved)+")", "sum.info")})
+	}
+	for _, it := range items {
+		segs = append(segs, sep)
+		segs = append(segs, it...)
 	}
 	return segs
+}
+
+// scrollPos is a scrolled view's place: the lines on screen and how far
+// down they reach, "L19–40/54 74%"; "all 10" when everything fits, "end"
+// at the bottom.
+func scrollPos(total, top, rows int) string {
+	if total <= rows {
+		return fmt.Sprintf("all %d", total)
+	}
+	last := min(total, top+rows)
+	if last >= total {
+		return fmt.Sprintf("L%d–%d/%d end", top+1, last, total)
+	}
+	return fmt.Sprintf("L%d–%d/%d %d%%", top+1, last, total, 100*last/total)
 }
 
 // positionSegs: right side of row 1, search state and scroll position.
@@ -500,8 +553,7 @@ func (m *Model) positionSegs() []text.Seg {
 		if m.view == ViewPatch {
 			lines, top = m.patchLines, m.patchScroll
 		}
-		total := max(1, len(lines))
-		segs = append(segs, text.S(fmt.Sprintf("L%d/%d %d%%", min(total, top+1), total, min(100, 100*(top+1)/total)), "pos"))
+		segs = append(segs, text.S(scrollPos(len(lines), top, m.bodyRows()), "pos"))
 	case ViewFiles:
 		if len(m.files) > 0 {
 			segs = append(segs, text.S(fmt.Sprintf("%d/%d", m.fileSel+1, len(m.files)), "pos"))
@@ -739,6 +791,20 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		widest = max(widest, text.SegsWidth(r))
 	}
 	bw := min(w-2, max(min(92, w-2), widest+4))
+	// a row wider than the box (the rule, the footer, on a narrow
+	// terminal) wraps at its words, the rest of it under the labels
+	inner := bw - 4
+	var fit [][]text.Seg
+	for _, r := range rows {
+		if text.SegsWidth(r) <= inner {
+			fit = append(fit, r)
+			continue
+		}
+		for _, ln := range markdown.Wrap(r, inner, nil, []text.Seg{label("")}, false) {
+			fit = append(fit, ln.Segs)
+		}
+	}
+	rows = fit
 	full := min(h-2, len(rows)+4)
 	t, ok := m.fx.T("help")
 	bh := min(h-2, widgets.PopHeight(full, t, ok))
@@ -756,6 +822,9 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		hint := "any key closes"
 		if len(rows) > room {
 			hint = fmt.Sprintf("j/k scroll (%d-%d of %d)   any other key closes", m.helpTop+1, min(len(rows), m.helpTop+room), len(rows))
+			if text.Width(hint) > iw {
+				hint = fmt.Sprintf("j/k %d-%d/%d, a key closes", m.helpTop+1, min(len(rows), m.helpTop+room), len(rows))
+			}
 		}
 		c.PutSegs(top+bh-3, left, []text.Seg{text.S(hint, "menu.hint")}, left+iw, false, false)
 	}
@@ -1011,4 +1080,17 @@ func (m *Model) drawPatch(c *canvas.Canvas, h, w int) {
 func actsHelpKey(k string) bool {
 	r := []rune(k)
 	return len(r) == 1 && r[0] >= 'A' && r[0] <= 'Z' && r[0] != 'G' && r[0] != 'N' && k != "HJKL"
+}
+
+// bodyRows is how many lines a scrolled view (the detail, a diff) shows:
+// the screen (or the room's glass) less the header, the summary and the
+// two bottom rows, as drawDetail and drawPatch lay it out.
+func (m *Model) bodyRows() int { return max(1, m.layoutH()-4) }
+
+// boolW is n when b, else 0.
+func boolW(b bool, n int) int {
+	if b {
+		return n
+	}
+	return 0
 }

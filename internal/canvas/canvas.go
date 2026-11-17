@@ -138,6 +138,9 @@ func (c *Canvas) PutStr(y, x int, s, style string) int {
 }
 
 func (c *Canvas) putRun(y, x int, s, style string, extra text.Attr, sel, band bool) int {
+	if text.Punct != nil {
+		s = text.Punct.Replace(s)
+	}
 	if x < 0 {
 		// skip the part left of the canvas
 		skip := -x

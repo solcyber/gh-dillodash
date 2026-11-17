@@ -681,7 +681,13 @@ func QueueRows(prs, releases []*model.PR, manifests map[string]*Manifest, now ti
 		}
 		return all[a].rank < all[b].rank
 	})
-	rows := []workflow.Row{{Kind: "header", Item: fmt.Sprintf("queued for the maintenance window (%d)", len(all))}}
+	// nothing queued, only a night's manifest: the section is the window,
+	// not "queued … 0"
+	title := fmt.Sprintf("queued for the maintenance window (%d)", len(all))
+	if len(all) == 0 {
+		title = "the maintenance window"
+	}
+	rows := []workflow.Row{{Kind: "header", Item: title}}
 	groups := map[string][]workflow.Row{}
 	for _, p := range all {
 		groups[p.p.Night] = append(groups[p.p.Night], p.row)

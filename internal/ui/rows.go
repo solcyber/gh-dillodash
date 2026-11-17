@@ -208,6 +208,7 @@ func (m *Model) refilter() {
 		}
 	}
 	rows = append(rows, m.wf.Sections(m, terms, m.me)...)
+	m.issuesListed = len(issues)
 	if len(issues) > 0 {
 		rows = append(rows, workflow.Row{Kind: "header", Item: fmt.Sprintf("issues (%d)", len(issues))})
 		for _, i := range issues {
@@ -728,7 +729,11 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		if ic, ok := row.Meta["icon"].(string); ok && ic != "" {
 			icon = ic
 		}
-		segs = []text.Seg{text.S(" "+glyphs.Ico(icon), "section")}
+		ico := glyphs.Ico(icon)
+		if ico == "" {
+			ico = "  " // a set without this icon keeps the column: names line up
+		}
+		segs = []text.Seg{text.S(" "+ico, "section")}
 		tail := text.S("  "+count+" ", "section.count")
 		segs = append(segs, text.S(text.Ellip(name, w-2-text.SegsWidth(segs)-text.Width(tail.Text)), "section"), tail)
 	}

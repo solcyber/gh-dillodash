@@ -66,7 +66,8 @@ func TestStuckApprovalByOthersStaysListed(t *testing.T) {
 	h.gh.PRs[model.Ident{Repo: infra, Number: 101}].MergeStateStatus = "DIRTY"
 	h.load()
 	s := h.screen()
-	for _, want := range []string{"approved · stuck", "conflicts with base"} {
+	// the harness draws the ascii set, whose dot is a dash
+	for _, want := range []string{"approved - stuck", "conflicts with base"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("screen lacks %q:\n%s", want, s)
 		}
