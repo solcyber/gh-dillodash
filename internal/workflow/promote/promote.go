@@ -2,7 +2,7 @@
 // merged into the first tier (dev), the PR that carries it into staging
 // (stage) and the go/hold tag it gets there, to production (main), which
 // it reaches through the release PR (the release_pr workflow). One row
-// per change shows where it is and what its tier's deploy did; p moves it
+// per change shows where it is and what its tier's deploy did; P moves it
 // one tier on (opens the promotion PR, merges it, tags the unit) and D
 // approves the deployment its tier waits on.
 package promote
@@ -21,6 +21,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -830,7 +831,7 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 
 // Keys is P.
 func (w *Workflow) Keys() []workflow.Key {
-	return []workflow.Key{{View: "list", Ch: "P", Label: "promote", Priority: 25, Handler: w.doPromote, Offer: w.offerPromote}}
+	return []workflow.Key{{View: "list", Ch: keymap.S(keymap.Promote), Label: "promote", Priority: 25, Handler: w.doPromote, Offer: w.offerPromote}}
 }
 
 // offerPromote: P acts on a change row, and says which step it takes.

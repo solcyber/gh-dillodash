@@ -47,11 +47,11 @@ An organization can keep its config in a repo and install it with
 
 dillodash keeps itself up to date: a newer release is downloaded in the
 background, verified against its digest and its build attestation, and
-installed beside the old one; `R` restarts into it where you were.
+installed beside the old one; `U` restarts into it where you were.
 `gh dillodash update` does it now and `--rollback` undoes it;
 `[update] auto = false` (or `DILLODASH_AUTO_UPDATE=0`, for one host under
 an org's pulled config) only warns: the header turns the version gold,
-`v1.5.2 → v1.5.4`, and `a`, `M`, `D` and `w` say what this build lacks
+`v1.5.2 → v1.5.4`, and `A`, `M`, `D` and `W` say what this build lacks
 before they run. Once a newer release is installed, those keys offer the
 restart first. `config check` lists every dillodash on the machine with
 its version and says whether auto-update is on. Remove it with
@@ -77,12 +77,12 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
 - **The list.** Open pull requests across your repos, with a status chip
   (`awaiting review`, `approved by me`, `changes requested`, `DRAFT`), one
   glyph per CI check, the diffstat, the author and the age. Open issues sit
-  below in their own section. `/` filters live as you type, `A` shows PRs
+  below in their own section. `/` filters live as you type, `s` shows PRs
   approved by others, `:` opens any `#N` or `repo#N`.
 - **A pull request.** The description and the comment thread rendered as
   markdown (tables, code, terraform plans colored), the review timeline, the
   changed files (`f`) and each file's diff, or the whole diff in `$PAGER`
-  (`v`). `a` approves, `c`/`C` comment, `t` tags someone, `M` merges an
+  (`v`). `A` approves, `C` comments, `T` tags someone, `M` merges an
   approved PR, `D` approves the deployments waiting on a merged one.
 - **The summary row** counts what needs you and what is failing; the status
   line explains every refusal in words; the header shows a UTC + local clock,
@@ -93,7 +93,7 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   map where it covers least (`b` hides it).
 - **The room.** While the release window is open, the dashboard is the view
   out of a window from a lamp-lit room at night: curtains, plants, a wall
-  clock, a mug on the sill, a framed page of Forster. `W` steps out to the plain dashboard and back
+  clock, a mug on the sill, a framed page of Forster. `w` steps out to the plain dashboard and back
   in; the next window opens in the room again
   ([docs/display.md](docs/display.md#the-room)).
 
@@ -109,10 +109,10 @@ matching workflow on in the config and dillodash drives it:
 
 | Workflow | What it adds | Doc |
 |---|---|---|
-| `terraform_approve` | `a` posts `/approve <plan-id>` from the plan digests on the PR, with the destroy count and the maintenance-window choice; plan cards in the detail view; apply outcomes read back | [docs/workflows/terraform-approve.md](docs/workflows/terraform-approve.md) |
-| `maintenance_window` | a section of PRs queued for a nightly window, grouped by night with the countdown; `w` posts `/attend`, `/release` and `/window-cancel` on the night's manifest issue | [docs/workflows/maintenance-window.md](docs/workflows/maintenance-window.md) |
-| `release_pr` | application releases as PRs into production across many repos, with the staging branch's units by tag; `a` on the row or in the detail approves to queue or posts `/release-now` (NOW alone on a release you already approved or the window bumped), the lane's next release and the slot to cancel; `D` for the environment approvals; `M` the last resort when the dispatch can't run | [docs/workflows/release-pr.md](docs/workflows/release-pr.md) |
-| `promote` | a section of the changes on their way through a branch-per-tier repo (dev → stage → main): where each one is, its tier's deploy, and `p` to move it one tier on (open the promotion PR, merge it, tag the unit go or hold); optionally every open PR into the first tier in the review list | [docs/workflows/promote.md](docs/workflows/promote.md) |
+| `terraform_approve` | `A` posts `/approve <plan-id>` from the plan digests on the PR, with the destroy count and the maintenance-window choice; plan cards in the detail view; apply outcomes read back | [docs/workflows/terraform-approve.md](docs/workflows/terraform-approve.md) |
+| `maintenance_window` | a section of PRs queued for a nightly window, grouped by night with the countdown; `W` posts `/attend`, `/release` and `/window-cancel` on the night's manifest issue | [docs/workflows/maintenance-window.md](docs/workflows/maintenance-window.md) |
+| `release_pr` | application releases as PRs into production across many repos, with the staging branch's units by tag; `A` on the row or in the detail approves to queue or posts `/release-now` (NOW alone on a release you already approved or the window bumped), the lane's next release and the slot to cancel; `D` for the environment approvals; `M` the last resort when the dispatch can't run | [docs/workflows/release-pr.md](docs/workflows/release-pr.md) |
+| `promote` | a section of the changes on their way through a branch-per-tier repo (dev → stage → main): where each one is, its tier's deploy, and `P` to move it one tier on (open the promotion PR, merge it, tag the unit go or hold); optionally every open PR into the first tier in the review list | [docs/workflows/promote.md](docs/workflows/promote.md) |
 | `waiting_runs` | a section of Actions runs waiting on an environment approval with no listed PR behind them (a hand-dispatched deploy, an ops run from `main`); `D` approves the environments you review | [docs/workflows/waiting-runs.md](docs/workflows/waiting-runs.md) |
 
 Before any command a bot accepts only from an approver (`/approve`,

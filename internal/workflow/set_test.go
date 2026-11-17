@@ -365,7 +365,13 @@ func TestRefreshingOtherErrorIsAWarning(t *testing.T) {
 	// the error ends first (so it is not "late" and is weighed), then
 	// the limit: the limit is still what Finish returns
 	broken.ended, walled.release = make(chan struct{}), make(chan struct{})
-	go func() { <-broken.ended; close(walled.release) }()
+	go func() {
+		<-broken.ended
+		// Refresh returning is not the run ending: its goroutine still
+		// notes whether a limit came first; give it ample time
+		time.Sleep(100 * time.Millisecond)
+		close(walled.release)
+	}()
 	_, warns, err := s.Start(context.Background(), nil, nil).Finish(nil, nil)
 	if !ghapi.IsRateLimit(err) {
 		t.Fatalf("the rate limit was hidden: err %v", err)

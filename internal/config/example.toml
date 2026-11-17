@@ -41,7 +41,7 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # clock = true                # the header clock: UTC, then the same instant in clock_timezone
 # clock_timezone = "America/New_York" # IANA zone of the clock's second time
 # clock_tz_label = ""         # label for it, e.g. "ET"; "" = the zone's own (EST/EDT)
-# room = true                 # in the release window, the dashboard is a view out of a window (W toggles)
+# room = true                 # in the release window, the dashboard is a view out of a window (w toggles)
 # fortress_epigraph = true    # Borges's "On Exactitude in Science" over the fortress map (b toggles)
 # profile = ""                # a header badge (at most 12 characters), e.g. "OPS": which config this dashboard runs
 
@@ -66,7 +66,7 @@ repos = ["acme/infra"]        # required: one or more "owner/name" (--repo repla
 # ============================================================================
 # Update — dillodash keeps itself on the latest release. A newer one is
 # downloaded in the background, verified (its digest and its build
-# attestation), installed beside the old one (kept as .prev), and R restarts
+# attestation), installed beside the old one (kept as .prev), and U restarts
 # into it. DILLODASH_AUTO_UPDATE=0 turns installing off on one host.
 # ============================================================================
 [update]
@@ -131,7 +131,7 @@ enabled = false
 # late_skip = ""                            # "HH:MM": the run starts no new item after it; default: not shown
 # closer = ""                               # "HH:MM": when the conductor closes the night; default: not shown
 # reserved_from = ""                        # with reserved_to: the span ("HH:MM") the apply dispatcher refuses an
-# reserved_to = ""                          #   immediate apply to a reserved stack without outside_window_flag; a offers the flag
+# reserved_to = ""                          #   immediate apply to a reserved stack without outside_window_flag; A offers the flag
 # reserved_stacks = []                      # the reserved stacks (patterns like "prod/*"); [] = every stack
 
 # ============================================================================
@@ -166,7 +166,7 @@ enabled = false
 # deploy_stuck_secs = 2700                  # flag a deploy still running after this long
 # deploy_refresh_secs = 30                  # poll a running deploy this often
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
-# lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, a offers the next
+# lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, A offers the next
 # apply_budget_mins = 0                     # a release in flight counts down from this many minutes on its row (0 = no countdown)
 
 # ============================================================================
@@ -183,7 +183,7 @@ enabled = false
 # ============================================================================
 # Workflow: promote
 # Branch-per-tier repos (a first tier, a staging tier, production): one row
-# per change shows where it is and its tier's deploy. p moves it one tier on
+# per change shows where it is and its tier's deploy. P moves it one tier on
 # (opens the promotion PR, merges it, tags the staging unit go or hold); D
 # approves the deploy its tier waits on. Production is reached through the
 # release PR (release_pr).

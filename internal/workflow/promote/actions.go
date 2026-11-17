@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
@@ -237,7 +238,7 @@ func (w *Workflow) openPromotion(app workflow.App, c *Change) {
 	app.Flash(fmt.Sprintf("opening the promotion of #%d...", n))
 	if err := gh.CreateBranch(ctx, c.Repo, branch, head); err != nil {
 		if e, ok := ghapi.AsError(err); ok && e.Status == 422 {
-			app.Notice(fmt.Sprintf("branch %s exists — a promotion of #%d was started; open it on GitHub, or delete the branch and press p again", branch, n))
+			app.Notice(fmt.Sprintf("branch %s exists — a promotion of #%d was started; open it on GitHub, or delete the branch and press %s again", branch, n, keymap.S(keymap.Promote)))
 			return
 		}
 		app.Fail(fmt.Sprintf("creating %s failed: %s", branch, err))
@@ -431,7 +432,7 @@ func (w *Workflow) releaseNote(app workflow.App, c *Change) string {
 		}
 		sort.Slice(open, func(i, j int) bool { return open[i].Number < open[j].Number })
 		if len(open) > 0 {
-			return fmt.Sprintf("release PR #%d into %s is open (A approves it there)", open[0].Number, w.cfg.Prod())
+			return fmt.Sprintf("release PR #%d into %s is open (%s approves it there)", open[0].Number, w.cfg.Prod(), keymap.S(keymap.Approve))
 		}
 	}
 	return "it rides the next release cut into " + w.cfg.Prod()

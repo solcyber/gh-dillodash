@@ -85,7 +85,7 @@ func TestLaneOrder(t *testing.T) {
 	first.Repo, first.Number = portal, 743
 	next := approved(makeRelease(relOpts{number: 158, repo: etl}), "carol")
 	w, _ := laneState(t, first, next)
-	if got := w.laneNote(first); got != "; next in lane: etl-jobs#158 — a on its row: release NOW" {
+	if got := w.laneNote(first); got != "; next in lane: etl-jobs#158 — A on its row: release NOW" {
 		t.Errorf("next in lane: %q", got)
 	}
 	first.Set(ExtDeploy, deploys.State{Phase: "running"})

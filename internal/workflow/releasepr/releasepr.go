@@ -29,6 +29,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -633,7 +634,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 			w.seen[key] = true
 			w.mu.Unlock()
 			if !seen {
-				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval — press D on its row", pr.Repo.Name, pr.Number, wt.EnvName))
+				app.Notice(fmt.Sprintf("%s#%d: %s now waits for your approval — press %s on its row", pr.Repo.Name, pr.Number, wt.EnvName, keymap.S(keymap.Deploys)))
 			}
 		}
 	}
