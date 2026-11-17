@@ -670,7 +670,13 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 		RowChange: {
 			Icon:   "branch",
 			Layout: w.layout,
-			Segs:   w.segs,
+			Author: func(r workflow.Row) string {
+				if c, ok := r.Item.(*Change); ok {
+					return c.Author()
+				}
+				return ""
+			},
+			Segs: w.segs,
 			URL: func(app workflow.App, row workflow.Row) string {
 				c, ok := row.Item.(*Change)
 				if !ok {
@@ -728,7 +734,7 @@ func (w *Workflow) layout(app workflow.App, items []workflow.Row, width, numW, r
 		}
 		authorW = max(authorW, text.Width(c.Author()))
 	}
-	cols := workflow.Layout{"where": min(34, whereW), "author": min(14, authorW), "age": 3}
+	cols := workflow.Layout{"where": min(34, whereW), "author": workflow.AuthorW(app, min(14, authorW)), "age": 3}
 	if deployW > 0 {
 		cols["deploy"] = min(30, deployW)
 	}
