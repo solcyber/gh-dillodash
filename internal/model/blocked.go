@@ -59,9 +59,14 @@ func BlockedWhy(pr *PR, rules BranchRules) string {
 					st = "failed"
 				}
 			}
-			// two runs of one name: the worse one decides
-			if prev := state[name]; prev == "" || prev == "passed" || (prev == "running" && st == "failed") {
+			// two runs of one name (two workflows, two events, a re-run)
+			// that disagree: which one the rule reads is not knowable
+			// from here, so that check is left out of every claim
+			switch prev := state[name]; {
+			case prev == "":
 				state[name] = st
+			case prev != st:
+				state[name] = "mixed"
 			}
 		}
 	}
@@ -108,24 +113,46 @@ func BlockedWhy(pr *PR, rules BranchRules) string {
 		}
 		return check(missing) + " haven't reported"
 	}
-	approvals := 0
+	// the reviews, by GitHub's own verdict where it gives one: once it
+	// says approved, no review is the block, whatever else is
+	approved, changes := false, ""
 	for _, r := range pr.Opinions.Nodes {
-		if r.State == "APPROVED" {
-			approvals++
+		switch r.State {
+		case "APPROVED":
+			approved = true
+		case "CHANGES_REQUESTED":
+			if changes == "" {
+				changes = r.Author.Login
+			}
 		}
 	}
+	switch pr.ReviewDecision {
+	case "APPROVED":
+		return ""
+	case "CHANGES_REQUESTED":
+		if changes != "" {
+			return "changes requested by " + changes
+		}
+		return "changes requested"
+	case "REVIEW_REQUIRED":
+		switch {
+		case rules.Approvals > 1:
+			return fmt.Sprintf("needs %d approvals", rules.Approvals)
+		case rules.CodeOwner && rules.Approvals == 0:
+			return "needs a code owner's review"
+		default:
+			return "needs an approval"
+		}
+	}
+	// no verdict: a branch that asks for no approving review reports
+	// none, even when it asks for a code owner's. Then a review is named
+	// only when nobody approved and every required check is known to be
+	// in, so a check can't be the block instead.
 	switch {
-	case rules.Approvals > approvals && rules.Approvals == 1:
-		return "needs an approval"
-	case rules.Approvals > approvals:
-		return fmt.Sprintf("needs %d approvals, has %d", rules.Approvals, approvals)
-	case rules.CodeOwner && approvals == 0:
+	case changes != "":
+		return "changes requested by " + changes
+	case rules.CodeOwner && !approved && (whole || len(rules.RequiredChecks) == 0):
 		return "needs a code owner's review"
-	case rules.CodeOwner && (whole || len(rules.RequiredChecks) == 0):
-		// approved, and still blocked with every required check in: the
-		// approval is not from an owner of what changed. With the checks
-		// unread, a check may be the block instead, so nothing is said.
-		return "needs a review from a code owner of the changed files"
 	}
 	return ""
 }

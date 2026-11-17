@@ -25,26 +25,33 @@ func TestBlockedWhy(t *testing.T) {
 	for name, tc := range map[string]struct {
 		rules    BranchRules
 		rollup   *Rollup
+		decision string
 		opinions []Review
 		want     string
 	}{
-		"failed wins":    {rules, rollup(0, run("build", "COMPLETED", "SUCCESS"), run("e2e", "COMPLETED", "FAILURE"), run("gate", "IN_PROGRESS", "")), nil, `required check "e2e" failed`},
-		"running":        {rules, rollup(0, run("build", "COMPLETED", "SUCCESS"), run("e2e", "COMPLETED", "SKIPPED"), run("gate", "QUEUED", "")), nil, `required check "gate" is still running`},
-		"not reported":   {rules, rollup(0, run("build", "COMPLETED", "SUCCESS")), nil, `required checks "e2e" and "gate" haven't reported`},
-		"status":         {BranchRules{Known: true, RequiredChecks: []string{"apply-gate"}}, rollup(0, CheckContext{Typename: "StatusContext", Context: "apply-gate", State: "PENDING"}), nil, `required check "apply-gate" is still running`},
-		"rerun failed":   {BranchRules{Known: true, RequiredChecks: []string{"build"}}, rollup(0, run("build", "COMPLETED", "SUCCESS"), run("build", "COMPLETED", "FAILURE")), nil, `required check "build" failed`},
-		"past the page":  {rules, rollup(80, run("build", "COMPLETED", "SUCCESS")), nil, ""},
-		"no rollup":      {rules, nil, nil, ""},
-		"unknown rules":  {BranchRules{RequiredChecks: []string{"build"}}, rollup(0), nil, ""},
-		"an approval":    {BranchRules{Known: true, Approvals: 1}, rollup(0), nil, "needs an approval"},
-		"two approvals":  {BranchRules{Known: true, Approvals: 2}, rollup(0), approved, "needs 2 approvals, has 1"},
-		"code owner":     {BranchRules{Known: true, CodeOwner: true}, rollup(0), nil, "needs a code owner's review"},
-		"wrong owner":    {BranchRules{Known: true, CodeOwner: true}, rollup(0), approved, "needs a review from a code owner of the changed files"},
-		"owner or check": {BranchRules{Known: true, CodeOwner: true, RequiredChecks: []string{"build"}}, nil, approved, ""},
-		"nothing asked":  {BranchRules{Known: true}, rollup(0), nil, ""},
-		"all green":      {BranchRules{Known: true, RequiredChecks: []string{"build"}, Approvals: 1}, rollup(0, run("build", "COMPLETED", "SUCCESS")), approved, ""},
+		"failed wins":   {rules, rollup(0, run("build", "COMPLETED", "SUCCESS"), run("e2e", "COMPLETED", "FAILURE"), run("gate", "IN_PROGRESS", "")), "", nil, `required check "e2e" failed`},
+		"running":       {rules, rollup(0, run("build", "COMPLETED", "SUCCESS"), run("e2e", "COMPLETED", "SKIPPED"), run("gate", "QUEUED", "")), "", nil, `required check "gate" is still running`},
+		"not reported":  {rules, rollup(0, run("build", "COMPLETED", "SUCCESS")), "", nil, `required checks "e2e" and "gate" haven't reported`},
+		"status":        {BranchRules{Known: true, RequiredChecks: []string{"apply-gate"}}, rollup(0, CheckContext{Typename: "StatusContext", Context: "apply-gate", State: "PENDING"}), "", nil, `required check "apply-gate" is still running`},
+		"two agree":     {BranchRules{Known: true, RequiredChecks: []string{"build"}}, rollup(0, run("build", "COMPLETED", "FAILURE"), run("build", "COMPLETED", "FAILURE")), "", nil, `required check "build" failed`},
+		"two disagree":  {BranchRules{Known: true, RequiredChecks: []string{"build"}}, rollup(0, run("build", "COMPLETED", "CANCELLED"), run("build", "COMPLETED", "SUCCESS")), "APPROVED", approved, ""},
+		"past the page": {rules, rollup(80, run("build", "COMPLETED", "SUCCESS")), "APPROVED", approved, ""},
+		"no rollup":     {rules, nil, "APPROVED", approved, ""},
+		"unknown rules": {BranchRules{RequiredChecks: []string{"build"}}, rollup(0), "", nil, ""},
+		// GitHub's verdict on the reviews decides what is said of them
+		"review required":      {BranchRules{Known: true, Approvals: 1}, rollup(0), "REVIEW_REQUIRED", nil, "needs an approval"},
+		"two approvals":        {BranchRules{Known: true, Approvals: 2}, rollup(0), "REVIEW_REQUIRED", approved, "needs 2 approvals"},
+		"owner required":       {BranchRules{Known: true, CodeOwner: true}, rollup(0), "REVIEW_REQUIRED", nil, "needs a code owner's review"},
+		"changes requested":    {BranchRules{Known: true, Approvals: 1}, rollup(0), "CHANGES_REQUESTED", []Review{{State: "CHANGES_REQUESTED", Author: Actor{Login: "carol"}}}, "changes requested by carol"},
+		"approved, other rule": {BranchRules{Known: true, Approvals: 1, CodeOwner: true}, rollup(0), "APPROVED", approved, ""},
+		// no verdict (a branch that asks for no approving review)
+		"owner, nobody approved": {BranchRules{Known: true, CodeOwner: true}, rollup(0), "", nil, "needs a code owner's review"},
+		"owner, someone did":     {BranchRules{Known: true, CodeOwner: true}, rollup(0), "", approved, ""},
+		"owner or check":         {BranchRules{Known: true, CodeOwner: true, RequiredChecks: []string{"build"}}, nil, "", nil, ""},
+		"nothing asked":          {BranchRules{Known: true}, rollup(0), "", nil, ""},
+		"all green":              {BranchRules{Known: true, RequiredChecks: []string{"build"}, Approvals: 1}, rollup(0, run("build", "COMPLETED", "SUCCESS")), "APPROVED", approved, ""},
 	} {
-		pr := &PR{}
+		pr := &PR{ReviewDecision: tc.decision}
 		pr.Opinions.Nodes = tc.opinions
 		pr.Commits = NewCommits(Commit{Rollup: tc.rollup})
 		if got := BlockedWhy(pr, tc.rules); got != tc.want {
