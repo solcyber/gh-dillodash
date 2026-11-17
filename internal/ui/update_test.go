@@ -55,7 +55,7 @@ func TestStaleBuildBanner(t *testing.T) {
 		t.Fatalf("checks at startup: %d", u.calls)
 	}
 	s := h.screen()
-	for _, want := range []string{"v1.5.2 → v1.5.4", "dillodash v1.5.2 — v1.5.4 is out: gh extension upgrade dillodash"} {
+	for _, want := range []string{"v1.5.2 → v1.5.4", "dillodash v1.5.2 - v1.5.4 is out: gh extension upgrade dillodash"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("list lacks %q:\n%s", want, s)
 		}

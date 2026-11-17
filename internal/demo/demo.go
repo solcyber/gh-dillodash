@@ -55,7 +55,7 @@ func rollup(checks ...string) *model.Rollup {
 func pr(repo model.Repo, n int, title, author, head string, age time.Duration, adds, dels int, checks ...string) *model.PR {
 	p := &model.PR{Repo: repo, Number: n, Title: title, State: "OPEN", HeadRefName: head, BaseRefName: "main",
 		HeadRefOid: fmt.Sprintf("%040x", n*7919), CreatedAt: at(age), UpdatedAt: at(age / 3),
-		Additions: adds, Deletions: dels, ChangedFiles: 1 + adds/40, Author: actor(author)}
+		Additions: adds, Deletions: dels, ChangedFiles: 2, Author: actor(author)} // two files: what every demo PR lists under f
 	p.Commits = model.NewCommits(model.Commit{CommittedDate: at(age / 2), Rollup: rollup(checks...)})
 	return p
 }

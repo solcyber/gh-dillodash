@@ -44,6 +44,9 @@ func (m *Model) openFortressCity(city string) {
 	}
 	if f.view == nil {
 		f.view = fortress.NewView(city)
+		// the announcements' times in the dashboard's zone from the first
+		// one ("Strike the earth!" is logged on Open, before a frame)
+		f.view.Clock = m.wallNow
 		f.view.Build = m.fortressBuild
 		f.view.Epigraph = m.cfg == nil || m.cfg.Display.FortressEpigraph
 	}

@@ -63,6 +63,11 @@ var ASCIIOnly = false
 // Ellipsis is the glyph Ellip appends; the glyphs package sets it per set.
 var Ellipsis = "…"
 
+// Punct, when set, rewrites the punctuation the active glyph set can't
+// draw, one cell for one cell so no layout moves: the ascii set sets it
+// (· and — become -). The canvas applies it to every run it paints.
+var Punct *strings.Replacer
+
 var asciiMap = map[rune]string{
 	0xa0: " ", 0xb7: "-", 0x2014: "-", 0x2013: "-", 0x2212: "-",
 	0x2026: "...", 0x2192: "->", 0x2190: "<-", 0x2018: "'",

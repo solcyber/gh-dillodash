@@ -184,7 +184,13 @@ func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workfl
 		repos = append(repos, r)
 	}
 	sort.Slice(repos, func(i, j int) bool { return repos[i].Name < repos[j].Name })
-	rows := []workflow.Row{{Kind: "header", Item: fmt.Sprintf("releases (%d)", count), Meta: map[string]any{"icon": "release"}}}
+	// "releases 0" over a stage row read as an empty section that wasn't:
+	// with no release in it, the section is the staging branches
+	title := fmt.Sprintf("releases (%d)", count)
+	if count == 0 {
+		title = fmt.Sprintf("staging (%d)", len(stages))
+	}
+	rows := []workflow.Row{{Kind: "header", Item: title, Meta: map[string]any{"icon": "release"}}}
 	for _, repo := range repos {
 		mine := byRepo[repo]
 		for _, pr := range mine {
@@ -593,18 +599,21 @@ func (w *Workflow) SummarySegs(app workflow.App) []text.Seg {
 		}
 	}
 	sep := text.S("  "+glyphs.G("sep")+"  ", "rule")
-	attn := func(n int, yes string) string {
-		if n > 0 {
-			return yes
+	var segs []text.Seg
+	add := func(s text.Seg) {
+		if len(segs) > 0 {
+			segs = append(segs, sep)
 		}
-		return "sum.muted"
+		segs = append(segs, s)
 	}
-	segs := []text.Seg{text.S(fmt.Sprintf("%s%d release%s need%s approval", glyphs.Ico("release"), need, plural(need, "", "s"), plural(need, "s", "")), attn(need, "sum.attn"))}
+	if need > 0 { // a count of nothing is left out
+		add(text.S(fmt.Sprintf("%s%d release%s need%s approval", glyphs.Ico("release"), need, plural(need, "", "s"), plural(need, "s", "")), "sum.attn"))
+	}
 	if waits > 0 {
-		segs = append(segs, sep, text.S(fmt.Sprintf("%s%d deploy%s wait%s on you (D)", glyphs.Ico("release"), waits, plural(waits, "", "s"), plural(waits, "s", "")), "sum.attn"))
+		add(text.S(fmt.Sprintf("%s%d deploy%s wait%s on you (D)", glyphs.Ico("release"), waits, plural(waits, "", "s"), plural(waits, "s", "")), "sum.attn"))
 	}
 	if stuck > 0 {
-		segs = append(segs, sep, text.S(fmt.Sprintf("%s%d deploy%s stuck or failed", glyphs.Ico("fail"), stuck, plural(stuck, "", "s")), "sum.fail"))
+		add(text.S(fmt.Sprintf("%s%d deploy%s stuck or failed", glyphs.Ico("fail"), stuck, plural(stuck, "", "s")), "sum.fail"))
 	}
 	return segs
 }

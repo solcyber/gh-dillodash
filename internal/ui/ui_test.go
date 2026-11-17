@@ -983,3 +983,46 @@ func TestActionPanicIsAnError(t *testing.T) {
 		t.Errorf("status = %q, want the panic named", h.m.errText)
 	}
 }
+
+// TestSummaryLine: a count of nothing is left out, a filter shows its own
+// count instead of the sections' totals, and a row too narrow drops whole
+// items with a mark, never cutting one.
+func TestSummaryLine(t *testing.T) {
+	h := newHarness(t)
+	h.load()
+	s := text.SegsText(h.m.summarySegs())
+	if strings.Contains(s, "0 failing CI") || !strings.Contains(s, "need you") {
+		t.Errorf("summary %q", s)
+	}
+	h.m.filter = "widen"
+	h.m.refilter()
+	if s := text.SegsText(h.m.summarySegs()); !strings.Contains(s, "1 row matches") {
+		t.Errorf("filtered summary %q", s)
+	}
+	items := []text.Seg{text.S(" 1 need you", "sum.attn"), text.S("  "+glyphs.G("sep")+"  ", "rule"),
+		text.S("3 runs waiting, 2 on you (D)", "sum.attn"), text.S("  "+glyphs.G("sep")+"  ", "rule"), text.S("5 to promote", "sum.attn")}
+	got := text.SegsText(fitSummary(items, 40))
+	if strings.Contains(got, "(D") && !strings.Contains(got, "(D)") || !strings.HasSuffix(strings.TrimSpace(got), text.Ellipsis) {
+		t.Errorf("fit %q: an item was cut, or no mark", got)
+	}
+}
+
+// TestScrollPosAndShortVersion: the position says what is on screen
+// (all of it, the end, or how far down its last line reaches), and a
+// build from source shows as its base and +dev.
+func TestScrollPosAndShortVersion(t *testing.T) {
+	for _, c := range []struct {
+		total, top, rows int
+		want             string
+	}{{10, 0, 30, "all 10"}, {54, 0, 20, "L1–20/54 37%"}, {54, 34, 20, "L35–54/54 end"}} {
+		if got := scrollPos(c.total, c.top, c.rows); got != c.want {
+			t.Errorf("scrollPos(%d,%d,%d) = %q, want %q", c.total, c.top, c.rows, got, c.want)
+		}
+	}
+	if got := shortVersion("v1.13.1-0.20261117014045-0574812c56ee+dirty"); got != "v1.13.1+dev" {
+		t.Errorf("shortVersion = %q", got)
+	}
+	if got := shortVersion("v2.3.0"); got != "v2.3.0" {
+		t.Errorf("a release: %q", got)
+	}
+}

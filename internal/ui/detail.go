@@ -256,6 +256,11 @@ func (m *Model) timeline(events []event, width int) []text.Line {
 				st = "chip.rev.changes"
 			}
 			head = append(head, scenes.Chip(rs, st)...)
+			if rs == "commented" && strings.TrimSpace(e.body) == "" {
+				// a review with no text of its own: its comments are on
+				// the diff (f, then a file)
+				head = append(head, text.S("  on the diff", "faint"))
+			}
 		} else {
 			head = append(head, text.S(e.what, "tl.verb"))
 		}
