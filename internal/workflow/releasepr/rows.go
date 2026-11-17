@@ -12,6 +12,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -641,7 +642,7 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	ends = append(ends, sp)
 	ends = append(ends, scenes.Chip(markErr()+"release FAILED", "chip.fail")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("bumped — A: release NOW", "chip.act")...)
+	ends = append(ends, scenes.Chip("bumped — "+keymap.S(keymap.Approve)+": release NOW", "chip.act")...)
 	ends = append(ends, text.S(" yours to act on", "muted"))
 	return [][]text.Seg{row, rail, ends}
 }
