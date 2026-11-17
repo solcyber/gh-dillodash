@@ -230,7 +230,9 @@ fragment RelPR on PullRequest {
   author { login }
   labels(first: 10) { nodes { name } }
   latestOpinionatedReviews(first: 20) { nodes { databaseId author { login } state submittedAt commit { oid } } }
-  commits(last: 1) { nodes { commit { committedDate statusCheckRollup {
+  commits(last: 1) { nodes { commit { oid committedDate
+    associatedPullRequests(first: 5) { nodes { number baseRefName mergedAt mergeCommit { oid } } }
+    statusCheckRollup {
     state contexts(first: 50) { totalCount nodes { __typename
       ... on CheckRun { name status conclusion }
       ... on StatusContext { context state description } } } } } } }

@@ -98,6 +98,32 @@ type Units struct {
 type Stage struct {
 	Repo  model.Repo
 	Units *Units // nil when the tips were not read
+	// Since is what merged below production since the open release was
+	// cut; nil without an open release, a first tier, or a read.
+	Since *SinceCut
+}
+
+// SinceCut is what happened below production after a release was cut:
+// the PRs merged into the first tier and into staging since, and whether
+// the two branches hold the same content.
+type SinceCut struct {
+	Release int       // the open release PR the cut belongs to
+	At      time.Time // the cut: the release head's commit time
+	Tier    string    // the first tier's branch name
+	ghapi.Since
+}
+
+// staleStage is a last-good stage row put back after a failed read: its
+// units stand (a warning says they are old), but what merged since the
+// cut is dropped, because a count that silently stopped moving is worse
+// than none.
+func staleStage(s *Stage) *Stage {
+	if s == nil || s.Since == nil {
+		return s
+	}
+	cp := *s
+	cp.Since = nil
+	return &cp
 }
 
 // Ident identifies the stage row across refreshes.
@@ -259,6 +285,9 @@ type Workflow struct {
 	last       map[model.Repo]lastGood
 	stageCache map[model.Repo]stageCached // under stageMu: the stage reads run side by side
 	stageMu    sync.Mutex
+	sinceCache map[model.Repo]sinceCached // under stageMu
+	first      string                     // the first tier's branch ([workflows.promote] tiers), "" when unknown
+	firstRepos map[model.Repo]bool        // the repos that have that tier ([workflows.promote] repos)
 
 	mu   sync.Mutex
 	cur  *State           // the last applied state (UI goroutine reads)
@@ -294,6 +323,7 @@ func New(ctx *workflow.Context) *Workflow {
 		org:        cfg.Org,
 		last:       map[model.Repo]lastGood{},
 		stageCache: map[model.Repo]stageCached{},
+		sinceCache: map[model.Repo]sinceCached{},
 		seen:       map[seenKey]bool{},
 		progress:   map[model.Ident]*track{},
 		refusedRE:  refusedREFor(cfg.ReleaseNowCommand),
@@ -309,6 +339,15 @@ func New(ctx *workflow.Context) *Workflow {
 	if win := ctx.Get(WindowName); win != nil {
 		w.window = win
 		w.win = ctx.Config.MaintenanceWindow
+	}
+	// the first tier is the promote workflow's, when its staging branch
+	// is this one's: without it nothing says where changes land first
+	if p := ctx.Config.Promote; p != nil && len(p.Tiers) == 3 && p.Stage() == cfg.StagingBranch && p.First() != cfg.StagingBranch {
+		w.first = p.First()
+		w.firstRepos = map[model.Repo]bool{}
+		for _, r := range p.Repos {
+			w.firstRepos[r] = true
+		}
 	}
 	w.nowRE = ReleaseNowRE(cfg.ReleaseNowCommand, cfg.ReleaseNowMinReason)
 	w.deploy.StuckAfter = time.Duration(cfg.DeployStuckSecs) * time.Second
@@ -410,8 +449,9 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	// every repo's stage row side by side (the compare and the tags):
 	// the loop below reads them in order
 	type stageRead struct {
-		stage *Stage
-		err   error
+		stage    *Stage
+		err      error
+		sinceErr error // the since-the-cut read alone failed: the row stands without its tail
 	}
 	stages := make(map[model.Repo]stageRead, len(names))
 	var stagesMu sync.Mutex
@@ -425,13 +465,19 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		go func() {
 			defer sg.Done()
 			var stage *Stage
-			var err error
+			var err, sinceErr error
 			func() {
 				defer workflow.Recover(&err)
 				stage, err = w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid)
 			}()
+			if err == nil && stage != nil {
+				func() {
+					defer workflow.Recover(&sinceErr)
+					stage.Since, sinceErr = w.sinceCut(ctx, gh, repo, info.StageOid, info.PRs, now)
+				}()
+			}
 			stagesMu.Lock()
-			stages[repo] = stageRead{stage, err}
+			stages[repo] = stageRead{stage, err, sinceErr}
 			stagesMu.Unlock()
 		}()
 	}
@@ -445,7 +491,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			if lg, ok := w.last[repo]; ok {
 				st.Releases = append(st.Releases, clonePRs(lg.rows)...)
 				if lg.stage != nil {
-					st.Stages = append(st.Stages, lg.stage)
+					st.Stages = append(st.Stages, staleStage(lg.stage))
 				}
 				st.Repos = append(st.Repos, repo)
 				warns = append(warns, fmt.Sprintf("%s: %s (showing %s's data)", repo.Name, info.Err, lg.at))
@@ -476,15 +522,22 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		stage, err := stages[repo].stage, stages[repo].err
 		if err != nil {
 			if lg, ok := w.last[repo]; ok {
-				stage = lg.stage
+				stage = staleStage(lg.stage)
 			}
 			warns = append(warns, fmt.Sprintf("%s stage: %s", repo.Name, err))
-			if ghapi.IsRateLimit(err) {
-				st.Warnings = warns
-				st.index()
-				w.annotate(st)
-				return st, warns, err
+		} else if serr := stages[repo].sinceErr; serr != nil {
+			// the row stands without its tail; a rate limit still backs
+			// the refresh off, as for any other read
+			warns = append(warns, fmt.Sprintf("%s since the cut: %s", repo.Name, serr))
+			if ghapi.IsRateLimit(serr) {
+				err = serr
 			}
+		}
+		if ghapi.IsRateLimit(err) {
+			st.Warnings = warns
+			st.index()
+			w.annotate(st)
+			return st, warns, err
 		}
 		st.Releases = append(st.Releases, rows...)
 		if stage != nil {

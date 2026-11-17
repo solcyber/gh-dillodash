@@ -225,6 +225,9 @@ type Client interface {
 	PRFiles(ctx context.Context, repo model.Repo, number int) ([]model.PRFile, error)
 	PRDiff(ctx context.Context, repo model.Repo, number int) (string, error)
 	Compare(ctx context.Context, repo model.Repo, base, head string) (CompareResult, error)
+	// MergedSince is what merged into the first tier and into staging
+	// after a moment, and the two branches' root trees.
+	MergedSince(ctx context.Context, repo model.Repo, first, stage string, since time.Time) (Since, error)
 	// TagRefs is the tag names under prefix ("go/" -> ["go/612", ...]).
 	TagRefs(ctx context.Context, repo model.Repo, prefix string) ([]string, error)
 	OrgRepos(ctx context.Context, org string) ([]model.RepoListing, error)

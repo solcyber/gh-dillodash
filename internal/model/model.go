@@ -147,8 +147,25 @@ type Rollup struct {
 
 // Commit is the last commit of a PR as the list query reads it.
 type Commit struct {
+	// Oid is read only where a query asks for it (a release's head).
+	Oid           string    `json:"oid"`
 	CommittedDate time.Time `json:"committedDate"`
 	Rollup        *Rollup   `json:"statusCheckRollup"`
+	// Landed are the PRs this commit is the merge of, where a query
+	// asks for them: for a release head pinned on a staging commit, the
+	// staging PR that made it.
+	Landed struct {
+		Nodes []LandedPR `json:"nodes"`
+	} `json:"associatedPullRequests"`
+}
+
+// LandedPR is a PR a commit belongs to: its base, when it merged, and
+// its merge commit.
+type LandedPR struct {
+	Number      int          `json:"number"`
+	BaseRefName string       `json:"baseRefName"`
+	MergedAt    *time.Time   `json:"mergedAt"`
+	MergeCommit *MergeCommit `json:"mergeCommit"`
 }
 
 type commitNode struct {

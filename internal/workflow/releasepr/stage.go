@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -157,4 +159,165 @@ func StageText(u *Units, prod, stage string) string {
 // stageText renders a stage row with the configured branch names.
 func (w *Workflow) stageText(s *Stage) string {
 	return StageText(s.Units, w.cfg.ProductionBranch, w.cfg.StagingBranch)
+}
+
+// sinceTTL is how long a since-the-cut read is kept while the staging
+// tip and the cut stand still: the first tier can move without either,
+// so it is short. It spares the request on the quick refreshes around a
+// write or a deploy; an ordinary refresh reads again, one cheap request
+// per repo with an open release.
+const sinceTTL = time.Minute
+
+// sinceListed is how many PR numbers per branch the stage row's notice
+// names before "and N more": it is one status line.
+const sinceListed = 8
+
+type sinceCached struct {
+	at    time.Time
+	cut   time.Time
+	stage string
+	since *SinceCut
+}
+
+// cutOf finds the open release the stage row answers to (a release
+// cut, never a hotfix or another branch) and when it was cut.
+//
+// A cut is pinned on a staging commit, so the moment is when that commit
+// landed on staging: the merge time of the staging PR whose merge commit
+// is the release head. GitHub stamps a merge a second or two after the
+// merge commit, and the search compares merge times, so the commit's own
+// time would count the cut's last unit as merged "since". A re-cut moves
+// the moment with the head. A head that is no staging merge (someone
+// updated the release branch) falls back to its commit time, and a
+// release whose head commit was not read to the PR's creation.
+func (w *Workflow) cutOf(prs []*model.PR) (*model.PR, time.Time) {
+	var rel *model.PR
+	for _, pr := range prs {
+		if pr == nil || pr.IsDraft || (pr.State != "" && pr.State != "OPEN") || w.Kind(pr) != KindRelease {
+			continue
+		}
+		if rel == nil || pr.CreatedAt.After(rel.CreatedAt) {
+			rel = pr
+		}
+	}
+	if rel == nil {
+		return nil, time.Time{}
+	}
+	c := rel.HeadCommit()
+	// the last commit read is the head only when their ids agree (a PR
+	// lists at most 250 commits); an id that was not read is trusted
+	if c == nil || (c.Oid != "" && rel.HeadRefOid != "" && c.Oid != rel.HeadRefOid) {
+		return rel, rel.CreatedAt
+	}
+	for _, l := range c.Landed.Nodes {
+		if l.BaseRefName == w.cfg.StagingBranch && l.MergedAt != nil && !l.MergedAt.IsZero() &&
+			l.MergeCommit != nil && l.MergeCommit.Oid != "" && l.MergeCommit.Oid == rel.HeadRefOid {
+			return rel, *l.MergedAt
+		}
+	}
+	if !c.CommittedDate.IsZero() {
+		return rel, c.CommittedDate
+	}
+	return rel, rel.CreatedAt
+}
+
+// sinceCut reads what merged below production since the repo's open
+// release was cut. Nil when there is no open release or the repo has no
+// first tier, and on a failed read: the row then says nothing rather
+// than something stale, and the error is the caller's to report.
+func (w *Workflow) sinceCut(ctx context.Context, gh ghapi.Client, repo model.Repo, stageOid string, prs []*model.PR, now time.Time) (*SinceCut, error) {
+	if w.first == "" || !w.firstRepos[repo] {
+		return nil, nil
+	}
+	rel, at := w.cutOf(prs)
+	if rel == nil || at.IsZero() {
+		return nil, nil
+	}
+	w.stageMu.Lock()
+	hit, ok := w.sinceCache[repo]
+	w.stageMu.Unlock()
+	if ok && hit.cut.Equal(at) && hit.stage == stageOid && now.Sub(hit.at) < sinceTTL {
+		return hit.since, nil
+	}
+	s, err := gh.MergedSince(ctx, repo, w.first, w.cfg.StagingBranch, at)
+	if err != nil {
+		return nil, err
+	}
+	out := &SinceCut{Release: rel.Number, At: at, Tier: w.first, Since: s}
+	w.stageMu.Lock()
+	w.sinceCache[repo] = sinceCached{at: now, cut: at, stage: stageOid, since: out}
+	w.stageMu.Unlock()
+	return out, nil
+}
+
+// sinceText is the stage row's tail while a release is open: "since the
+// cut: +3 dev, +1 stage · dev ≠ stage", or just "dev == stage" when
+// nothing merged. "" without a read.
+func (w *Workflow) sinceText(s *Stage) string {
+	c := s.Since
+	if c == nil {
+		return ""
+	}
+	var merged []string
+	if c.FirstCount > 0 {
+		merged = append(merged, fmt.Sprintf("+%d %s", c.FirstCount, c.Tier))
+	}
+	if c.StageCount > 0 {
+		merged = append(merged, fmt.Sprintf("+%d %s", c.StageCount, w.cfg.StagingBranch))
+	}
+	var parts []string
+	if len(merged) > 0 {
+		parts = append(parts, "since the cut: "+strings.Join(merged, ", "))
+	}
+	switch {
+	case c.Same():
+		parts = append(parts, fmt.Sprintf("%s == %s", c.Tier, w.cfg.StagingBranch))
+	case c.Known():
+		parts = append(parts, fmt.Sprintf("%s ≠ %s", c.Tier, w.cfg.StagingBranch))
+	}
+	return strings.Join(parts, " "+glyphs.G("sep")+" ")
+}
+
+// sinceNotice is the same in a sentence, with the PR numbers: what
+// Enter on the stage row says. The verdict comes first, so a narrow
+// screen clips the numbers, not the answer.
+func (w *Workflow) sinceNotice(s *Stage, now time.Time) string {
+	c := s.Since
+	if c == nil {
+		return ""
+	}
+	list := func(prs []ghapi.MergedPR, n int) string {
+		var out []string
+		for i, p := range prs {
+			if i == sinceListed {
+				break
+			}
+			out = append(out, fmt.Sprintf("#%d", p.Number))
+		}
+		if n > len(out) {
+			out = append(out, fmt.Sprintf("and %d more", n-len(out)))
+		}
+		return strings.Join(out, " ")
+	}
+	var parts []string
+	if c.FirstCount > 0 {
+		parts = append(parts, fmt.Sprintf("into %s %s", c.Tier, list(c.First, c.FirstCount)))
+	}
+	if c.StageCount > 0 {
+		parts = append(parts, fmt.Sprintf("into %s %s", w.cfg.StagingBranch, list(c.Stage, c.StageCount)))
+	}
+	msg := s.Repo.Name + ": "
+	switch {
+	case c.Same():
+		msg += fmt.Sprintf("%s and %s hold the same content", c.Tier, w.cfg.StagingBranch)
+	case c.Known():
+		msg += fmt.Sprintf("%s and %s differ", c.Tier, w.cfg.StagingBranch)
+	default:
+		msg += fmt.Sprintf("couldn't compare %s with %s", c.Tier, w.cfg.StagingBranch)
+	}
+	msg += fmt.Sprintf(" — since release #%d was cut (%s): ", c.Release, clock.Ago(c.At, now))
+	if len(parts) == 0 {
+		return msg + "nothing merged"
+	}
+	return msg + "merged " + strings.Join(parts, "; ")
 }

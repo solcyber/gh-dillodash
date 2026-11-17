@@ -101,7 +101,7 @@ func (w *Workflow) SearchText(row workflow.Row) string {
 		if !ok {
 			return ""
 		}
-		return "stage " + s.Repo.Name + " " + w.stageText(s)
+		return "stage " + s.Repo.Name + " " + w.stageText(s) + " " + w.sinceText(s)
 	}
 	return ""
 }
@@ -164,7 +164,7 @@ func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workfl
 		byRepo[pr.Repo] = append(byRepo[pr.Repo], pr)
 	}
 	for _, s := range st.Stages {
-		if !matches([]string{"stage", s.Repo.Name, w.stageText(s)}, terms) {
+		if !matches([]string{"stage", s.Repo.Name, w.stageText(s), w.sinceText(s)}, terms) {
 			continue
 		}
 		stages[s.Repo] = s
@@ -244,7 +244,13 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				}
 				return ghapi.CompareURL(app.Config().GitHub.Host, s.Repo, w.cfg.ProductionBranch, w.cfg.StagingBranch)
 			},
-			Open: func(app workflow.App, _ workflow.Row) bool {
+			Open: func(app workflow.App, row workflow.Row) bool {
+				// with a release open the row has something to say:
+				// what merged below production since its cut, by number
+				if s, ok := row.Item.(*Stage); ok && s.Since != nil {
+					app.Status(w.sinceNotice(s, app.Now()))
+					return true
+				}
 				app.Notice(fmt.Sprintf("%s is a branch, not a PR — o opens its compare with %s on GitHub", w.cfg.StagingBranch, w.cfg.ProductionBranch))
 				return true
 			},
@@ -533,8 +539,21 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 	}
 	room := width - 3 - text.SegsWidth(segs)
 	txt := w.stageText(s)
+	// tail: what merged since the open release was cut, after whatever
+	// the row says first, when there is room for all of it
+	tail := func(segs []text.Seg) []text.Seg {
+		since := w.sinceText(s)
+		if since == "" {
+			return segs
+		}
+		lead := "  "
+		if left := width - 3 - text.SegsWidth(segs) - text.Width(lead); left >= text.Width(since) {
+			segs = append(segs, text.S(lead+since, "muted"))
+		}
+		return segs
+	}
 	if s.Units == nil || s.Units.Units == 0 {
-		return append(segs, text.S(text.Ellip(txt, room), "faint"))
+		return tail(append(segs, text.S(text.Ellip(txt, room), "faint")))
 	}
 	// ahead: the count in words, then a small chip per tag that has any
 	// (go blue, hold gold, untagged gray), so the row reads at a glance
@@ -567,7 +586,7 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 		return append(segs, text.S(text.Ellip(txt, room), style))
 	}
 	segs = append(segs, text.S(head, "muted"))
-	return append(segs, chips...)
+	return tail(append(segs, chips...))
 }
 
 // SummarySegs: "N releases need approval", "N deploys wait on you (D)",
