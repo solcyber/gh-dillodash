@@ -258,7 +258,7 @@ func TestShiftActsLowercaseLooks(t *testing.T) {
 func TestNoRetiredKeysInProse(t *testing.T) {
 	// a retired letter named as a key: in backticks, or in the phrasings
 	// the messages and comments use
-	prose := regexp.MustCompile("`[actpR]`|\\b[actpR] (approves|tags|comments|promotes|moves|restarts|offers|posts|on its row)\\b|\\((A shows|W toggles|R in)|\\b(press|use|re-run) '?[actpR]'?( —| again|\\)|$)")
+	prose := regexp.MustCompile("`[actpR]`|\\b[actpR] (approves|tags|comments|promotes|moves|restarts|offers|posts|on its row)\\b|\\((A shows|W toggles|R in)|\\b(press|use|re-run) '?[actpR]'?( —| again|\\)|$)|\"[actpR]: |\\b[actpR] releases\\b")
 	files := []string{"README.md", "config.example.toml", "internal/config/example.toml", "CONTRIBUTING.md", "main.go"}
 	for _, dir := range []string{"docs", "docs/workflows"} {
 		ents, err := os.ReadDir(repoFile(dir))

@@ -227,6 +227,7 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 		},
 		RowStage: {
 			Icon:    "stage",
+			Browse:  "compare",
 			NumText: func(workflow.Row) string { return "stage" },
 			Layout:  w.stageLayout,
 			Segs:    w.stageSegs,
@@ -719,10 +720,10 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 	case (src.State == "" || src.State == "OPEN") && (workflow.IApproved(app, pr) || workflow.IApproved(app, src)):
 		rule = fmt.Sprintf("approved by you — A: release NOW posts %s \"<reason>\" with no second review (yours stands); the release job merges it at its slot, M only when the release-now dispatch can't run; D approves the deployments waiting on the merge", cmd)
 	case w.cfg.ApprovalQueuesForWindow && w.win != nil:
-		rule = fmt.Sprintf("a: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
+		rule = fmt.Sprintf("A: an approving review queues it for %s window; %s \"<reason>\" releases it now; the release job merges it at its slot (M only when the dispatch can't run); D approves the deployments waiting on the merge",
 			w.NightPhrase(app.Now()), cmd)
 	default:
-		rule = fmt.Sprintf("a: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
+		rule = fmt.Sprintf("A: an approving review lets M merge it (the deploy); %s \"<reason>\" marks an emergency release; D approves the deployments waiting on the merge", cmd)
 	}
 	ruleLines := scenes.CardLines([]text.Seg{text.S(glyphs.Ico("info"), "faint"), text.S(rule, "faint")}, width, inner)
 	if p, ok := w.progressOf(src); ok {

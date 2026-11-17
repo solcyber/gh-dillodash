@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -380,12 +381,30 @@ func (m *Model) ok(msg string) {
 	m.statusKind = "ok"
 }
 
-// notice is a refusal or a cancellation: gold, with a shake, so it is seen.
+// next is what to do next ("press D on its row"): its own color, no
+// shake (nothing went wrong), and a routine refresh's "refreshed at"
+// doesn't replace it while it is up.
+func (m *Model) next(msg string) {
+	m.setStatus(msg)
+	m.statusKind = "next"
+}
+
+// notice is a refusal: gold, with a shake, so it is seen. A
+// cancellation ("approve cancelled") is the answer you just gave, not a
+// refusal: it is said plainly.
 func (m *Model) notice(msg string) {
 	m.setStatus(msg)
+	if cancelRE.MatchString(msg) {
+		return
+	}
 	m.statusKind = "warn"
 	m.fx.Start("toast.shake", 0.3, nil)
 }
+
+// cancelRE is a plain cancellation: "cancelled" or "<what> cancelled",
+// nothing after it. One with a reason ("approve cancelled (destroy count
+// not confirmed)") was refused, and is said as a refusal.
+var cancelRE = regexp.MustCompile(`^([a-z][a-z -]* )?cancelled$`)
 
 func (m *Model) fail(msg string) {
 	m.errText = msg

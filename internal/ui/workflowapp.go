@@ -30,6 +30,7 @@ var _ workflow.App = (*lockedApp)(nil)
 
 func (m *Model) OK(msg string)       { m.ok(msg) }
 func (m *Model) Notice(msg string)   { m.notice(msg) }
+func (m *Model) Next(msg string)     { m.next(msg) }
 func (m *Model) Fail(msg string)     { m.fail(msg) }
 func (m *Model) Status(msg string)   { m.setStatus(msg) }
 func (m *Model) Celebrate(big bool)  { m.celebrate(big) }
@@ -131,6 +132,7 @@ func (a *lockedApp) lock() func() {
 
 func (a *lockedApp) OK(msg string)      { defer a.lock()(); a.m.ok(msg) }
 func (a *lockedApp) Notice(msg string)  { defer a.lock()(); a.m.notice(msg) }
+func (a *lockedApp) Next(msg string)    { defer a.lock()(); a.m.next(msg) }
 func (a *lockedApp) Fail(msg string)    { defer a.lock()(); a.m.fail(msg) }
 func (a *lockedApp) Status(msg string)  { defer a.lock()(); a.m.setStatus(msg) }
 func (a *lockedApp) Celebrate(big bool) { defer a.lock()(); a.m.celebrate(big) }
