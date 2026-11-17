@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -127,6 +128,7 @@ release_command = "/go"
 cancel_command = "/stop"
 missed_freeze_marker = "NO FREEZE"
 missed_freeze_grace_mins = 10
+attended_days = ["Tue", "thursday", "tue"]
 missed_freeze_hint = "run it by hand"
 late_skip = "22:10"
 closer = "22:45"
@@ -212,7 +214,7 @@ poll_secs = 0
 		Cutoff: clock.HM{H: 20}, ReleaseFrom: clock.HM{H: 21, M: 59}, Start: clock.HM{H: 22}, End: clock.HM{H: 22, M: 30},
 		QueuedLabel: "q", ScheduledLabel: "s", RolledLabel: "r", AppliedLabel: "a", FailedLabel: "f", PendingLabel: "p", ManifestLabel: "m", ManifestTitle: "Night {night}",
 		ConductorBot: "infra-bot", Team: "acme/sre", AttendCommand: "/here", ReleaseCommand: "/go", CancelCommand: "/stop",
-		MissedFreezeMarker: "NO FREEZE", MissedFreezeGraceMins: 10, MissedFreezeHint: "run it by hand", LateSkip: &clock.HM{H: 22, M: 10}, Closer: &clock.HM{H: 22, M: 45},
+		MissedFreezeMarker: "NO FREEZE", MissedFreezeGraceMins: 10, AttendedDays: []time.Weekday{time.Tuesday, time.Thursday}, MissedFreezeHint: "run it by hand", LateSkip: &clock.HM{H: 22, M: 10}, Closer: &clock.HM{H: 22, M: 45},
 	}
 	if !reflect.DeepEqual(mw, wantMW) {
 		t.Errorf("maintenance_window =\n %+v\nwant\n %+v", mw, wantMW)

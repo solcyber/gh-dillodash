@@ -127,6 +127,7 @@ enabled = false
 # release_command = "/release"              # comment that releases an item
 # cancel_command = "/window-cancel"         # comment that pulls an item from the window
 # missed_freeze_marker = "MISSED FREEZE"    # conductor comment text: the freeze never ran, nothing fires that night
+# attended_days = []                       # e.g. ["tue", "thu"]: only those nights ask for the attend command; default: every night
 # missed_freeze_grace_mins = 30             # an open manifest this long past the cutoff is a missed freeze (0 = the comment only)
 # missed_freeze_hint = ""                   # the recovery a missed night shows; default: a generic one
 # late_skip = ""                            # "HH:MM": the run starts no new item after it; default: not shown
