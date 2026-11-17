@@ -207,57 +207,85 @@ type Inputs struct {
 	// Contains reports a commit on a branch head's history (the first
 	// tier's merge commit in a whole-tier promotion); errors count as no.
 	Contains func(sha, head string) bool
-	// Commits is a PR's own commits (nil: not known, and the PR is then
-	// not taken for a back-merge). Asked only of the PRs nothing else
-	// places: a first-tier PR no staging or production PR carries, a
-	// staging PR no first-tier PR links to.
-	Commits func(p *model.PR) []string
+	// Commits is a PR's own commits with their parents (nil: not known,
+	// and the PR is then not taken for a back-merge).
+	Commits func(p *model.PR) []ghapi.CompareCommit
+	// NotOn is the commits of p's head that are not on branch (ok false:
+	// not known, or more than one compare page): what p would bring it.
+	NotOn func(branch string, p *model.PR) (shas map[string]bool, ok bool)
 	// BackmergeTitle, when set, marks a PR whose title matches as a
 	// back-merge whatever its commits (a cherry-picked one has new oids).
 	BackmergeTitle *regexp.Regexp
 }
 
 // backmerger tells a back-merge made through a side branch, whose head is
-// not the later tier's branch: its own commits carry a later tier's merge
-// commit (a staging or production PR merged back down). A branch cut from
-// the tier after such a back-merge landed has it in its history but not
-// among its own commits, so it is never taken for one.
+// not the later tier's branch. A back-merge brings the lower tier nothing
+// of its own: every one of its own commits is either already on the later
+// tier or a merge commit (the merges, and the conflicts they resolved).
+// It is suspected first, cheaply, by its own commits carrying a later
+// tier's merge commit (a staging or production PR merged back down), and
+// then proven against the later tier's branch. A branch cut from the
+// later tier, or one that merged it in to settle a conflict, carries
+// work of its own that is on no later tier: it is a change, and listed.
+// Unknown at any step (a read failed, a compare cut short): listed.
 type backmerger struct {
 	in             Inputs
-	intoFirst      map[string]bool // merge commits of staging and production PRs
-	intoStage      map[string]bool // merge commits of production PRs
-	stageBackmerge map[int]bool    // staging PRs found to be back-merges
+	stageMerges    map[string]bool // merge commits of staging PRs
+	prodMerges     map[string]bool // merge commits of production PRs
+	stageBackmerge map[int]bool    // staging PRs that are back-merges
 }
 
 func newBackmerger(in Inputs) *backmerger {
-	b := &backmerger{in: in, intoFirst: map[string]bool{}, intoStage: map[string]bool{}, stageBackmerge: map[int]bool{}}
+	b := &backmerger{in: in, stageMerges: map[string]bool{}, prodMerges: map[string]bool{}, stageBackmerge: map[int]bool{}}
 	for _, p := range in.Set.ProdMerged {
 		if oid := mergeOid(p); oid != "" {
-			b.intoFirst[oid], b.intoStage[oid] = true, true
+			b.prodMerges[oid] = true
 		}
 	}
 	for _, p := range in.Set.StageMerged {
 		if oid := mergeOid(p); oid != "" {
-			b.intoFirst[oid] = true
+			b.stageMerges[oid] = true
 		}
 	}
 	return b
 }
 
-// is reports p a back-merge into a tier whose later tiers merged later.
-func (b *backmerger) is(p *model.PR, later map[string]bool) bool {
+// intoFirst reports p, a PR into the first tier, a back-merge.
+func (b *backmerger) intoFirst(p *model.PR) bool { return b.is(p, true) }
+
+// intoStage reports p, a PR into staging, a back-merge.
+func (b *backmerger) intoStage(p *model.PR) bool { return b.is(p, false) }
+
+func (b *backmerger) is(p *model.PR, first bool) bool {
 	if b.in.BackmergeTitle != nil && b.in.BackmergeTitle.MatchString(p.Title) {
 		return true
 	}
-	if b.in.Commits == nil || len(later) == 0 {
+	if b.in.Commits == nil || b.in.NotOn == nil {
 		return false
 	}
-	for _, oid := range b.in.Commits(p) {
-		if later[oid] {
-			return true
+	own := b.in.Commits(p)
+	viaStage, viaProd := false, false
+	for _, c := range own {
+		viaStage = viaStage || (first && b.stageMerges[c.SHA])
+		viaProd = viaProd || b.prodMerges[c.SHA]
+	}
+	if !viaStage && !viaProd {
+		return false
+	}
+	later := b.in.Prod
+	if viaStage {
+		later = b.in.Stage
+	}
+	notOn, ok := b.in.NotOn(later, p)
+	if !ok {
+		return false
+	}
+	for _, c := range own {
+		if notOn[c.SHA] && len(c.Parents) < 2 {
+			return false // work of its own, on no later tier: a change
 		}
 	}
-	return false
+	return true
 }
 
 // Locate places every change of one repo: each first-tier PR merged in
@@ -272,7 +300,8 @@ func Locate(in Inputs) (changes []*Change, released int) {
 	var stage []*model.PR
 	for _, p := range append(append([]*model.PR(nil), in.Set.StageMerged...), in.Set.StageOpen...) {
 		if p.HeadRefName == in.Prod {
-			continue // a back-merge of production into staging
+			bm.stageBackmerge[p.Number] = true // a back-merge of production into staging
+			continue
 		}
 		stage = append(stage, p)
 	}
@@ -307,6 +336,12 @@ func Locate(in Inputs) (changes []*Change, released int) {
 				best = s
 			}
 		}
+		if best == nil && !shipped[f.Number] && bm.intoFirst(f) {
+			// a back-merge through a side branch; asked before the
+			// whole-tier promotions, which carry it as they carry
+			// everything on the first tier
+			continue
+		}
 		if best == nil {
 			for _, s := range stage {
 				if s.HeadRefName != in.First || !after(s, f) || !better(s, best) {
@@ -325,9 +360,6 @@ func Locate(in Inputs) (changes []*Change, released int) {
 			released++ // shipped to production by a PR that names it
 			continue
 		}
-		if best == nil && bm.is(f, bm.intoFirst) {
-			continue // a back-merge into the first tier through a side branch
-		}
 		firsts = append(firsts, c)
 	}
 	var stageOwn []*Change
@@ -338,7 +370,7 @@ func Locate(in Inputs) (changes []*Change, released int) {
 		// a promotion of the whole first tier carries whatever the first
 		// tier holds, a production hotfix merged straight down included:
 		// never a back-merge
-		if s.HeadRefName != in.First && bm.is(s, bm.intoStage) {
+		if s.HeadRefName != in.First && bm.intoStage(s) {
 			bm.stageBackmerge[s.Number] = true
 			continue
 		}

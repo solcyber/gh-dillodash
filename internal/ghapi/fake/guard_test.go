@@ -87,7 +87,7 @@ func TestWithAllowedReposCoversEveryWrite(t *testing.T) {
 		"WorkflowRuns": true, "WorkflowFileRuns": true, "RunJobs": true, "PRFiles": true, "PRDiff": true,
 		"Compare": true, "TagRefs": true, "OrgRepos": true, "Rulesets": true, "FileContents": true,
 		"Fortress": true, "ReleasePRs": true, "RepoLabels": true,
-		"PromotePRs": true, "ListOpenInto": true, "IsAncestor": true, "PRCommitOids": true, "CommitChange": true, "BlobAt": true, "BlobBase64": true, "BranchHead": true,
+		"PromotePRs": true, "ListOpenInto": true, "IsAncestor": true, "PRCommits": true, "CommitChange": true, "BlobAt": true, "BlobBase64": true, "BranchHead": true,
 	}
 	tested := writes(fake.New("alice"), okRepo)
 	typ := reflect.TypeOf((*ghapi.Client)(nil)).Elem()

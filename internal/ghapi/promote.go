@@ -186,20 +186,27 @@ func (c *GitHub) IsAncestor(ctx context.Context, repo model.Repo, a, b string) (
 	return raw.Status == "ahead" || raw.Status == "identical", nil
 }
 
-// PRCommitOids is a PR's own commits, oldest first: GitHub lists up to
-// 250 (three pages of 100).
-func (c *GitHub) PRCommitOids(ctx context.Context, repo model.Repo, number int) ([]string, error) {
-	var out []string
+// PRCommits is a PR's own commits with their parents, oldest first.
+// GitHub lists at most 250 (pages of 100, the third one short).
+func (c *GitHub) PRCommits(ctx context.Context, repo model.Repo, number int) ([]CompareCommit, error) {
+	var out []CompareCommit
 	for page := 1; page <= 3; page++ {
 		var raw []struct {
-			SHA string `json:"sha"`
+			SHA     string `json:"sha"`
+			Parents []struct {
+				SHA string `json:"sha"`
+			} `json:"parents"`
 		}
 		path := repoPath(repo, fmt.Sprintf("pulls/%d/commits?per_page=100&page=%d", number, page))
 		if err := c.restJSON(ctx, http.MethodGet, path, nil, &raw); err != nil {
 			return nil, err
 		}
 		for _, r := range raw {
-			out = append(out, r.SHA)
+			cc := CompareCommit{SHA: r.SHA}
+			for _, p := range r.Parents {
+				cc.Parents = append(cc.Parents, p.SHA)
+			}
+			out = append(out, cc)
 		}
 		if len(raw) < 100 {
 			break
