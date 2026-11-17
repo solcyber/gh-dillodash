@@ -241,11 +241,13 @@ type Client interface {
 
 	// Promotion (the promote workflow). PromotePRs reads one repo's PRs
 	// merged into first and stage since a date and open into stage.
-	// IsAncestor reports a on b's history. CommitChange is a commit's
+	// IsAncestor reports a on b's history. PRCommitOids is a PR's own
+	// commits (up to 250, as GitHub lists them). CommitChange is a commit's
 	// parents and files; BlobAt a path's blob sha at a ref (exists false
 	// on a 404); BlobBase64 a blob's content; BranchHead a branch's tip.
 	PromotePRs(ctx context.Context, repo model.Repo, first, stage, prod string, since time.Time) (PromoteSet, error)
 	IsAncestor(ctx context.Context, repo model.Repo, a, b string) (bool, error)
+	PRCommitOids(ctx context.Context, repo model.Repo, number int) ([]string, error)
 	CommitChange(ctx context.Context, repo model.Repo, sha string) (model.CommitChange, error)
 	BlobAt(ctx context.Context, repo model.Repo, path, ref string) (sha string, exists bool, err error)
 	BlobBase64(ctx context.Context, repo model.Repo, sha string) (string, error)

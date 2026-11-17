@@ -1,6 +1,7 @@
 package promote
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -39,6 +40,9 @@ type Change struct {
 	// BlockedBy is, for a go unit, the first staging unit ahead of it that
 	// is not go (its PR number): the release cut stops there. 0: none.
 	BlockedBy int
+	// BlockedByBackmerge: that unit is a back-merge, which the lane does
+	// not list (the row names it as one, so it can be found).
+	BlockedByBackmerge bool
 	// Runs are the newest run of each workflow on the commit of the tier
 	// the change is on (the first tier's merge commit, or the staging
 	// unit's); nil while it is being promoted (the PR's checks say it).
@@ -77,6 +81,15 @@ func (c *Change) Author() string {
 		return c.Promo.Author.Login
 	}
 	return ""
+}
+
+// blocker names the staging unit a go unit waits on: "#307", or
+// "back-merge #307" for one the lane doesn't list.
+func (c *Change) blocker() string {
+	if c.BlockedByBackmerge {
+		return fmt.Sprintf("back-merge #%d", c.BlockedBy)
+	}
+	return fmt.Sprintf("#%d", c.BlockedBy)
 }
 
 // Ident keeps a change's row apart from a PR row of the same number (the
@@ -194,15 +207,68 @@ type Inputs struct {
 	// Contains reports a commit on a branch head's history (the first
 	// tier's merge commit in a whole-tier promotion); errors count as no.
 	Contains func(sha, head string) bool
+	// Commits is a PR's own commits (nil: not known, and the PR is then
+	// not taken for a back-merge). Asked only of the PRs nothing else
+	// places: a first-tier PR no staging or production PR carries, a
+	// staging PR no first-tier PR links to.
+	Commits func(p *model.PR) []string
+	// BackmergeTitle, when set, marks a PR whose title matches as a
+	// back-merge whatever its commits (a cherry-picked one has new oids).
+	BackmergeTitle *regexp.Regexp
+}
+
+// backmerger tells a back-merge made through a side branch, whose head is
+// not the later tier's branch: its own commits carry a later tier's merge
+// commit (a staging or production PR merged back down). A branch cut from
+// the tier after such a back-merge landed has it in its history but not
+// among its own commits, so it is never taken for one.
+type backmerger struct {
+	in             Inputs
+	intoFirst      map[string]bool // merge commits of staging and production PRs
+	intoStage      map[string]bool // merge commits of production PRs
+	stageBackmerge map[int]bool    // staging PRs found to be back-merges
+}
+
+func newBackmerger(in Inputs) *backmerger {
+	b := &backmerger{in: in, intoFirst: map[string]bool{}, intoStage: map[string]bool{}, stageBackmerge: map[int]bool{}}
+	for _, p := range in.Set.ProdMerged {
+		if oid := mergeOid(p); oid != "" {
+			b.intoFirst[oid], b.intoStage[oid] = true, true
+		}
+	}
+	for _, p := range in.Set.StageMerged {
+		if oid := mergeOid(p); oid != "" {
+			b.intoFirst[oid] = true
+		}
+	}
+	return b
+}
+
+// is reports p a back-merge into a tier whose later tiers merged later.
+func (b *backmerger) is(p *model.PR, later map[string]bool) bool {
+	if b.in.BackmergeTitle != nil && b.in.BackmergeTitle.MatchString(p.Title) {
+		return true
+	}
+	if b.in.Commits == nil || len(later) == 0 {
+		return false
+	}
+	for _, oid := range b.in.Commits(p) {
+		if later[oid] {
+			return true
+		}
+	}
+	return false
 }
 
 // Locate places every change of one repo: each first-tier PR merged in
 // view, linked to the staging PR that names it (#N in its title or body)
 // or, for a whole-tier promotion (a staging PR from the first tier
 // itself), that contains its merge commit; then every staging PR no
-// first-tier PR links to. Back-merges (a PR from staging or production)
-// are not changes. released counts what reached production.
+// first-tier PR links to. Back-merges (a PR from staging or production,
+// or through a side branch: see backmerger) are not changes. released
+// counts what reached production.
 func Locate(in Inputs) (changes []*Change, released int) {
+	bm := newBackmerger(in)
 	var stage []*model.PR
 	for _, p := range append(append([]*model.PR(nil), in.Set.StageMerged...), in.Set.StageOpen...) {
 		if p.HeadRefName == in.Prod {
@@ -227,6 +293,7 @@ func Locate(in Inputs) (changes []*Change, released int) {
 		}
 	}
 	linked := map[*model.PR]bool{}
+	var firsts []*Change
 	for _, f := range in.Set.FirstMerged {
 		if f.HeadRefName == in.Stage || f.HeadRefName == in.Prod {
 			continue // a back-merge into the first tier
@@ -258,19 +325,35 @@ func Locate(in Inputs) (changes []*Change, released int) {
 			released++ // shipped to production by a PR that names it
 			continue
 		}
-		place(c, in)
+		if best == nil && bm.is(f, bm.intoFirst) {
+			continue // a back-merge into the first tier through a side branch
+		}
+		firsts = append(firsts, c)
+	}
+	var stageOwn []*Change
+	for _, s := range stage {
+		if linked[s] {
+			continue
+		}
+		// a promotion of the whole first tier carries whatever the first
+		// tier holds, a production hotfix merged straight down included:
+		// never a back-merge
+		if s.HeadRefName != in.First && bm.is(s, bm.intoStage) {
+			bm.stageBackmerge[s.Number] = true
+			continue
+		}
+		stageOwn = append(stageOwn, &Change{Repo: in.Repo, Promo: s})
+	}
+	for _, c := range firsts {
+		place(c, in, bm.stageBackmerge)
 		if c.Where == OnProd {
 			released++
 			continue
 		}
 		changes = append(changes, c)
 	}
-	for _, s := range stage {
-		if linked[s] {
-			continue
-		}
-		c := &Change{Repo: in.Repo, Promo: s}
-		place(c, in)
+	for _, c := range stageOwn {
+		place(c, in, bm.stageBackmerge)
 		if c.Where == OnProd {
 			released++
 			continue
@@ -312,8 +395,9 @@ func after(s, f *model.PR) bool {
 	return !s.MergedAt.Before(*f.MergedAt)
 }
 
-// place sets Where, Tag and BlockedBy.
-func place(c *Change, in Inputs) {
+// place sets Where, Tag and BlockedBy; backmerges are the staging units
+// known to be back-merges.
+func place(c *Change, in Inputs, backmerges map[int]bool) {
 	switch {
 	case c.Promo == nil:
 		c.Where = OnFirst
@@ -340,7 +424,7 @@ func place(c *Change, in Inputs) {
 					break
 				}
 				if !in.Go[u] {
-					c.BlockedBy = u
+					c.BlockedBy, c.BlockedByBackmerge = u, backmerges[u]
 					break
 				}
 			}

@@ -186,6 +186,28 @@ func (c *GitHub) IsAncestor(ctx context.Context, repo model.Repo, a, b string) (
 	return raw.Status == "ahead" || raw.Status == "identical", nil
 }
 
+// PRCommitOids is a PR's own commits, oldest first: GitHub lists up to
+// 250 (three pages of 100).
+func (c *GitHub) PRCommitOids(ctx context.Context, repo model.Repo, number int) ([]string, error) {
+	var out []string
+	for page := 1; page <= 3; page++ {
+		var raw []struct {
+			SHA string `json:"sha"`
+		}
+		path := repoPath(repo, fmt.Sprintf("pulls/%d/commits?per_page=100&page=%d", number, page))
+		if err := c.restJSON(ctx, http.MethodGet, path, nil, &raw); err != nil {
+			return nil, err
+		}
+		for _, r := range raw {
+			out = append(out, r.SHA)
+		}
+		if len(raw) < 100 {
+			break
+		}
+	}
+	return out, nil
+}
+
 // CommitChange reads a commit's parents and changed files (up to ten
 // pages of 100).
 func (c *GitHub) CommitChange(ctx context.Context, repo model.Repo, sha string) (model.CommitChange, error) {

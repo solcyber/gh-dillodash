@@ -79,6 +79,9 @@ type Workflow struct {
 	// every run on it completed
 	ancestry map[string]bool
 	runs     map[string]runsCached
+	// commits: a PR's own commits by repo, number and head; a merged PR's
+	// never change, and an open one's change only with its head
+	commits map[string][]string
 }
 
 var (
@@ -98,7 +101,7 @@ func init() {
 
 // New builds the workflow from its config.
 func New(cfg *config.PromoteConfig) *Workflow {
-	return &Workflow{cfg: cfg, last: map[model.Repo]RepoState{}, ancestry: map[string]bool{}, runs: map[string]runsCached{}}
+	return &Workflow{cfg: cfg, last: map[model.Repo]RepoState{}, ancestry: map[string]bool{}, runs: map[string]runsCached{}, commits: map[string][]string{}}
 }
 
 // Name is "promote".
@@ -218,6 +221,7 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 		Repo: repo, First: w.cfg.First(), Stage: w.cfg.Stage(), Prod: w.cfg.Prod(),
 		Set: set, Units: units, Ahead: ahead, AheadOK: ok,
 		Go: tagNumbers(goTags, w.cfg.GoTagPrefix), Hold: tagNumbers(holdTags, w.cfg.HoldTagPrefix),
+		BackmergeTitle: w.cfg.BackmergeTitle,
 	}
 	if err := w.prefetchAncestry(ctx, gh, in); err != nil {
 		return rs, nil, err
@@ -242,7 +246,18 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 		w.noteAncestry(repo, sha, head, v)
 		return v
 	}
+	// the prefetch read every PR's commits Locate asks for; a read that
+	// failed is unknown, and the PR stays listed
+	asked := map[string]bool{}
+	in.Commits = func(p *model.PR) []string {
+		asked[commitsKey(repo, p)] = true
+		v, _ := w.commitsOf(repo, p)
+		return v
+	}
 	changes, released := Locate(in)
+	if limit == nil {
+		w.pruneCommits(repo, asked)
+	}
 	if limit != nil {
 		return rs, nil, limit
 	}
@@ -285,9 +300,23 @@ const ancestryRounds = 3
 // Locate's own backstop.
 func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inputs) error {
 	type pair struct{ sha, head string }
+	var failedMu sync.Mutex
+	failed := map[int]bool{} // commit reads that failed: unknown this refresh
 	for round := 0; round < ancestryRounds; round++ {
 		var misses []pair
+		var prMisses []*model.PR
 		seen := map[pair]bool{}
+		seenPR := map[int]bool{}
+		in.Commits = func(p *model.PR) []string {
+			if v, hit := w.commitsOf(in.Repo, p); hit {
+				return v
+			}
+			if !seenPR[p.Number] && !failed[p.Number] {
+				seenPR[p.Number] = true
+				prMisses = append(prMisses, p)
+			}
+			return nil
+		}
 		in.Contains = func(sha, head string) bool {
 			if sha == "" || head == "" {
 				return false
@@ -302,10 +331,26 @@ func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inp
 			return false
 		}
 		Locate(in)
-		if len(misses) == 0 {
+		if len(misses) == 0 && len(prMisses) == 0 {
 			return nil
 		}
 		g, gctx := errgroup.WithContext(ctx)
+		for _, p := range prMisses {
+			g.Go(func() error {
+				v, err := gh.PRCommitOids(gctx, in.Repo, p.Number)
+				if err != nil {
+					if ghapi.IsRateLimit(err) {
+						return err
+					}
+					failedMu.Lock()
+					failed[p.Number] = true // unknown: listed, asked again next refresh
+					failedMu.Unlock()
+					return nil
+				}
+				w.noteCommits(in.Repo, p, v)
+				return nil
+			})
+		}
 		for _, p := range misses {
 			g.Go(func() error {
 				v, err := gh.IsAncestor(gctx, in.Repo, p.sha, p.head)
@@ -324,6 +369,40 @@ func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inp
 		}
 	}
 	return nil
+}
+
+// commitsKey keys a PR's commits by its head, so an open PR pushed to
+// is read again.
+func commitsKey(repo model.Repo, p *model.PR) string {
+	return fmt.Sprintf("%s#%d@%s", repo, p.Number, p.HeadRefOid)
+}
+
+// commitsOf is a PR's kept commits; hit false when they were never read
+// (or the read failed).
+func (w *Workflow) commitsOf(repo model.Repo, p *model.PR) ([]string, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	v, hit := w.commits[commitsKey(repo, p)]
+	return v, hit
+}
+
+func (w *Workflow) noteCommits(repo model.Repo, p *model.PR, oids []string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.commits[commitsKey(repo, p)] = append([]string{}, oids...) // never nil: read
+}
+
+// pruneCommits keeps only the commits of the PRs a repo's Locate asked
+// about this refresh (the rest left the lookback or moved their head).
+func (w *Workflow) pruneCommits(repo model.Repo, asked map[string]bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	prefix := repo.String() + "#"
+	for k := range w.commits {
+		if strings.HasPrefix(k, prefix) && !asked[k] {
+			delete(w.commits, k)
+		}
+	}
 }
 
 func (w *Workflow) ancestryOf(repo model.Repo, sha, head string) (bool, bool) {
@@ -480,7 +559,7 @@ func (w *Workflow) whereChip(c *Change) (string, string) {
 		switch c.Tag {
 		case "go":
 			if c.BlockedBy > 0 {
-				return fmt.Sprintf("%s · go · after #%d", w.cfg.Stage(), c.BlockedBy), "chip.state"
+				return fmt.Sprintf("%s · go · after %s", w.cfg.Stage(), c.blocker()), "chip.state"
 			}
 			return w.cfg.Stage() + " · go", "chip.approved"
 		case "hold":

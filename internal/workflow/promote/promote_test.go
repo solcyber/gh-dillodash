@@ -2,7 +2,10 @@ package promote
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -107,6 +110,86 @@ func TestStageOrder(t *testing.T) {
 	c.AheadBy = 300
 	if _, _, ok := StageOrder(c); ok {
 		t.Error("a compare cut short is not ok")
+	}
+}
+
+// TestLocateSideBranchBackmerges: back-merges opened from a side branch
+// (the direct form conflicted) are found by their own commits, which
+// carry a later tier's merge commit, and are not listed; a feature cut
+// from the tier after such a back-merge landed is listed, and so is a
+// PR whose commits couldn't be read. A go unit behind a back-merge names
+// it as one.
+func TestLocateSideBranchBackmerges(t *testing.T) {
+	set := ghapi.PromoteSet{
+		ProdMerged: []*model.PR{merged(611, "main", "hotfix/x", "hotfix", "p611", 60)},
+		StageMerged: []*model.PR{
+			merged(307, "stage", "fix/backmerge-main-into-stage", "sync stage with main", "s307", 50),
+			merged(309, "stage", "sync/main", "squash-merged back-merge", "s309", 45),
+			merged(311, "stage", "dev", "Promote dev → stage", "s311", 20),
+		},
+		FirstMerged: []*model.PR{
+			merged(207, "dev", "fix/backmerge-stage-into-dev", "sync dev with stage", "d207", 40),
+			merged(208, "dev", "feat/new", "a feature after the back-merge", "d208", 30),
+			merged(210, "dev", "feat/unread", "commits unreadable", "d210", 25),
+		},
+		StageOpen: []*model.PR{open(312, "stage", "dev", "Promote dev → stage again", "h312", 1)},
+	}
+	commits := map[int][]string{
+		307: {"p611", "bm307"},
+		309: {"x1", "p611"},
+		207: {"s307", "p611", "bm207"},
+		208: {"c208"},
+		311: {"d208", "p611"}, // a whole-tier promotion carries a hotfix merged straight down: still a change
+		312: {"d210", "p611"},
+	}
+	var asked []int
+	_, ahead, _ := StageOrder(compare(307, 311, 309))
+	in := Inputs{Repo: web, First: "dev", Stage: "stage", Prod: "main", Set: set,
+		Units: []int{307, 311, 309}, Ahead: ahead, AheadOK: true,
+		Go: map[int]bool{311: true}, Hold: map[int]bool{},
+		Commits: func(p *model.PR) []string {
+			asked = append(asked, p.Number)
+			return commits[p.Number] // 210: nil, unknown
+		},
+	}
+	changes, _ := Locate(in)
+	by := map[int]*Change{}
+	for _, c := range changes {
+		by[c.Number()] = c
+	}
+	for _, n := range []int{207, 307, 309} {
+		if by[n] != nil {
+			t.Errorf("back-merge #%d is listed", n)
+		}
+	}
+	if c := by[208]; c == nil {
+		t.Error("#208, cut after the back-merge, is hidden")
+	}
+	if c := by[210]; c == nil || c.Where != OnFirst {
+		t.Errorf("#210 (commits unknown) must stay listed: %+v", c)
+	}
+	if c := by[311]; c == nil || c.Where != OnStage || c.BlockedBy != 307 || !c.BlockedByBackmerge {
+		t.Errorf("#311: %+v; want on stage, go, after back-merge #307", c)
+	} else if got := c.blocker(); got != "back-merge #307" {
+		t.Errorf("blocker %q", got)
+	}
+	if c := by[312]; c == nil || c.Where != Promoting {
+		t.Errorf("#312, an open whole-tier promotion, must stay listed: %+v", c)
+	}
+	for _, n := range asked {
+		if n == 611 {
+			t.Error("asked for a production PR's commits")
+		}
+	}
+	// a title rule hides a cherry-picked back-merge (new oids)
+	set.FirstMerged = append(set.FirstMerged, merged(213, "dev", "pick/sync", "Back-merge stage (cherry-picked)", "d213", 15))
+	in.Set = set
+	in.BackmergeTitle = regexp.MustCompile(`^Back-merge`)
+	changes, _ = Locate(in)
+	for _, c := range changes {
+		if c.Number() == 213 {
+			t.Error("backmerge_title did not hide #213")
+		}
 	}
 }
 
@@ -243,6 +326,51 @@ func TestRefreshKeepsLastOnError(t *testing.T) {
 	}
 	if cs := state(app).Changes(); len(cs) != 1 {
 		t.Errorf("kept %d changes", len(cs))
+	}
+}
+
+// TestRefreshReadsBackmergeCommits: the refresh reads the commits of
+// the PRs nothing else places, side by side and once (kept by head), so
+// a side-branch back-merge is hidden for good; a failed read leaves the
+// PR listed and is asked again next refresh.
+func TestRefreshReadsBackmergeCommits(t *testing.T) {
+	w, app := newWF(t)
+	bm := merged(207, "dev", "fix/backmerge", "sync dev", "d207", 3)
+	feat := merged(208, "dev", "feat/a", "a feature", "d208", 2)
+	app.Fake.Promote = map[model.Repo]ghapi.PromoteSet{web: {
+		ProdMerged:  []*model.PR{merged(611, "main", "hotfix/x", "hotfix", "p611", 5)},
+		FirstMerged: []*model.PR{bm, feat},
+	}}
+	app.Fake.PRCommits = map[model.Ident][]string{
+		{Repo: web, Number: 207}: {"p611", "c207"},
+		{Repo: web, Number: 208}: {"c208"},
+	}
+	refresh(t, w, app)
+	if got := numbers(state(app).Changes()); !reflect.DeepEqual(got, []int{208}) {
+		t.Fatalf("changes %v, want [208]", got)
+	}
+	if n := app.Fake.Reads["pr_commits"]; n != 2 {
+		t.Errorf("pr_commits reads = %d, want 2", n)
+	}
+	refresh(t, w, app)
+	if n := app.Fake.Reads["pr_commits"]; n != 2 {
+		t.Errorf("pr_commits reads after a second refresh = %d, want 2 (kept)", n)
+	}
+	// a PR whose commits can't be read stays listed, and is asked again
+	app.Fake.Promote[web] = ghapi.PromoteSet{
+		ProdMerged:  []*model.PR{merged(611, "main", "hotfix/x", "hotfix", "p611", 5)},
+		FirstMerged: []*model.PR{bm, feat, merged(209, "dev", "fix/other", "x", "d209", 1)},
+	}
+	app.Fake.PRCommits[model.Ident{Repo: web, Number: 209}] = []string{"p611"}
+	app.Fake.Fail = map[string]error{"pr_commits": errors.New("HTTP 502")}
+	refresh(t, w, app)
+	if got := numbers(state(app).Changes()); !slices.Contains(got, 209) {
+		t.Errorf("#209 (unread) is hidden: %v", got)
+	}
+	app.Fake.Fail = nil
+	refresh(t, w, app)
+	if got := numbers(state(app).Changes()); slices.Contains(got, 209) {
+		t.Errorf("#209 read on the next refresh is still listed: %v", got)
 	}
 }
 

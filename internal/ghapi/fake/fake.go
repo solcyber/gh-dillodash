@@ -121,6 +121,8 @@ type Client struct {
 	// CommitOnBranch moves it to "c0mmit<n>".
 	Promote   map[model.Repo]ghapi.PromoteSet
 	Ancestors map[string]bool
+	// PRCommits are PRCommitOids' answers (absent: none).
+	PRCommits map[model.Ident][]string
 	Changes   map[string]model.CommitChange
 	BlobSHAs  map[string]string
 	BlobData  map[string]string
@@ -935,6 +937,16 @@ func (f *Client) PromotePRs(ctx context.Context, repo model.Repo, first, stage, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.Promote[repo], nil
+}
+
+// PRCommitOids serves PRCommits[repo#number].
+func (f *Client) PRCommitOids(ctx context.Context, repo model.Repo, number int) ([]string, error) {
+	if err := f.fail("pr_commits"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.PRCommits[model.Ident{Repo: repo, Number: number}]...), nil
 }
 
 // IsAncestor serves Ancestors["a..b"]; a == b is always true.
