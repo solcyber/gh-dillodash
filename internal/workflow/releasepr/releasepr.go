@@ -421,7 +421,12 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		sg.Add(1)
 		go func() {
 			defer sg.Done()
-			stage, err := w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid)
+			var stage *Stage
+			var err error
+			func() {
+				defer workflow.Recover(&err)
+				stage, err = w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid)
+			}()
 			stagesMu.Lock()
 			stages[repo] = stageRead{stage, err}
 			stagesMu.Unlock()
@@ -501,8 +506,10 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 		dg.Add(1)
 		go func() {
 			defer dg.Done()
-			dep, err := w.deploy.Fetch(ctx, gh, pr.Repo, MergeSHA(pr), false, now)
-			deps[i] = depRead{dep, err}
+			var r depRead
+			defer func() { deps[i] = r }()
+			defer workflow.Recover(&r.err)
+			r.dep, r.err = w.deploy.Fetch(ctx, gh, pr.Repo, MergeSHA(pr), false, now)
 		}()
 	}
 	dg.Wait()

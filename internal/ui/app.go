@@ -248,8 +248,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		m.action = false
 		m.clearAck()
 		// an action may have written: no kept read, nor one already on
-		// its way, may stand for the item after it
-		m.dcache.clear()
+		// its way, may stand for the item after it (but the re-read the
+		// action set off after its write may)
+		m.dcache.settle()
 		if msg.panic != "" {
 			m.modal = nil // a modal the action left open has nobody to answer it
 			m.fail(msg.panic)
@@ -338,6 +339,15 @@ func (m *Model) overlayKey(k widgets.Key) {
 // read its state yet.
 const workflowsLoading = "still reading the workflows — press it again in a moment"
 
+// workflowsHeld is the notice for a key held while list-only: a moment,
+// or why the workflows never landed and what brings them back.
+func (m *Model) workflowsHeld() string {
+	if m.listOnlyErr == "" {
+		return workflowsLoading
+	}
+	return "the workflows didn't load (" + m.listOnlyErr + "); keys that act wait for a refresh that lands — r tries again"
+}
+
 func isEnter(k widgets.Key) bool { return k.Name == "enter" }
 func isEsc(k widgets.Key) bool   { return k.Name == "esc" }
 
@@ -394,7 +404,7 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	app := &lockedApp{m}
 	if b := lookup(view, k); b != nil && b.Do != nil {
 		if b.Acts && m.listOnly && k.Rune != 'U' {
-			m.notice(workflowsLoading)
+			m.notice(m.workflowsHeld())
 			return nil
 		}
 		if why := m.heldForRead(); b.Acts && why != "" && k.Rune != 'U' {
@@ -405,7 +415,7 @@ func (m *Model) handleKey(k widgets.Key) tea.Cmd {
 	}
 	if wk, ok := m.wf.Key(view, string(k.Rune)); ok && k.Rune != 0 {
 		if m.listOnly && unicode.IsUpper(k.Rune) {
-			m.notice(workflowsLoading) // a capital acts
+			m.notice(m.workflowsHeld()) // a capital acts
 			return nil
 		}
 		if why := m.heldForRead(); why != "" && unicode.IsUpper(k.Rune) {

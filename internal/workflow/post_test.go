@@ -128,3 +128,31 @@ func TestPrimeHead(t *testing.T) {
 		t.Errorf("head reads = %d, want 2 (the stale primed one, then a fresh one)", n)
 	}
 }
+
+// TestForgetHead: a confirm answered no drops its primed read, so the
+// next post's check (release-now picked a moment later) reads the head
+// after its own answer instead of taking the old read.
+func TestForgetHead(t *testing.T) {
+	app := wftest.New(config.Default(), "alice")
+	id := model.Ident{Repo: postRepo, Number: 8}
+	shown := &model.PR{Repo: postRepo, Number: 8, HeadRefOid: "aaaaaaa1"}
+	app.Fake.PRs = map[model.Ident]*model.PR{id: {Repo: postRepo, Number: 8, HeadRefOid: "aaaaaaa1"}}
+	app.PrimeHeads = true
+	var heads atomic.Int32
+	app.Fake.BeforeOp = func(op string) {
+		if op == "pr_head" {
+			heads.Add(1)
+		}
+	}
+	workflow.PrimeHead(app, shown)
+	workflow.ForgetHead(shown)
+	for end := time.Now().Add(2 * time.Second); heads.Load() < 1 && time.Now().Before(end); {
+		time.Sleep(time.Millisecond)
+	}
+	if !workflow.HeadStill(app, shown, "release-now") {
+		t.Errorf("the head did not move: %q", app.Log)
+	}
+	if n := heads.Load(); n != 2 {
+		t.Errorf("head reads = %d, want 2 (the dropped prime, then a fresh one after the answer)", n)
+	}
+}

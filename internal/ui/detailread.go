@@ -45,12 +45,31 @@ type detailCache struct {
 	// epoch: reads that set off before it are not kept (a write since
 	// may have changed what they read)
 	epoch float64
+	// reread: the read the write itself set off after GitHub accepted it
+	// (reloadDetail). It sees the write, so it is kept although the
+	// action's end moves the epoch past it.
+	reread float64
 }
 
 // clear forgets every kept read, and refuses the ones already on their
 // way: called when something was written.
 func (c *detailCache) clear() {
 	c.m = nil
+	c.epoch = fx.Now()
+	c.reread = 0
+}
+
+// settle is clear at an action's end: the action may have written
+// without saying so, but the re-read it set off after its last write
+// already sees every write, so it stays kept (or is kept when it lands).
+func (c *detailCache) settle() {
+	var keep map[model.Ident]*detailEntry
+	for id, e := range c.m {
+		if c.reread != 0 && e.started == c.reread {
+			keep = map[model.Ident]*detailEntry{id: e}
+		}
+	}
+	c.m = keep
 	c.epoch = fx.Now()
 }
 
@@ -67,7 +86,7 @@ func (c *detailCache) get(id model.Ident) (*detailEntry, bool) {
 }
 
 func (c *detailCache) put(id model.Ident, d any, started float64) {
-	if started < c.epoch {
+	if started < c.epoch && (c.reread == 0 || started != c.reread) {
 		return // it set off before a write: it may not show it
 	}
 	if c.m == nil {
@@ -216,9 +235,10 @@ func (m *Model) openItem(repo model.Repo, number int, kind string, listed *model
 		return
 	}
 	m.detailPartial = true
-	if m.prefetching && m.prefetchID == id {
+	if m.prefetching && m.prefetchID == id && m.prefetchAt >= m.dcache.epoch {
 		// the rest already set this read off: the open takes its answer
-		// instead of asking GitHub a second time
+		// instead of asking GitHub a second time (unless a write went out
+		// since it set off: then it would put the item back as it was)
 		m.adoptSeq = seq
 		m.detailLoadedAt = m.prefetchAt
 		return
@@ -228,7 +248,7 @@ func (m *Model) openItem(repo model.Repo, number int, kind string, listed *model
 
 // readDetail reads one item on its own goroutine (lock held); the
 // answer lands as a detailLoadedMsg.
-func (m *Model) readDetail(id model.Ident, kind string, listed *model.PR, seq int, pending bool) {
+func (m *Model) readDetail(id model.Ident, kind string, listed *model.PR, seq int, pending bool) float64 {
 	m.reading++
 	msg := detailLoadedMsg{id: id, kind: kind, listed: listed, seq: seq, pending: pending, prefetch: seq == 0, started: fx.Now()}
 	if listed != nil {
@@ -263,6 +283,7 @@ func (m *Model) readDetail(id model.Ident, kind string, listed *model.PR, seq in
 		}
 		msg.detail = pr
 	}()
+	return msg.started
 }
 
 // applyDetailLoaded lands a detail read (lock held): it is kept either
