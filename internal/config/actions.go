@@ -168,12 +168,20 @@ func (p *parser) parseMerge(top *table, cfg *Config) {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
+			seen := map[string]string{}
 			for _, k := range keys {
 				r, ok := model.ParseRepo(k)
 				if !ok {
 					t.errf("methods", "%q is not \"owner/name\"", k)
 					continue
 				}
+				// GitHub names are case-insensitive: two spellings of one
+				// repo would make the answer depend on map order
+				if prev, dup := seen[strings.ToLower(k)]; dup {
+					t.errf("methods", "%q and %q are the same repo; list it once", prev, k)
+					continue
+				}
+				seen[strings.ToLower(k)] = k
 				if bases, perBase := m[k].(map[string]any); perBase {
 					p.parseMergeBases(t, cfg, r, k, bases)
 					continue

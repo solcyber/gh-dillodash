@@ -306,7 +306,13 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		app.Notice(fmt.Sprintf("GitHub hasn't worked out whether #%d can merge (%s) — try again in a moment", n, text.OrQ(st)))
 		return
 	}
-	method := app.Config().Merge.Method(c.Repo, w.cfg.Stage(), "")
+	// the same fallback as M: [workflows.release_pr] merge_method, else
+	// a merge commit, so the two keys never merge one PR differently
+	def := ""
+	if rp := app.Config().ReleasePR; rp != nil && rp.MergeMethod != "merge" {
+		def = rp.MergeMethod
+	}
+	method := app.Config().Merge.Method(c.Repo, w.cfg.Stage(), def)
 	how, title := method, ""
 	switch method {
 	case "":
