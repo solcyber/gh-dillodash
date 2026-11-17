@@ -1321,7 +1321,7 @@ func progressStyle(p Progress) string {
 	case PhaseReleased:
 		return "chip.released"
 	case PhasePending, PhaseBumped, PhaseNotTold:
-		// you can act: D approves the waiting deploy, a releases NOW, M
+		// you can act: D approves the waiting deploy, A releases NOW, M
 		// merges what the manifest repo was never told about
 		return "chip.act"
 	case PhaseFailed, PhaseRefused, PhaseUnverifiable:
