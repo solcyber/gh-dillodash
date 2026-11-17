@@ -151,7 +151,19 @@ type wfRun struct {
 	st    State
 	warns []string
 	err   error
-	late  bool // ended after another workflow met a rate limit
+	late  bool  // ended after another workflow met a rate limit
+	panic error // Refresh panicked: no state, the last one stays
+}
+
+// Recover turns a panic on a refresh goroutine into *err, so one bad
+// read fails its own refresh (a warning on screen) instead of ending
+// the program: Go recovers a panic only on the goroutine that raised
+// it, and the refresh worker's own recover never sees these. Defer it
+// directly: defer workflow.Recover(&err).
+func Recover(err *error) {
+	if p := recover(); p != nil {
+		*err = fmt.Errorf("panic: %v", p)
+	}
 }
 
 // Start sets off the list-free workflows (ListFree); the others wait for
@@ -175,7 +187,10 @@ func (r *Refreshing) start(w Workflow, prs []*model.PR, issues []*model.Issue) *
 	run := &wfRun{done: make(chan struct{})}
 	go func() {
 		defer close(run.done)
-		run.st, run.warns, run.err = w.Refresh(r.ctx, r.gh, r.repos, prs, issues)
+		func() {
+			defer Recover(&run.panic)
+			run.st, run.warns, run.err = w.Refresh(r.ctx, r.gh, r.repos, prs, issues)
+		}()
 		if ghapi.IsRateLimit(run.err) {
 			if r.limited.CompareAndSwap(false, true) {
 				r.cancel()
@@ -203,7 +218,9 @@ func (r *Refreshing) Abort() {
 // waits for all of them, and annotates in workflow order, one at a time
 // (Annotate writes the PRs' Ext maps). States are keyed by name; the
 // first rate limit met is returned, and a workflow that ended after it
-// has no state (the last one stays on screen).
+// has no state (the last one stays on screen). A workflow that panicked
+// or failed otherwise has its error among the warnings, never returned:
+// only a rate limit changes what the refresh does next.
 func (r *Refreshing) Finish(prs []*model.PR, issues []*model.Issue) (map[string]State, []string, error) {
 	defer r.cancel()
 	states := map[string]State{}
@@ -220,14 +237,24 @@ func (r *Refreshing) Finish(prs []*model.PR, issues []*model.Issue) (map[string]
 	for i, w := range r.s.Items {
 		run := r.runs[i]
 		<-run.done
+		if run.panic != nil {
+			warns = append(warns, fmt.Sprintf("%s refresh failed: %v", w.Name(), run.panic))
+			continue
+		}
 		if run.late && !ghapi.IsRateLimit(run.err) {
 			continue
 		}
 		states[w.Name()] = run.st
 		warns = append(warns, run.warns...)
 		w.Annotate(prs, issues, run.st)
-		if run.err != nil && limit == nil {
-			limit = run.err
+		switch {
+		case run.err == nil:
+		case ghapi.IsRateLimit(run.err):
+			if limit == nil {
+				limit = run.err
+			}
+		default:
+			warns = append(warns, fmt.Sprintf("%s: %v", w.Name(), run.err))
 		}
 	}
 	return states, warns, limit

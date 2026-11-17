@@ -164,7 +164,7 @@ func (m *Model) reloadDetail() {
 	if _, isIssue := m.detail.(*model.Issue); isIssue {
 		kind = "issue"
 	}
-	m.readDetail(id, kind, m.detailListed, m.openSeq, false)
+	m.dcache.reread = m.readDetail(id, kind, m.detailListed, m.openSeq, false)
 }
 
 // repoIdent is an issue's identity with its repo resolved.

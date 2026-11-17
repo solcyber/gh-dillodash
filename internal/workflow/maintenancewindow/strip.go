@@ -59,7 +59,13 @@ func (w *Workflow) stripSegs(info *Night, night string, now time.Time, width int
 		return nil
 	}
 	if !to.After(from) {
-		to = to.Add(24 * time.Hour) // a window that crosses midnight
+		// a window that crosses midnight ends on the next day's wall
+		// clock: a night the clocks change is 23 or 25 hours long
+		day, err := nightDate(night, w.cfg.Local())
+		if err != nil {
+			return nil
+		}
+		to = w.cfg.Local().WallToUTC(day.AddDate(0, 0, 1), w.cfg.End)
 	}
 	var marks []slotMark
 	for _, it := range info.Items {

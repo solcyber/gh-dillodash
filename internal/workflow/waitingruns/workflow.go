@@ -212,6 +212,7 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer workflow.Recover(&runErrs[i])
 			runsOf[i], runErrs[i] = gh.RepoWaitingRuns(ctx, repo)
 		}()
 	}
@@ -247,6 +248,7 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer workflow.Recover(&x.err)
 			x.pend, x.err = gh.PendingDeployments(ctx, x.repo, x.run.ID)
 		}()
 	}

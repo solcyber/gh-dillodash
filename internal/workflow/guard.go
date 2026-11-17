@@ -178,6 +178,18 @@ func PrimeHead(app App, pr *model.PR) {
 	headMu.Unlock()
 }
 
+// ForgetHead drops pr's primed read: its confirm was answered no, so it
+// must not stand in for a later post's check (an unpinned one above all:
+// release-now picked within HeadFresh of a cancelled approve).
+func ForgetHead(pr *model.PR) {
+	if pr == nil {
+		return
+	}
+	headMu.Lock()
+	delete(headReads, model.Ident{Repo: pr.Repo, Number: pr.Number})
+	headMu.Unlock()
+}
+
 // takeHead is the primed read of pr, if one began within HeadFresh, else
 // a fresh read; either way the primed one is used up.
 func takeHead(app App, pr *model.PR) *headRead {

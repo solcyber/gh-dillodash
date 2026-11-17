@@ -204,11 +204,24 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 	wg.Add(4)
 	go func() {
 		defer wg.Done()
+		defer workflow.Recover(&errs[0])
 		set, errs[0] = gh.PromotePRs(ctx, repo, w.cfg.First(), w.cfg.Stage(), w.cfg.Prod(), since)
 	}()
-	go func() { defer wg.Done(); cmp, errs[1] = gh.Compare(ctx, repo, w.cfg.Prod(), w.cfg.Stage()) }()
-	go func() { defer wg.Done(); goTags, errs[2] = gh.TagRefs(ctx, repo, w.cfg.GoTagPrefix) }()
-	go func() { defer wg.Done(); holdTags, errs[3] = gh.TagRefs(ctx, repo, w.cfg.HoldTagPrefix) }()
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[1])
+		cmp, errs[1] = gh.Compare(ctx, repo, w.cfg.Prod(), w.cfg.Stage())
+	}()
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[2])
+		goTags, errs[2] = gh.TagRefs(ctx, repo, w.cfg.GoTagPrefix)
+	}()
+	go func() {
+		defer wg.Done()
+		defer workflow.Recover(&errs[3])
+		holdTags, errs[3] = gh.TagRefs(ctx, repo, w.cfg.HoldTagPrefix)
+	}()
 	wg.Wait()
 	if errs[1] != nil {
 		errs[1] = fmt.Errorf("comparing %s...%s: %w", w.cfg.Prod(), w.cfg.Stage(), errs[1])

@@ -145,6 +145,9 @@ type Model struct {
 	// listOnly: the first load's list is on screen but the rest of that
 	// refresh (workflows, CI) has not landed; the keys that act wait
 	listOnly bool
+	// listOnlyErr: the refresh that was to land the workflows failed;
+	// the held keys say so instead of "a moment"
+	listOnlyErr string
 	// sigQuiet: the next noteDeltas takes the baseline without effects
 	sigQuiet   bool
 	ciClusters map[model.Ident]model.CICluster
