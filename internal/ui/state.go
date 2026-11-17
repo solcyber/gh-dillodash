@@ -473,6 +473,11 @@ func (m *Model) repoOf(item any) model.Repo {
 // or "owner/a, other/b" across orgs.
 func (m *Model) reposText() string {
 	out := m.reviewReposText()
+	// with an organization read whole, counting the listed repos would
+	// undersell it: name the organization instead
+	if m.cfg != nil && len(m.cfg.Reviews.RequestedOrgs) > 0 {
+		return out + " +requests in " + strings.Join(m.cfg.Reviews.RequestedOrgs, ", ")
+	}
 	if n := len(m.requested); n > 0 {
 		out += fmt.Sprintf(" +%d requested", n)
 	}

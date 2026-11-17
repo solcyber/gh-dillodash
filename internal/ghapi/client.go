@@ -137,6 +137,9 @@ type Client interface {
 	// reviewed, or that I opened: PRs only, de-duped. A failed search is
 	// a note; the call fails only when the request does.
 	ListRequested(ctx context.Context, repos []model.Repo) (ListResult, error)
+	// ListRequestedOrgs is ListRequested across whole organizations
+	// (`[reviews] requested_orgs`), leaving out the skip repos.
+	ListRequestedOrgs(ctx context.Context, orgs []string, skip []model.Repo) (ListResult, error)
 	// ListOpenInto reads every open, non-draft PR into base in repos
 	// (promote's first_tier_reviews = "open"): PRs only, de-duped.
 	ListOpenInto(ctx context.Context, repos []model.Repo, base string) (ListResult, error)

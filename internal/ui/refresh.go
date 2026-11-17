@@ -117,6 +117,7 @@ func (m *Model) refresh(again bool) {
 		firstTier = m.cfg.Promote.First()
 	}
 	ci, ahead, me := m.ci, m.ahead, m.me
+	orgs := m.cfg.Reviews.RequestedOrgs
 	firstLoad := !m.loaded
 	// one Shared per refresh: two readers of the same URL (two workflows
 	// reading one compare) cost one request
@@ -144,10 +145,11 @@ func (m *Model) refresh(again bool) {
 		// by side
 		var (
 			results    map[model.Repo]ghapi.ListResult
-			rq, op     ghapi.ListResult
+			rq, op, og ghapi.ListResult
 			err        error
 			rqErr      error
 			opErr      error
+			ogErr      error
 			lists      sync.WaitGroup
 			wantOpenTo = len(requested) > 0 && len(openFirst) > 0
 		)
@@ -165,6 +167,16 @@ func (m *Model) refresh(again bool) {
 				defer lists.Done()
 				defer workflow.Recover(&rqErr)
 				rq, rqErr = gh.ListRequested(ctx, requested)
+			}()
+		}
+		if len(orgs) > 0 {
+			lists.Add(1)
+			go func() {
+				defer lists.Done()
+				defer workflow.Recover(&ogErr)
+				// the repos read in full are left out; a requested repo's
+				// PRs come back from both reads and are de-duped below
+				og, ogErr = gh.ListRequestedOrgs(ctx, orgs, repos)
 			}()
 		}
 		if wantOpenTo {
@@ -242,6 +254,29 @@ func (m *Model) refresh(again bool) {
 						warns = append(warns, op.Notes...)
 					}
 				}
+			}
+		}
+		if len(orgs) > 0 {
+			// my review requests anywhere in the organizations: a repo
+			// nobody listed still shows the PR that asks for me
+			if ogErr != nil {
+				if e, ok := ghapi.AsError(ogErr); ok && e.IsRateLimit() {
+					out.err, out.retryAt = ogErr.Error(), e.RetryAt
+					return
+				}
+				warns = append(warns, "requested orgs: "+ogErr.Error())
+			} else {
+				have := make(map[model.Ident]bool, len(out.allPRs))
+				for _, p := range out.allPRs {
+					have[p.Ident()] = true
+				}
+				for _, p := range og.PRs {
+					if !have[p.Ident()] {
+						have[p.Ident()] = true
+						out.allPRs = append(out.allPRs, p)
+					}
+				}
+				warns = append(warns, og.Notes...)
 			}
 		}
 		ahead.annotate(ctx, gh, out.allPRs, me)

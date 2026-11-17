@@ -112,7 +112,11 @@ type ReviewsConfig struct {
 	// requested from me, that I reviewed, or that I opened (no issues):
 	// a busy repo's review requests without the rest of its traffic.
 	// Never one of Repos.
-	Requested     []model.Repo
+	Requested []model.Repo
+	// RequestedOrgs are organizations read the same way as Requested,
+	// whichever repo a PR is in: a repo that starts asking for a review
+	// shows without being listed.
+	RequestedOrgs []string
 	CIRecheckSecs int
 	// MergeApplies are repos where a merge deploys or applies (a pipeline
 	// on push to the base): M says so in its question, and the detail's
@@ -132,7 +136,9 @@ func (r ReviewsConfig) Applies(repo model.Repo) bool {
 
 // Multi reports whether more than one repo is listed (refs then carry
 // the repo name).
-func (r ReviewsConfig) Multi() bool { return len(r.Repos)+len(r.Requested) > 1 }
+func (r ReviewsConfig) Multi() bool {
+	return len(r.Repos)+len(r.Requested) > 1 || len(r.RequestedOrgs) > 0
+}
 
 // All is Repos then Requested.
 func (r ReviewsConfig) All() []model.Repo {

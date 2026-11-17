@@ -124,6 +124,37 @@ func TestRequestedReposListOnlyMyPRs(t *testing.T) {
 	}
 }
 
+// TestRequestedOrgsListAnUnlistedRepo: with requested_orgs, a PR that
+// asks for my review shows though no list names its repo; a repo read
+// in full is not read twice; another organization's PR never joins.
+func TestRequestedOrgsListAnUnlistedRepo(t *testing.T) {
+	h := newHarness(t)
+	scope := model.Repo{Owner: "acme", Name: "agent-scope"}
+	asked := pr(scope, 77, "widen the agent's scope file", "infra-bot", false)
+	own := pr(infra, 555, "a PR the full list already reads", "bob", false)
+	other := pr(model.Repo{Owner: "elsewhere", Name: "thing"}, 9, "not ours", "bob", false)
+	h.gh.Requested = []*model.PR{asked, own, other}
+	h.m.cfg.Reviews.RequestedOrgs = []string{"acme"}
+	h.m.multi = true
+	h.load()
+	s := h.screen()
+	if !strings.Contains(s, "agent-scope#77") || !strings.Contains(s, "widen the agent's scope file") {
+		t.Errorf("the unlisted repo's PR should list:\n%s", s)
+	}
+	if strings.Contains(s, "#555") || strings.Contains(s, "not ours") {
+		t.Errorf("a full-list repo's PR and another org's PR stay out:\n%s", s)
+	}
+	if n := h.gh.Reads["requested_orgs"]; n != 1 {
+		t.Errorf("org reads %d", n)
+	}
+	// a failed search warns; the list still lands
+	h.gh.Fail = map[string]error{"requested_orgs": &ghapi.Error{Message: "boom"}}
+	h.key('r')
+	if s := h.screen(); !strings.Contains(s, "#101") {
+		t.Errorf("the review repo's list must survive a failed org search:\n%s", s)
+	}
+}
+
 // TestOpenFirstTierListsUnrequestedPRs: with promote's first_tier_reviews
 // = "open", every open PR into a requested repo's first tier joins the
 // list, though nobody asked for a review, an agent's in [bots] too; a
