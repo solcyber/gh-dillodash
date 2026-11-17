@@ -51,13 +51,17 @@ jobs:
       - name: the denylist over the tree (keyed)
         env:
           DILLODASH_HYGIENE_KEY: ${{ secrets.DILLODASH_HYGIENE_KEY }}
-          DILLODASH_HYGIENE_REQUIRED: "1"
+          # Dependabot's runs get no Actions secrets, so no key: its PRs
+          # (go.mod and go.sum) skip the keyed scans; the rest still run
+          DILLODASH_HYGIENE_REQUIRED: ${{ github.actor == 'dependabot[bot]' && '0' || '1' }}
         run: go test ./internal/hygiene -count=1 -run TestNoPrivateTerms -v
       - name: the denylist over the PR's title, body and commit messages
         if: github.event_name == 'pull_request'
         env:
           DILLODASH_HYGIENE_KEY: ${{ secrets.DILLODASH_HYGIENE_KEY }}
-          DILLODASH_HYGIENE_REQUIRED: "1"
+          # Dependabot's runs get no Actions secrets, so no key: its PRs
+          # (go.mod and go.sum) skip the keyed scans; the rest still run
+          DILLODASH_HYGIENE_REQUIRED: ${{ github.actor == 'dependabot[bot]' && '0' || '1' }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -75,7 +79,9 @@ jobs:
         if: github.event_name == 'push'
         env:
           DILLODASH_HYGIENE_KEY: ${{ secrets.DILLODASH_HYGIENE_KEY }}
-          DILLODASH_HYGIENE_REQUIRED: "1"
+          # Dependabot's runs get no Actions secrets, so no key: its PRs
+          # (go.mod and go.sum) skip the keyed scans; the rest still run
+          DILLODASH_HYGIENE_REQUIRED: ${{ github.actor == 'dependabot[bot]' && '0' || '1' }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
         run: |
