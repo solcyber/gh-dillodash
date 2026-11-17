@@ -63,6 +63,7 @@ it runs whatever it wraps.
 | `clock_timezone` | `America/New_York` | | IANA zone of the clock's second time, e.g. `Europe/London`, `Asia/Tokyo`, `UTC`. |
 | `clock_tz_label` | `""` | | Label for the second time, e.g. `ET`. Empty uses the zone's own abbreviation for the instant, so New York reads `EST` in winter and `EDT` in summer. |
 | `room` | `true` | | While the release window is open, the dashboard is the view out of a window: it shrinks to the glass in the middle of the screen, behind a cross of mullions, and the room around it has curtains, plants, pictures, a wall clock and a mug of something hot. `w` steps out to the plain dashboard (and back in); the next window opens in the room again. Needs a terminal of at least 100×30. `false` keeps the plain dashboard, and `w` still shows the room. |
+| `fortress_epigraph` | `true` | | Borges's "On Exactitude in Science" laid over the fortress map, where it covers the least of the city; `b` toggles it ([fortress.md](fortress.md)). |
 | `profile` | unset | | A short badge in the header (at most 12 characters), e.g. `OPS`: which config this dashboard runs, for someone who runs more than one (`--config` or `$DILLODASH_CONFIG` switches between them). |
 
 ## `[agent]`
@@ -222,7 +223,9 @@ do not speak. `waiting_runs` is new in dillodash; add its table by hand.
 | `$XDG_CACHE_HOME/dillodash/release-repos-<org>.json` (default `~/.cache/dillodash/`) | The `release_pr` workflow's discovered repo list, cached for `discover_ttl_secs`. Written 0600. Delete it to re-discover now. |
 | `$XDG_CACHE_HOME/dillodash/latest-release.json` (default `~/.cache/dillodash/`) | The latest dillodash release and its ETag, from the build check at startup and in `config check`. Each check is a conditional request (free when nothing changed); offline, the last answer stands. Written 0600. |
 | `<install>.prev`, and `manifest.yml.prev` beside the gh extension | The binary (and gh's manifest) an update or `gh dillodash update` replaced. `gh dillodash update --rollback` swaps it back. A temporary `.dillodash-*` file beside an install exists only while an update is written. |
-| `config.toml.bak` beside the config | The previous config, kept whenever `config pull --force` or `config migrate --force` replaces one. |
+| `config.toml.bak` beside the config | The previous config, kept whenever `config pull --force` or `config migrate --force` replaces one, or `config pull` replaces a file edited by hand. When a `.bak` is already there, the copy is `config.toml.bak.<UTC timestamp>`. |
+| `$XDG_CACHE_HOME/dillodash/seen-2.0` | That this host saw the 2.0 key card (the first start on 2.0 shows it once). |
+| `$XDG_CACHE_HOME/dillodash/rolled-back-from` | The release `update --rollback` rolled back from, so the background update doesn't put it straight back. |
 | `$TMPDIR/dillodash-*.md`, `*.diff` | A comment being edited in `$EDITOR`, a diff shown in `$PAGER`. Created 0600 and removed afterwards. |
 
 Nothing else. The token never touches the disk through dillodash.
