@@ -713,6 +713,12 @@ func (w *Workflow) announce(app workflow.App, pr *model.PR) {
 		} else if p.Detail != "" {
 			msg += " (" + p.Detail + ")"
 		}
+		if autoOnly(pr) {
+			// automation reviews it and still has its grace: nothing
+			// for the viewer to press yet
+			app.Notice(msg + ", left to the automation that reviews it")
+			break
+		}
 		app.Next(msg + " — press " + keymap.S(keymap.Deploys) + " on its row")
 	case PhaseFailed, PhaseUnverifiable:
 		msg := fmt.Sprintf("%s release FAILED", wh)
@@ -758,6 +764,13 @@ func waitingEnvs(pr *model.PR) string {
 		envs = append(envs, wt.EnvName)
 	}
 	return strings.Join(envs, " and ")
+}
+
+// autoOnly: the merged release's deploy waits, and every wait is one
+// automation approves that is not yet put to the viewer.
+func autoOnly(pr *model.PR) bool {
+	dep, ok := pr.Get(ExtDeploy).(deploys.State)
+	return ok && dep.AllLeft()
 }
 
 func (w *Workflow) progressTimeout() time.Duration {

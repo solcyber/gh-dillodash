@@ -61,13 +61,9 @@ func (m *Model) offerMerge() (string, bool) {
 	if pr.ReviewDecision == "APPROVED" || m.localApproved(pr) {
 		return "merge", true
 	}
-	// no review asked for: offer the merge only when GitHub says it
-	// can happen, so the bar never offers a key that would refuse
-	if pr.ReviewDecision == "" {
-		switch strings.ToUpper(pr.MergeStateStatus) {
-		case "CLEAN", "HAS_HOOKS", "UNSTABLE":
-			return "merge", true
-		}
+	// no review asked for: offer the merge exactly when M would take it
+	if pr.ReviewDecision == "" && changesRequestedBy(pr) == "" && canMergeUnreviewed(pr) {
+		return "merge", true
 	}
 	return "", false
 }
@@ -86,6 +82,15 @@ func deploysDone(pr *model.PR) bool {
 		return false
 	}
 	return pr.MergedAt != nil && clock.Now().Sub(*pr.MergedAt) > deploysSettledAfter
+}
+
+// deploysNotMine: the merged PR's deploy waits, and nothing it waits on
+// is the viewer's to approve now (somebody else reviews it, or
+// automation does and still has its grace), so D is not offered. The
+// key still reads the deploys and says so.
+func deploysNotMine(pr *model.PR) bool {
+	st, ok := pr.Get("deploy").(deploys.State)
+	return ok && st.Phase == "waiting" && len(st.Waits) > 0 && len(st.Due()) == 0
 }
 
 // browseLabel is what o opens on the selected row when the row has
@@ -125,7 +130,7 @@ func (m *Model) offerDeploysList() (string, bool) {
 		return "", false
 	}
 	if pr, ok := row.Item.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
-		if deploysDone(pr) {
+		if deploysDone(pr) || deploysNotMine(pr) {
 			return "", false
 		}
 		return "approve deploys", true
@@ -138,7 +143,7 @@ func (m *Model) offerDeploysList() (string, bool) {
 
 func (m *Model) offerDeploysDetail() (string, bool) {
 	if pr, ok := m.detail.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
-		if deploysDone(pr) {
+		if deploysDone(pr) || deploysNotMine(pr) {
 			return "", false
 		}
 		return "approve deploys", true
