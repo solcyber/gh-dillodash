@@ -8,6 +8,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 var oldHead = strings.Repeat("1", 40)
@@ -135,7 +136,7 @@ func TestRequestedOrgsListAnUnlistedRepo(t *testing.T) {
 	other := pr(model.Repo{Owner: "elsewhere", Name: "thing"}, 9, "not ours", "bob", false)
 	h.gh.Requested = []*model.PR{asked, own, other}
 	h.m.cfg.Reviews.RequestedOrgs = []string{"acme"}
-	h.m.multi = true
+	h.m.multi = h.m.cfg.Reviews.Multi() // as New does: an organization makes refs carry the repo
 	h.load()
 	s := h.screen()
 	if !strings.Contains(s, "agent-scope#77") || !strings.Contains(s, "widen the agent's scope file") {
@@ -147,11 +148,28 @@ func TestRequestedOrgsListAnUnlistedRepo(t *testing.T) {
 	if n := h.gh.Reads["requested_orgs"]; n != 1 {
 		t.Errorf("org reads %d", n)
 	}
+	if !h.m.multi || !strings.Contains(s, "infra#101") {
+		t.Errorf("with an organization every ref carries its repo:\n%s", s)
+	}
+	if !orgsSpanOwners([]model.Repo{infra}, []string{"widgets"}) || orgsSpanOwners([]model.Repo{infra}, []string{"ACME"}) {
+		t.Error("another owner's organization makes refs carry the owner; the same owner does not")
+	}
 	// a failed search warns; the list still lands
 	h.gh.Fail = map[string]error{"requested_orgs": &ghapi.Error{Message: "boom"}}
 	h.key('r')
 	if s := h.screen(); !strings.Contains(s, "#101") {
 		t.Errorf("the review repo's list must survive a failed org search:\n%s", s)
+	}
+	h.gh.Fail = nil
+	h.key('r')
+	// : takes the ref as the row shows it
+	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "agent-scope#77", true }
+	h.key(':')
+	if strings.Contains(h.m.status, "no repo named") {
+		t.Errorf("go to an organization's repo: %q", h.m.status)
+	}
+	if h.m.view != ViewDetail {
+		t.Errorf("go to opens the PR: view %s", h.m.view)
 	}
 }
 

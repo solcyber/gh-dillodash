@@ -210,12 +210,12 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		}
 	}
 	if len(cfg.Reviews.RequestedOrgs) > 0 {
-		res, err := gh.ListRequestedOrgs(ctx, cfg.Reviews.RequestedOrgs, cfg.Reviews.Repos)
+		res, err := gh.ListRequestedOrgs(ctx, cfg.Reviews.RequestedOrgs, cfg.Reviews.All())
 		if err != nil {
 			fmt.Fprintf(w, "requested orgs: FAILED: %s\n", err)
 			failed = true
 		} else {
-			fmt.Fprintf(w, "requested orgs: %d open PR(s) ask for your review, have your review, or are yours\n", len(res.PRs))
+			fmt.Fprintf(w, "requested orgs: %d more open PR(s), in repos not listed above, ask for your review, have your review, or are yours\n", len(res.PRs))
 			for _, n := range res.Notes {
 				fmt.Fprintf(w, "  note: %s\n", n)
 			}

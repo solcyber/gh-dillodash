@@ -516,7 +516,7 @@ func (p *parser) parseReviews(top *table, cfg *Config, ov Overrides) {
 		for _, o := range orgs {
 			o = strings.TrimSpace(o)
 			// an org name goes into a search: nothing but a login's letters
-			if o == "" || strings.ContainsAny(o, " /:\"\t") {
+			if !orgNameRE.MatchString(o) {
 				t.errf("requested_orgs", "%q is not an organization name", o)
 				continue
 			}
@@ -536,6 +536,7 @@ func (p *parser) parseReviews(top *table, cfg *Config, ov Overrides) {
 		repos = p.parseRepos("--repo", ov.Repos)
 		present = true
 		requested = nil
+		cfg.Reviews.RequestedOrgs = nil
 	}
 	for _, r := range requested {
 		for _, full := range repos {
@@ -1088,3 +1089,6 @@ func weekday(s string) (time.Weekday, bool) {
 	}
 	return 0, false
 }
+
+// orgNameRE is a GitHub organization login.
+var orgNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`)

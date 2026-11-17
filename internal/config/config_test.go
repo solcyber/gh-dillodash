@@ -810,7 +810,10 @@ func TestRequestedOrgs(t *testing.T) {
 	if err != nil || len(c.Reviews.RequestedOrgs) != 2 || c.Reviews.RequestedOrgs[1] != "widgets" || !c.Reviews.Multi() {
 		t.Fatalf("orgs %v multi %v err %v", c.Reviews.RequestedOrgs, c.Reviews.Multi(), err)
 	}
-	for _, bad := range []string{"acme/infra", "two words", ""} {
+	if c, err := Parse([]byte(minimal+"requested_orgs = [\"acme\"]\n"), "t", Overrides{Repos: []string{"x/y"}}); err != nil || len(c.Reviews.RequestedOrgs) != 0 {
+		t.Errorf("--repo is just those repos: orgs %v err %v", c.Reviews.RequestedOrgs, err)
+	}
+	for _, bad := range []string{"acme/infra", "two words", "", "-acme", "ac(me", "@me", "*"} {
 		if _, err := Parse([]byte(minimal+"requested_orgs = [\""+bad+"\"]\n"), "t", Overrides{}); err == nil || !strings.Contains(err.Error(), "not an organization name") {
 			t.Errorf("%q should be refused: %v", bad, err)
 		}
