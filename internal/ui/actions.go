@@ -33,6 +33,23 @@ func reviewOwed(pr *model.PR) bool {
 	return pr.ReviewDecision != "" && pr.ReviewDecision != "APPROVED"
 }
 
+// blockedWhy says what a blocked PR waits for, from its base branch's
+// rules (read now: this runs on the action goroutine), or def when the
+// rules can't be read or name nothing.
+func (m *Model) blockedWhy(pr *model.PR, def string) string {
+	if pr.BaseRefName == "" {
+		return def
+	}
+	rules, err := m.gh.BranchRules(m.ctx, m.repoOf(pr), pr.BaseRefName)
+	if err != nil {
+		return def
+	}
+	if why := model.BlockedWhy(pr, rules); why != "" {
+		return why
+	}
+	return def
+}
+
 // canMergeUnreviewed: GitHub has said a PR with no review decision can
 // merge. An unknown or missing merge state is not that.
 func canMergeUnreviewed(pr *model.PR) bool {
@@ -327,12 +344,16 @@ func (m *Model) doMerge(app *lockedApp) {
 	case pr.ReviewDecision == "" && !app.LocalApproved(pr) && strings.EqualFold(pr.MergeStateStatus, "BLOCKED"):
 		// no review decision and GitHub blocks it: a rule (a code
 		// owner's review, a required check) is not met
-		app.Notice(where + " can't merge yet: a required check or review is missing")
+		app.Notice(where + " can't merge yet: " + m.blockedWhy(pr, "a required check or review is missing"))
 		return
 	case pr.ReviewDecision == "" && !app.LocalApproved(pr) && !canMergeUnreviewed(pr):
 		// with no approval to go by, GitHub's verdict is all there is:
 		// wait for it rather than assert that no review is asked for
 		app.Notice(fmt.Sprintf("GitHub hasn't worked out whether %s can merge (%s) — try again in a moment", where, text.OrQ(strings.ToLower(pr.MergeStateStatus))))
+		return
+	case strings.EqualFold(pr.MergeStateStatus, "BLOCKED"):
+		// approved, and GitHub still blocks it: say what it waits for
+		app.Notice(where + " can't merge yet: " + m.blockedWhy(pr, "GitHub blocks it (a required check or rule has not passed)"))
 		return
 	case !mergeable[strings.ToUpper(pr.MergeStateStatus)]:
 		app.Notice(fmt.Sprintf("%s is not mergeable: GitHub says %s", where, strings.ToLower(pr.MergeStateStatus)))

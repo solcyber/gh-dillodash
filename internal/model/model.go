@@ -231,6 +231,9 @@ type PR struct {
 	// ApprovalAhead is how many commits the head is ahead of a stale
 	// approval's commit (a compare call fills it; 0 = not known).
 	ApprovalAhead int `json:"-"`
+	// BlockedWhy is what a blocked PR waits for (BlockedWhy, from the
+	// base branch's rules); "" when it is not blocked or nothing is known.
+	BlockedWhy string `json:"-"`
 
 	// Ext carries per-workflow annotations, keyed by workflow name.
 	Ext map[string]any `json:"-"`

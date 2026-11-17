@@ -61,3 +61,25 @@ func TestMergedSince(t *testing.T) {
 		t.Errorf("a search with no answer: %v", err)
 	}
 }
+
+// TestBranchRules: the required checks of every ruleset on the branch,
+// de-duped, and the strictest review rule.
+func TestBranchRules(t *testing.T) {
+	s := newServer(t)
+	s.handle("GET", "/repos/"+webRepo.String()+"/rules/branches/main", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `[
+			{"type":"deletion"},
+			{"type":"pull_request","parameters":{"required_approving_review_count":0,"require_code_owner_review":true}},
+			{"type":"pull_request","parameters":{"required_approving_review_count":1,"require_code_owner_review":false}},
+			{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"build"},{"context":"e2e"}]}},
+			{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"build"}]}}]`)
+	})
+	got, err := s.client(t).BranchRules(context.Background(), webRepo, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Known || strings.Join(got.RequiredChecks, ",") != "build,e2e" || got.Approvals != 1 || !got.CodeOwner {
+		t.Errorf("rules: %+v", got)
+	}
+}

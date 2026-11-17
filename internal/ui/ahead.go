@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
@@ -72,6 +73,52 @@ func (a *aheadCache) annotate(ctx context.Context, gh ghapi.Client, prs []*model
 		a.mu.Unlock()
 		if ok {
 			pr.ApprovalAhead = n
+		}
+	}
+}
+
+// blockedMax bounds the branches whose rules one refresh reads.
+const blockedMax = 12
+
+// annotateBlocked sets BlockedWhy on every PR GitHub blocks: the base
+// branch's rules, read once per branch (side by side; a repeat is a
+// conditional request), against the PR's own checks and reviews.
+// Advisory: rules that can't be read leave the generic reason.
+func annotateBlocked(ctx context.Context, gh ghapi.Client, prs []*model.PR) {
+	type branch struct {
+		repo model.Repo
+		base string
+	}
+	want := map[branch]bool{}
+	for _, pr := range prs {
+		if strings.EqualFold(pr.MergeStateStatus, "BLOCKED") && pr.BaseRefName != "" && len(want) < blockedMax {
+			want[branch{pr.Repo, pr.BaseRefName}] = true
+		}
+	}
+	if len(want) == 0 {
+		return
+	}
+	var mu sync.Mutex
+	rules := map[branch]model.BranchRules{}
+	var wg sync.WaitGroup
+	for b := range want {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { _ = recover() }() // a panic is rules not read
+			r, err := gh.BranchRules(ctx, b.repo, b.base)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			rules[b] = r
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	for _, pr := range prs {
+		if strings.EqualFold(pr.MergeStateStatus, "BLOCKED") {
+			pr.BlockedWhy = model.BlockedWhy(pr, rules[branch{pr.Repo, pr.BaseRefName}])
 		}
 	}
 }

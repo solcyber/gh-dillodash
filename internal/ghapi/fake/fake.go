@@ -135,6 +135,8 @@ type Client struct {
 	// moments it was asked for.
 	Sinces     map[model.Repo]ghapi.Since
 	SinceAsked []time.Time
+	// Rules is what BranchRules answers, by "owner/name@branch".
+	Rules map[string]model.BranchRules
 	// Teams is each "org/team"'s members for TeamMember; a team that is
 	// not in the map is unreadable.
 	Teams map[string][]string
@@ -295,6 +297,21 @@ func (f *Client) TokenSource() string {
 		return "keyring"
 	}
 	return f.Source
+}
+
+// BranchRules serves Rules["owner/name@branch"]; a branch not there has
+// rules that ask for nothing.
+func (f *Client) BranchRules(ctx context.Context, repo model.Repo, branch string) (model.BranchRules, error) {
+	if err := f.fail("rules"); err != nil {
+		return model.BranchRules{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if r, ok := f.Rules[repo.String()+"@"+branch]; ok {
+		r.Known = true
+		return r, nil
+	}
+	return model.BranchRules{Known: true}, nil
 }
 
 // LastRate is Rate.
