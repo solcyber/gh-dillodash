@@ -1,5 +1,69 @@
 # Changelog
 
+## [2.4.0] — 2026-11-17
+
+**Who has to act.** For teams whose branch rules ask for a review only
+on the way into production, and whose release job approves its own
+deploys: `M` merges where no review is asked for, an environment that
+automation approves is left to it, the stage row says what merged since
+the release was cut, and the window asks for attendance only on the
+nights someone attends.
+
+### Added
+
+- **An environment that automation approves is left to it.** When a
+  `[bots]` login is among a waiting environment's required reviewers, a
+  merged PR's deploy reads `waits: prod · automatic`. It is not announced
+  or counted as yours, and `D` leaves the key bar. Past
+  `deploy_auto_grace_secs` (`[workflows.release_pr]`, 300; 0 leaves
+  nothing to automation) it becomes `approve: prod` like any other wait.
+  `D` works throughout: with nothing else to approve its question says
+  who is expected to approve, and with another environment that is yours
+  it approves that one and names the one it left. An environment reviewed
+  only by people is yours at once, and so is every run in the waiting
+  approvals section. ([#93])
+- **The stage row says what merged since the release was cut.** While a
+  release is open and the promote workflow names the first tier, the
+  `stage:` line ends `since the cut: +3 dev, +1 stage · dev ≠ stage`:
+  the PRs merged into each branch after the release's head landed on
+  staging, however they were merged, and whether the two branches hold
+  the same content (their root trees, so a squashed promotion reads
+  equal). `enter` on the line gives the verdict and names the PRs. A
+  read that fails leaves the tail off and warns. ([#94])
+- **`[merge] methods` per base branch.** A repo's value may be a table,
+  `{ default = "merge", stage = "squash" }`, so a repo can squash into
+  its staging branch and still merge its release with a merge commit. A
+  squashed promotion keeps the PR's number on its subject, which is how
+  the unit and its tag are found. ([#92])
+- **`attended_days`** (`[workflows.maintenance_window]`, e.g.
+  `["tue", "thu"]`): only those nights ask for the attend command.
+  Another night says `not an attended night — held items wait for Thu`
+  and still takes the commands. Unset, every night asks, as before.
+  ([#95])
+
+### Changed
+
+- **`M` merges where the branch asks for no review.** A branch whose
+  rules ask for no approving review reports no review decision, and `M`
+  refused every PR on it as not approved. `M` now goes by GitHub's merge
+  state there, and its question says `nobody has approved this`. It
+  stops when a reviewer asked for changes, when GitHub blocks the merge,
+  and while GitHub has not worked out whether the PR can merge; the key
+  bar offers it exactly when it would work. A PR that waits on a review
+  is refused as before. ([#92], [#93])
+- **The promote steps ask for a person, not an approver.** `P` (open the
+  promotion PR, merge it, tag go or hold) refuses a `[bots]` login and no
+  longer asks `approvers_team`: those steps are below production, where
+  the branch rules decide. ([#92])
+- **Enter on a stage row** names what merged since the cut when a release
+  is open; without one it says, as before, that the row is a branch.
+  ([#94])
+
+[#92]: https://github.com/solcyber/gh-dillodash/pull/92
+[#93]: https://github.com/solcyber/gh-dillodash/pull/93
+[#94]: https://github.com/solcyber/gh-dillodash/pull/94
+[#95]: https://github.com/solcyber/gh-dillodash/pull/95
+
 ## [2.3.0] — 2026-11-17
 
 **Polish.** The 2.1 and 2.2 speed-ups made safe, the key bar offers only
@@ -1155,6 +1219,7 @@ dashboard, as a GitHub CLI extension.
 - Fortress mode, the splash, wipes, confetti, the release launch, and Amos.
 - The bundled Hack Nerd Font Mono and `font install`.
 
+[2.4.0]: https://github.com/solcyber/gh-dillodash/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/solcyber/gh-dillodash/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/solcyber/gh-dillodash/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/solcyber/gh-dillodash/compare/v2.0.0...v2.1.0
