@@ -131,7 +131,7 @@ environment:
                      a token that overrides the gh login (config check says when one does)
   GH_PAGER, PAGER    the pager for v (default less)
   GH_EDITOR, VISUAL, EDITOR
-                     the editor for C and t (default vi)
+                     the editor for C and T (default vi)
   NO_COLOR           no colors, like --mono
 `
 
@@ -528,7 +528,7 @@ func runUpdate(ctx context.Context, u *selfupdate.Updater, w io.Writer) error {
 	if notes := firstLines(st.Notes, 8); notes != "" {
 		fmt.Fprintf(w, "what changed in %s:\n%s\n", res.Version, notes)
 	}
-	fmt.Fprintln(w, "restart dillodash to run it (R in a running dashboard)")
+	fmt.Fprintln(w, "restart dillodash to run it (U in a running dashboard)")
 	return nil
 }
 

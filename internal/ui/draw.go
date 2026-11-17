@@ -9,6 +9,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -782,7 +783,7 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 		case m.showAll:
 			note = "nothing open in " + m.reposText()
 		default:
-			note = "all clear " + glyphs.G("sep") + " nothing awaiting your attention (A shows PRs approved by others)"
+			note = "all clear " + glyphs.G("sep") + " nothing awaiting your attention (" + keymap.S(keymap.ShowApproved) + " shows PRs approved by others)"
 		}
 		scenes.Empty(c, m.fx, h, w, note, theme.Current())
 		return

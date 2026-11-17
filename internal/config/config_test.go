@@ -781,6 +781,7 @@ func TestPromote(t *testing.T) {
 		"lookback":    "lookback_days = 0\n",
 		"same tags":   "go_tag_prefix = \"x/\"\nhold_tag_prefix = \"x/\"\n",
 		"placeholder": "approval_comment = \"{sha}\"\n",
+		"bad regexp":  "backmerge_title = \"^(Back\"\n",
 	} {
 		if _, err := parse(t, minimal+"[workflows.promote]\nenabled = true\n"+bad); err == nil {
 			t.Errorf("%s: no error", name)
@@ -789,5 +790,12 @@ func TestPromote(t *testing.T) {
 	c = mustParse(t, minimal+"[workflows.promote]\nenabled = true\n")
 	if c.Promote.Repos[0].String() != "acme/infra" || c.Promote.FirstTierReviews != "requested" || c.OpenFirstTier() != nil {
 		t.Errorf("defaults %+v", c.Promote)
+	}
+	if c.Promote.BackmergeTitle != nil {
+		t.Error("backmerge_title is off by default")
+	}
+	c = mustParse(t, minimal+"[workflows.promote]\nenabled = true\nbackmerge_title = \"^Back-merge\"\n")
+	if re := c.Promote.BackmergeTitle; re == nil || !re.MatchString("Back-merge stage into dev") || re.MatchString("Fix back-merge script") {
+		t.Errorf("backmerge_title = %v", re)
 	}
 }

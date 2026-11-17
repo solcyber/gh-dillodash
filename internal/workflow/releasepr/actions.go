@@ -8,6 +8,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -38,7 +39,7 @@ func (w *Workflow) EnrichDetail(_ context.Context, _ ghapi.Client, pr, listed *m
 // for the maintenance window; the NOW path also posts the release-now
 // command with a reason (an approver's emergency). A hotfix lists NOW
 // first: it is an emergency by definition. A release you already
-// approved for this head is queued already, so a offers only NOW, and
+// approved for this head is queued already, so A offers only NOW, and
 // posts the command without a second review (a release bumped from the
 // window, say). Every question shows exactly what will be posted; the
 // review goes first, and a failed comment after it says so. Returns
@@ -54,7 +55,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		// Shaped like a release, but the release repos are not read yet:
 		// never fall through to a plain review (or to "already approved")
 		// on what is probably a release.
-		app.Notice(fmt.Sprintf("couldn't read release state for %s yet — press r and retry", wh))
+		app.Notice(fmt.Sprintf("couldn't read release state for %s yet — press %s and retry", wh, keymap.S(keymap.Refresh)))
 		return true
 	}
 	state := pr.State
@@ -223,7 +224,7 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 	return true
 }
 
-// The review choices a offers beside approve and NOW.
+// The review choices A offers beside approve and NOW.
 const (
 	changesLabel = "request changes — takes it out of the window, with a reason"
 	dismissLabel = "dismiss my approval — takes it out of the queue; A approves it again to re-queue"
@@ -458,8 +459,8 @@ func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handle
 	// command and tells the manifest repo; merging by hand is the last
 	// resort, for when that dispatch can't fire.
 	if w.cfg.ReleaseNowDispatch && !w.manifestRepo(app).IsZero() && !w.dispatchFailed(pr) {
-		app.Notice(fmt.Sprintf("%s: use a — release NOW posts %s and tells %s; M merges by hand only when that dispatch can't fire",
-			wh, w.cfg.ReleaseNowCommand, w.manifestRepo(app)))
+		app.Notice(fmt.Sprintf("%s: use %s — release NOW posts %s and tells %s; %s merges by hand only when that dispatch can't fire",
+			wh, keymap.S(keymap.Approve), w.cfg.ReleaseNowCommand, w.manifestRepo(app), keymap.S(keymap.Merge)))
 		return false, true
 	}
 	slot := "the window"

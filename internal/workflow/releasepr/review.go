@@ -20,7 +20,7 @@ import (
 const changesMinReason = 10
 
 // refireAfter is how long a posted command may wait for its run before
-// a offers to fire the dispatch for it again: the run usually shows
+// A offers to fire the dispatch for it again: the run usually shows
 // within a minute of a dispatch, and a command posted from the PR page
 // fires none at all.
 const refireAfter = 2 * time.Minute
@@ -85,7 +85,7 @@ func (w *Workflow) myApproval(app workflow.App, pr *model.PR) int64 {
 }
 
 // dismissMine dismisses the viewer's approval of pr. Withdrawn, the
-// release leaves the queue; a approves it again (and so queues it again)
+// release leaves the queue; A approves it again (and so queues it again)
 // whenever it should go.
 func (w *Workflow) dismissMine(app workflow.App, pr *model.PR, wh string) {
 	app.Flash(fmt.Sprintf("reading your review of %s...", wh))

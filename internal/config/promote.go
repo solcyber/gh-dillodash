@@ -1,6 +1,7 @@
 package config
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/solcyber/gh-dillodash/internal/model"
@@ -30,6 +31,10 @@ type PromoteConfig struct {
 	// ApprovalComment goes on a deployment D approves from a promotion
 	// row; placeholders {repo} {workflow} {run}.
 	ApprovalComment string
+	// BackmergeTitle, when set, marks a PR whose title matches as a
+	// back-merge (not listed), whatever its branch or commits: for a
+	// team that cherry-picks its back-merges. nil: off.
+	BackmergeTitle *regexp.Regexp
 }
 
 // FirstTierChoices are first_tier_reviews' values.
@@ -129,6 +134,13 @@ func (p *parser) parsePromote(wt *table, cfg *Config) {
 		case "{repo}", "{workflow}", "{run}":
 		default:
 			t.errf("approval_comment", "unknown placeholder %s (allowed: {repo} {workflow} {run})", ph)
+		}
+	}
+	if s := strings.TrimSpace(t.str("backmerge_title", "")); s != "" {
+		if re, err := regexp.Compile(s); err != nil {
+			t.errf("backmerge_title", "not a regular expression: %s", err)
+		} else {
+			w.BackmergeTitle = re
 		}
 	}
 	t.done()
