@@ -186,3 +186,54 @@ func TestRoomQuoteASCII(t *testing.T) {
 		t.Error("the ASCII page has lost its words")
 	}
 }
+
+// TestMullionsNeverCoverALetter: at every size the room draws in, with a
+// dashboard that fills the glass but for a few gaps, the window's bars
+// cover no letter; they run in the gaps, near the middle.
+func TestMullionsNeverCoverALetter(t *testing.T) {
+	in := RoomInfo{Clock: time.Date(2031, 4, 16, 22, 10, 30, 0, time.UTC), Sign: "w · back to work"}
+	wasSet, wasTier := glyphs.Active(), theme.Current()
+	t.Cleanup(func() {
+		glyphs.Use(wasSet)
+		theme.Setup(map[theme.Tier]colorprofile.Profile{
+			theme.Mono: colorprofile.Ascii, theme.Color16: colorprofile.ANSI,
+			theme.Color256: colorprofile.ANSI256, theme.TrueColor: colorprofile.TrueColor,
+		}[wasTier], false)
+	})
+	for _, tier := range []colorprofile.Profile{colorprofile.TrueColor, colorprofile.Ascii} {
+		for _, sz := range [][2]int{{RoomMinH, RoomMinW}, {40, 120}, {48, 160}, {70, 240}} {
+			h, w := sz[0], sz[1]
+			theme.Setup(tier, false)
+			glyphs.Use(glyphs.Unicode)
+			in.Tier = theme.Current()
+			l, ok := RoomFit(h, w)
+			if !ok {
+				continue
+			}
+			inner := canvas.New(l.W, l.H)
+			for y := 0; y < l.H; y++ {
+				if y == l.H/2+1 {
+					continue // a blank line, as under a section
+				}
+				row := []rune(strings.Repeat("abcdefghij", l.W/10+1)[:l.W])
+				row[l.W/2-2] = ' ' // a gap between columns
+				inner.PutStr(y, 0, string(row), "text")
+			}
+			c := canvas.New(w, h)
+			Room(c, l, in)
+			c.Blit(inner, l.Y, l.X)
+			RoomFront(c, l, in)
+			for y, want := range inner.Lines() {
+				got := []rune(c.Text(l.Y + y))
+				for x, ch := range []rune(want) {
+					if ch != ' ' && got[l.X+x] != ch {
+						t.Fatalf("%v %dx%d: (%d,%d) %q covered by %q", tier, w, h, y, x, string(ch), string(got[l.X+x]))
+					}
+				}
+			}
+			if r := c.Text(l.Y + l.H/2 + 1); !strings.ContainsAny(r, "━-─") {
+				t.Errorf("%v %dx%d: no bar along the blank line: %q", tier, w, h, r)
+			}
+		}
+	}
+}

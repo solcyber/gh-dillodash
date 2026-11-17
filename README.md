@@ -2,9 +2,10 @@
 
 A terminal dashboard for the pull requests that are waiting on you. Open one,
 read it, approve it, comment, merge it, approve its deployments, and watch CI
-without leaving the terminal. Runs as a GitHub CLI extension, so it signs in
-the way `gh` does, and it works against any GitHub organization, including
-GitHub Enterprise Server.
+without leaving the terminal. If your bots speak one of its protocols, it
+also drives releases, plan approvals and maintenance windows. Runs as a
+GitHub CLI extension, so it signs in the way `gh` does, and it works against
+any GitHub organization, including GitHub Enterprise Server.
 
 ![The dillodash list: pull requests with status chips, CI glyphs, diffstat, author and age, issues below, and a pull request's detail view](docs/screenshot.png)
 

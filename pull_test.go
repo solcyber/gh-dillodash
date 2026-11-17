@@ -85,7 +85,7 @@ func TestPullConfig(t *testing.T) {
 	if bak, err := os.ReadFile(path + ".bak"); err != nil || !bytes.Equal(bak, before) {
 		t.Errorf("the switch kept the previous file as .bak: %v", err)
 	}
-	if err := pullConfig(ctx, gh, "acme/dash-config:nope.toml", path, true, &out); err == nil || !strings.Contains(err.Error(), "could not read") {
+	if err := pullConfig(ctx, gh, "acme/dash-config:nope.toml", path, true, &out); err == nil || !strings.Contains(err.Error(), "couldn't read") {
 		t.Errorf("missing file: %v", err)
 	}
 	// a bad spec is a usage error
