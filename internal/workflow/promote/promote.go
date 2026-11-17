@@ -84,34 +84,6 @@ type Workflow struct {
 	commits map[string][]ghapi.CompareCommit
 }
 
-// notOnReads is one refresh's answers to "what of this PR's head is not
-// on that branch" (the branch moves, so they are not kept across
-// refreshes); ok false: unknown.
-type notOnReads struct {
-	mu sync.Mutex
-	m  map[string]notOnAnswer
-}
-
-type notOnAnswer struct {
-	shas map[string]bool
-	ok   bool
-}
-
-func notOnKey(branch string, p *model.PR) string { return branch + "|" + p.HeadRefOid }
-
-func (r *notOnReads) get(branch string, p *model.PR) (notOnAnswer, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	a, hit := r.m[notOnKey(branch, p)]
-	return a, hit
-}
-
-func (r *notOnReads) put(branch string, p *model.PR, a notOnAnswer) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.m[notOnKey(branch, p)] = a
-}
-
 var (
 	_ workflow.Workflow       = (*Workflow)(nil)
 	_ workflow.DeployProvider = (*Workflow)(nil)
@@ -264,8 +236,7 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 		Go: tagNumbers(goTags, w.cfg.GoTagPrefix), Hold: tagNumbers(holdTags, w.cfg.HoldTagPrefix),
 		BackmergeTitle: w.cfg.BackmergeTitle,
 	}
-	notOn := &notOnReads{m: map[string]notOnAnswer{}}
-	if err := w.prefetchAncestry(ctx, gh, in, notOn); err != nil {
+	if err := w.prefetchAncestry(ctx, gh, in); err != nil {
 		return rs, nil, err
 	}
 	var limit error
@@ -295,10 +266,6 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 		asked[commitsKey(repo, p)] = true
 		v, _ := w.commitsOf(repo, p)
 		return v
-	}
-	in.NotOn = func(branch string, p *model.PR) (map[string]bool, bool) {
-		a, _ := notOn.get(branch, p)
-		return a.shas, a.ok
 	}
 	changes, released := Locate(in)
 	if limit == nil {
@@ -335,7 +302,7 @@ func (w *Workflow) readRepo(ctx context.Context, gh ghapi.Client, repo model.Rep
 }
 
 // ancestryRounds bounds the prefetch's dry runs of Locate.
-const ancestryRounds = 4 // commits, then the compare that proves a back-merge, then ancestry
+const ancestryRounds = 4 // commits, then the ancestry that proves a back-merge, then the linking it frees
 
 // prefetchAncestry asks, side by side, every ancestry question Locate
 // will ask that the cache can't answer: a dry run of Locate records the
@@ -344,31 +311,15 @@ const ancestryRounds = 4 // commits, then the compare that proves a back-merge, 
 // The answers are fixed points (two commits), so they are kept for good.
 // Only a rate limit is an error; any other failure leaves the pair to
 // Locate's own backstop.
-func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inputs, notOn *notOnReads) error {
+func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inputs) error {
 	type pair struct{ sha, head string }
-	type notOnAsk struct {
-		branch string
-		p      *model.PR
-	}
 	var failedMu sync.Mutex
 	failed := map[int]bool{} // commit reads that failed: unknown this refresh
 	for round := 0; round < ancestryRounds; round++ {
 		var misses []pair
 		var prMisses []*model.PR
-		var notOnMisses []notOnAsk
 		seen := map[pair]bool{}
 		seenPR := map[int]bool{}
-		seenNotOn := map[string]bool{}
-		in.NotOn = func(branch string, p *model.PR) (map[string]bool, bool) {
-			if a, hit := notOn.get(branch, p); hit {
-				return a.shas, a.ok
-			}
-			if k := notOnKey(branch, p); !seenNotOn[k] && p.HeadRefOid != "" {
-				seenNotOn[k] = true
-				notOnMisses = append(notOnMisses, notOnAsk{branch, p})
-			}
-			return nil, false
-		}
 		in.Commits = func(p *model.PR) []ghapi.CompareCommit {
 			if v, hit := w.commitsOf(in.Repo, p); hit {
 				return v
@@ -393,29 +344,11 @@ func (w *Workflow) prefetchAncestry(ctx context.Context, gh ghapi.Client, in Inp
 			return false
 		}
 		Locate(in)
-		if len(misses) == 0 && len(prMisses) == 0 && len(notOnMisses) == 0 {
+		if len(misses) == 0 && len(prMisses) == 0 {
 			return nil
 		}
 		g, gctx := errgroup.WithContext(ctx)
 		g.SetLimit(16) // the client sends 8 at a time; this bounds the goroutines
-		for _, q := range notOnMisses {
-			g.Go(func() error {
-				c, err := gh.Compare(gctx, in.Repo, q.branch, q.p.HeadRefOid)
-				if err != nil {
-					if ghapi.IsRateLimit(err) {
-						return err
-					}
-					notOn.put(q.branch, q.p, notOnAnswer{}) // unknown: listed
-					return nil
-				}
-				a := notOnAnswer{shas: map[string]bool{}, ok: c.AheadBy <= len(c.Commits)}
-				for _, cm := range c.Commits {
-					a.shas[cm.SHA] = true
-				}
-				notOn.put(q.branch, q.p, a)
-				return nil
-			})
-		}
 		for _, p := range prMisses {
 			g.Go(func() error {
 				v, err := gh.PRCommits(gctx, in.Repo, p.Number)

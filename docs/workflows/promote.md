@@ -80,16 +80,16 @@ not changes, and aren't listed:
 - **Straight from the tier branch:** a PR whose head is the staging or
   production branch.
 - **Through a side branch,** the usual fix when the direct form
-  conflicts. A back-merge brings the lower tier nothing of its own:
-  every one of its own commits is either already on the later tier or a
-  merge commit. A PR is suspected when its own commits carry a later
-  tier's merge commit (a staging or production PR merged back down), and
-  hidden only when a compare with that tier's branch proves it. A change
-  that merely touches a later tier stays listed: a branch cut from
-  production, one that merged staging in to settle a conflict, a hotfix
-  opened into staging first. So does any PR whose commits or compare
-  can't be read. A promotion of the whole first tier is never taken for
-  one.
+  conflicts. A back-merge brings the lower tier nothing of its own: its
+  own commits carry a later tier's merge commits (staging or production
+  PRs merged back down), and every other one is a merge commit or already
+  in one of those merges' history. That is checked once per PR, with the
+  ancestry reads the workflow keeps for good, never against a branch
+  that moves. A change that merely touches a later tier stays listed: a
+  branch cut from production, one that merged staging in to settle a
+  conflict, a hotfix opened into staging first. So does any PR whose
+  commits can't be read, or with more than 100 commits of its own. A
+  promotion of the whole first tier is never taken for one.
 - **By title,** when `backmerge_title` is set.
 
 A `go` unit behind an untagged back-merge on staging, direct or through
@@ -161,9 +161,9 @@ Each refresh, for each repo, costs:
   PR no staging or production PR names, a staging PR no first-tier PR
   links to), to tell a side-branch back-merge. It's read once per head
   and kept, all of a refresh's new ones at once. A suspect (one whose
-  commits carry a later tier's merge commit) costs one compare with that
-  tier's branch each refresh, sent with the last ETag. A read that fails
-  leaves the PR listed and is asked again next refresh.
+  commits carry a later tier's merge commit) costs an ancestry compare
+  per commit of its own that isn't a merge, once, kept for good. A read
+  that fails leaves the PR listed and is asked again next refresh.
 
 The repos are read side by side, and the workflow starts beside the
 dashboard's list rather than after it. A shorter `lookback_days` means

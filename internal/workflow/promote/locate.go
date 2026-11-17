@@ -210,9 +210,6 @@ type Inputs struct {
 	// Commits is a PR's own commits with their parents (nil: not known,
 	// and the PR is then not taken for a back-merge).
 	Commits func(p *model.PR) []ghapi.CompareCommit
-	// NotOn is the commits of p's head that are not on branch (ok false:
-	// not known, or more than one compare page): what p would bring it.
-	NotOn func(branch string, p *model.PR) (shas map[string]bool, ok bool)
 	// BackmergeTitle, when set, marks a PR whose title matches as a
 	// back-merge whatever its commits (a cherry-picked one has new oids).
 	BackmergeTitle *regexp.Regexp
@@ -220,72 +217,103 @@ type Inputs struct {
 
 // backmerger tells a back-merge made through a side branch, whose head is
 // not the later tier's branch. A back-merge brings the lower tier nothing
-// of its own: every one of its own commits is either already on the later
-// tier or a merge commit (the merges, and the conflicts they resolved).
-// It is suspected first, cheaply, by its own commits carrying a later
-// tier's merge commit (a staging or production PR merged back down), and
-// then proven against the later tier's branch. A branch cut from the
-// later tier, or one that merged it in to settle a conflict, carries
-// work of its own that is on no later tier: it is a change, and listed.
-// Unknown at any step (a read failed, a compare cut short): listed.
+// of its own: it carries a later tier's merge commits (staging or
+// production PRs merged back down), and every one of its own commits is
+// either one of those, a merge commit, or already in the history of one
+// of those. That is a fixed fact about the PR, proven with the ancestry
+// the workflow already asks (Contains, kept for good), never against a
+// branch that moves. A branch cut from production, one that merged
+// staging in to settle a conflict, a hotfix opened into staging first:
+// each carries work of its own in no later tier's merge, so it is a
+// change, and listed. Unknown at any step (a read failed): listed.
 type backmerger struct {
 	in             Inputs
-	stageMerges    map[string]bool // merge commits of staging PRs
-	prodMerges     map[string]bool // merge commits of production PRs
-	stageBackmerge map[int]bool    // staging PRs that are back-merges
+	merges         map[string]time.Time // later-tier merge commits: when merged
+	stageMerges    map[string]bool      // of those, staging PRs'
+	stageBackmerge map[int]bool         // staging PRs that are back-merges
 }
 
+// backmergeWork caps the own commits a back-merge is proven over (each
+// is an ancestry read, once): a PR with more stays listed.
+const backmergeWork = 100
+
+// backmergeOids caps the later-tier merge commits each own commit is
+// tried against, newest first (the newest usually holds the rest).
+const backmergeOids = 3
+
 func newBackmerger(in Inputs) *backmerger {
-	b := &backmerger{in: in, stageMerges: map[string]bool{}, prodMerges: map[string]bool{}, stageBackmerge: map[int]bool{}}
-	for _, p := range in.Set.ProdMerged {
-		if oid := mergeOid(p); oid != "" {
-			b.prodMerges[oid] = true
+	b := &backmerger{in: in, merges: map[string]time.Time{}, stageMerges: map[string]bool{}, stageBackmerge: map[int]bool{}}
+	note := func(p *model.PR) string {
+		oid := mergeOid(p)
+		if oid != "" && p.MergedAt != nil {
+			b.merges[oid] = *p.MergedAt
 		}
+		return oid
+	}
+	for _, p := range in.Set.ProdMerged {
+		note(p)
 	}
 	for _, p := range in.Set.StageMerged {
-		if oid := mergeOid(p); oid != "" {
+		if oid := note(p); oid != "" {
 			b.stageMerges[oid] = true
 		}
 	}
 	return b
 }
 
-// intoFirst reports p, a PR into the first tier, a back-merge.
+// intoFirst reports p, a PR into the first tier, a back-merge (of
+// staging or production).
 func (b *backmerger) intoFirst(p *model.PR) bool { return b.is(p, true) }
 
-// intoStage reports p, a PR into staging, a back-merge.
+// intoStage reports p, a PR into staging, a back-merge (of production).
 func (b *backmerger) intoStage(p *model.PR) bool { return b.is(p, false) }
 
 func (b *backmerger) is(p *model.PR, first bool) bool {
 	if b.in.BackmergeTitle != nil && b.in.BackmergeTitle.MatchString(p.Title) {
 		return true
 	}
-	if b.in.Commits == nil || b.in.NotOn == nil {
+	if b.in.Commits == nil || b.in.Contains == nil {
 		return false
 	}
 	own := b.in.Commits(p)
-	viaStage, viaProd := false, false
+	var later []string
 	for _, c := range own {
-		viaStage = viaStage || (first && b.stageMerges[c.SHA])
-		viaProd = viaProd || b.prodMerges[c.SHA]
-	}
-	if !viaStage && !viaProd {
-		return false
-	}
-	later := b.in.Prod
-	if viaStage {
-		later = b.in.Stage
-	}
-	notOn, ok := b.in.NotOn(later, p)
-	if !ok {
-		return false
-	}
-	for _, c := range own {
-		if notOn[c.SHA] && len(c.Parents) < 2 {
-			return false // work of its own, on no later tier: a change
+		if _, ok := b.merges[c.SHA]; ok && (first || !b.stageMerges[c.SHA]) {
+			later = append(later, c.SHA)
 		}
 	}
-	return true
+	if len(later) == 0 {
+		return false
+	}
+	sort.SliceStable(later, func(i, j int) bool { return b.merges[later[i]].After(b.merges[later[j]]) })
+	if len(later) > backmergeOids {
+		later = later[:backmergeOids]
+	}
+	var work []string
+	for _, c := range own {
+		if _, isLater := b.merges[c.SHA]; isLater || len(c.Parents) >= 2 {
+			continue
+		}
+		work = append(work, c.SHA)
+	}
+	if len(work) > backmergeWork {
+		return false
+	}
+	// every commit is asked, even after one fails: the prefetch's dry
+	// run (which answers "no" for what it hasn't read) then reads them
+	// all in one round, not one per round
+	proven := true
+	for _, sha := range work {
+		found := false
+		for _, oid := range later {
+			if b.in.Contains(sha, oid) {
+				found = true
+				break
+			}
+		}
+		proven = proven && found // false: work of its own, in no later tier's merge
+	}
+	return proven
 }
 
 // Locate places every change of one repo: each first-tier PR merged in
