@@ -67,7 +67,7 @@ var shots = []shot{
 	{Name: "night-2-now", Night: true, Steps: nightSteps(2), Expect: []string{"already approved by you", "release NOW (/release-now)"}},
 	{Name: "night-3-released", Night: true, Steps: nightSteps(3), Expect: []string{"web-portal#212 released", "next in lane: db-migrations#64"}},
 	{Name: "night-4-cancel", Night: true, Steps: nightSteps(4), Expect: []string{"16:09 slot on manifest #20", "/window-cancel rel:db-migrations#64"}},
-	{Name: "night-5-stg", Night: true, Steps: nightSteps(5), Expect: []string{"deploy waiting · D", "stg (migrate, run 801)"}},
+	{Name: "night-5-prod", Night: true, Steps: nightSteps(5), Expect: []string{"deploy waiting · D", "prod (migrate, run 801)"}},
 	{Name: "night-6-done", Night: true, Steps: nightSteps(6), Expect: []string{"approved 1 deployment of db-migrations#64 (prod)"}},
 	// the room: the window is open, so the dashboard is the view out of
 	// it; w steps out of the room to the plain dashboard
@@ -126,8 +126,8 @@ func nightSteps(n int) []string {
 		{"A"}, // release NOW only: the approval stands
 		{"enter", "bumped from the window for time; the fix is waiting", "enter", "y", "r"}, // posted; released, next in lane
 		{"G", "A", "enter", "next in the lane after the portal release", "enter", "y"},      // NOW on the migration; its slot
-		{"y", "D"},      // the slot cancelled; the migration waits on stg
-		{"y", "D", "y"}, // stg, then prod: released
+		{"y", "D"}, // the slot cancelled; the migration waits on prod, the one environment people approve
+		{"y"},      // prod approved: released
 	}
 	var out []string
 	for _, s := range steps[:n] {

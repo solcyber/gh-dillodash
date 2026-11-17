@@ -273,9 +273,9 @@ replays one offline; these shots are its steps.
 - **The countdown.** With `apply_budget_mins` set, a release in flight
   counts down on its row (`deploying · 23m left`, then `over by 4m`).
 
-![The migration merged and waits on stg: D on its row approves it](../shots/night-5-stg.png)
+![The migration merged and waits on prod, the one environment people approve: D on its row](../shots/night-5-prod.png)
 
-![stg, then prod: both releases out, with no keystroke outside dillodash](../shots/night-6-done.png)
+![prod approved: both releases out, with no keystroke outside dillodash](../shots/night-6-done.png)
 
 ## Live progress
 

@@ -66,8 +66,7 @@ const (
 	NightStart       = iota // web-portal#212 bumped (approved), db-migrations#64 scheduled
 	NightAppPosted          // release NOW posted on #212: dispatched
 	NightAppReleased        // #212 released and deployed; #64 is next in the lane
-	NightDBWaitsStg         // release NOW on #64: merged, its migration waits on stg
-	NightDBWaitsProd        // stg approved: it waits on prod
+	NightDBWaitsProd        // release NOW on #64: merged, its migration waits on prod, the one environment people approve
 	NightDBReleased         // prod approved: both released
 	nightStages
 )
@@ -150,9 +149,9 @@ func (n *Night) posted(c fake.Call) {
 	case c.Op == "comment" && strings.HasPrefix(c.Body, "/release-now") && c.Repo == nightApp && n.stage == NightStart:
 		next = NightAppPosted
 	case c.Op == "comment" && strings.HasPrefix(c.Body, "/release-now") && c.Repo == nightDB && n.stage == NightAppReleased:
-		next = NightDBWaitsStg
-	case c.Op == "approve_deployments" && (n.stage == NightDBWaitsStg || n.stage == NightDBWaitsProd):
-		next = n.stage + 1
+		next = NightDBWaitsProd
+	case c.Op == "approve_deployments" && n.stage == NightDBWaitsProd:
+		next = NightDBReleased
 	}
 	changed := next != n.stage
 	n.stage, n.reads = next, 0
@@ -230,19 +229,17 @@ func (n *Night) load(stage int) {
 		comments[app.Ident()] = append(comments[app.Ident()], outcome("Released", appSHA, -11*time.Minute-40*time.Second))
 		runs[appSHA] = []model.WorkflowRun{run(701, "deploy-web", "completed", "success", appSHA), run(702, "deploy-api", "completed", "success", appSHA)}
 	}
-	if stage >= NightDBWaitsStg {
+	if stage >= NightDBWaitsProd {
 		merged(db, dbSHA, 3*time.Minute)
 		db.Labels.Nodes = []model.Label{{Name: "window:pending"}}
 		comments[db.Ident()] = []model.Comment{nowCmd("next in the lane after the portal release", 0),
 			outcome("Release merged; the deploy is WAITING on an environment approval", dbSHA, 0)}
 		dbStatus = "cancelled by @" + Me
-		env := "stg"
-		if stage >= NightDBWaitsProd {
-			env = "prod"
-		}
+		// nothing below production waits for anyone; production's
+		// migration is reviewed by people only, so it is the viewer's
 		runs[dbSHA] = []model.WorkflowRun{run(801, "migrate", "waiting", "", dbSHA)}
-		waits[801] = []model.PendingDeployment{pending(env, true, "team:release-approvers")}
-		waits[801][0].Environment.ID = map[string]int64{"stg": 11, "prod": 12}[env]
+		waits[801] = []model.PendingDeployment{pending("prod", true, "team:release-approvers")}
+		waits[801][0].Environment.ID = 12
 	}
 	if stage >= NightDBReleased {
 		db.Labels.Nodes = []model.Label{{Name: "window:applied"}}
