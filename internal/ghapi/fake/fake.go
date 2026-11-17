@@ -314,6 +314,32 @@ func (f *Client) BranchRules(ctx context.Context, repo model.Repo, branch string
 	return model.BranchRules{Known: true}, nil
 }
 
+// ListRequestedOrgs serves the Requested PRs whose owner is one of orgs
+// and whose repo is not skipped.
+func (f *Client) ListRequestedOrgs(ctx context.Context, orgs []string, skip []model.Repo) (ghapi.ListResult, error) {
+	if err := f.fail("requested_orgs"); err != nil {
+		return ghapi.ListResult{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out ghapi.ListResult
+next:
+	for _, p := range f.Requested {
+		for _, r := range skip {
+			if p.Repo == r {
+				continue next
+			}
+		}
+		for _, o := range orgs {
+			if strings.EqualFold(p.Repo.Owner, o) {
+				out.PRs = append(out.PRs, p)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 // LastRate is Rate.
 func (f *Client) LastRate() *model.RateLimit {
 	f.mu.Lock()

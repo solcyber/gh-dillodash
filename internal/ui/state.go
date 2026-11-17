@@ -304,8 +304,8 @@ func New(ctx context.Context, o Options) *Model {
 		me:              o.Me,
 		repos:           repos,
 		requested:       o.Config.Reviews.Requested,
-		multi:           len(all) > 1,
-		multiOwner:      spansOwners(all),
+		multi:           o.Config.Reviews.Multi() || len(all) > 1,
+		multiOwner:      spansOwners(all) || orgsSpanOwners(all, o.Config.Reviews.RequestedOrgs),
 		host:            o.Host,
 		ctx:             ctx,
 		ver:             o.Version,
@@ -473,6 +473,11 @@ func (m *Model) repoOf(item any) model.Repo {
 // or "owner/a, other/b" across orgs.
 func (m *Model) reposText() string {
 	out := m.reviewReposText()
+	// with an organization read whole, counting the listed repos would
+	// undersell it: name the organization instead
+	if m.cfg != nil && len(m.cfg.Reviews.RequestedOrgs) > 0 {
+		return out + " +requests in " + strings.Join(m.cfg.Reviews.RequestedOrgs, ", ")
+	}
 	if n := len(m.requested); n > 0 {
 		out += fmt.Sprintf(" +%d requested", n)
 	}
@@ -542,6 +547,18 @@ func (m *Model) deployRefresh() time.Duration {
 }
 
 // spansOwners reports whether the repos belong to more than one owner.
+// orgsSpanOwners: a requested organization is not the first repo's
+// owner, so two PRs of one name and number can come from two owners and
+// every reference has to say which.
+func orgsSpanOwners(repos []model.Repo, orgs []string) bool {
+	for _, o := range orgs {
+		if len(repos) == 0 || !strings.EqualFold(o, repos[0].Owner) {
+			return len(repos) > 0
+		}
+	}
+	return false
+}
+
 func spansOwners(repos []model.Repo) bool {
 	for _, r := range repos[min(1, len(repos)):] {
 		if !strings.EqualFold(r.Owner, repos[0].Owner) {

@@ -1062,6 +1062,41 @@ func TestTriageOperations(t *testing.T) {
 	}
 }
 
+// TestListRequestedOrgs: the three searches per organization, the repo
+// taken from each result, the skipped repos and strays left out.
+func TestListRequestedOrgs(t *testing.T) {
+	s := newServer(t)
+	var got gqlReq
+	s.setGraphQL(func(w http.ResponseWriter, req gqlReq) {
+		got = req
+		w.Header().Set("Content-Type", "application/json")
+		withRepo := func(n int, repo string) string {
+			p := listPR(n, "a change")
+			return p[:len(p)-1] + `,"repository":{"nameWithOwner":"` + repo + `"}}`
+		}
+		io.WriteString(w, `{"data":{`+rateLimitJSON()+`,
+			"s0":{"issueCount":4,"nodes":[`+withRepo(7, "acme/never-listed")+`,`+withRepo(8, "Acme/Infra")+`,`+withRepo(9, "other/thing")+`,`+withRepo(7, "acme/never-listed")+`]},
+			"s1":{"issueCount":0,"nodes":[]},
+			"s2":{"issueCount":0,"nodes":[]}}}`)
+	})
+	out, err := s.client(t).ListRequestedOrgs(context.Background(), []string{"acme"}, []model.Repo{infra})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.PRs) != 1 || out.PRs[0].Number != 7 || out.PRs[0].Repo.String() != "acme/never-listed" {
+		t.Fatalf("one PR, in the repo the result names: %+v", out.PRs)
+	}
+	for i, whose := range []string{"review-requested:@me", "reviewed-by:@me", "author:@me"} {
+		want := "is:pr is:open archived:false " + whose + " org:acme"
+		if q := got.Variables[fmt.Sprintf("q%d", i)]; q != want {
+			t.Errorf("search %d: %q, want %q", i, q, want)
+		}
+	}
+	if out, err := s.client(t).ListRequestedOrgs(context.Background(), nil, nil); err != nil || len(out.PRs) != 0 {
+		t.Errorf("no orgs, no request: %+v %v", out, err)
+	}
+}
+
 func TestListRequested(t *testing.T) {
 	s := newServer(t)
 	var got gqlReq

@@ -50,6 +50,9 @@ func Run(ctx context.Context, w io.Writer, cfg *config.Config, version string, b
 	if len(cfg.Reviews.Requested) > 0 {
 		fmt.Fprintf(w, "requested: %s (only PRs that ask for your review, that you reviewed or opened)\n", joinRepos(cfg.Reviews.Requested))
 	}
+	if len(cfg.Reviews.RequestedOrgs) > 0 {
+		fmt.Fprintf(w, "requested orgs: %s (the same PRs, in any repo of the organization)\n", strings.Join(cfg.Reviews.RequestedOrgs, ", "))
+	}
 	gh, err := ghapi.New(ghapi.Options{Host: cfg.GitHub.Host, Version: version, Timeout: 15 * time.Second})
 	if err != nil {
 		fmt.Fprintf(w, "auth: FAILED: %s\n", err)
@@ -201,6 +204,18 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 			failed = true
 		} else {
 			fmt.Fprintf(w, "requested repos: %d open PR(s) ask for your review, have your review, or are yours\n", len(res.PRs))
+			for _, n := range res.Notes {
+				fmt.Fprintf(w, "  note: %s\n", n)
+			}
+		}
+	}
+	if len(cfg.Reviews.RequestedOrgs) > 0 {
+		res, err := gh.ListRequestedOrgs(ctx, cfg.Reviews.RequestedOrgs, cfg.Reviews.All())
+		if err != nil {
+			fmt.Fprintf(w, "requested orgs: FAILED: %s\n", err)
+			failed = true
+		} else {
+			fmt.Fprintf(w, "requested orgs: %d more open PR(s), in repos not listed above, ask for your review, have your review, or are yours\n", len(res.PRs))
 			for _, n := range res.Notes {
 				fmt.Fprintf(w, "  note: %s\n", n)
 			}
