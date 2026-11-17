@@ -28,6 +28,7 @@ type refreshResult struct {
 	hasFortress bool
 	detail      any
 	detailErr   string
+	keepCI      bool // CI met the rate limit: the last clusters stay
 	err         string
 	retryAt     time.Time
 }
@@ -151,14 +152,28 @@ func (m *Model) refresh(again bool) {
 			wantOpenTo = len(requested) > 0 && len(openFirst) > 0
 		)
 		lists.Add(1)
-		go func() { defer lists.Done(); results, err = gh.ListOpen(ctx, repos) }()
+		// each read on its own goroutine, out of reach of the worker's
+		// recover: a panic is that read's error
+		go func() {
+			defer lists.Done()
+			defer workflow.Recover(&err)
+			results, err = gh.ListOpen(ctx, repos)
+		}()
 		if len(requested) > 0 {
 			lists.Add(1)
-			go func() { defer lists.Done(); rq, rqErr = gh.ListRequested(ctx, requested) }()
+			go func() {
+				defer lists.Done()
+				defer workflow.Recover(&rqErr)
+				rq, rqErr = gh.ListRequested(ctx, requested)
+			}()
 		}
 		if wantOpenTo {
 			lists.Add(1)
-			go func() { defer lists.Done(); op, opErr = gh.ListOpenInto(ctx, openFirst, firstTier) }()
+			go func() {
+				defer lists.Done()
+				defer workflow.Recover(&opErr)
+				op, opErr = gh.ListOpenInto(ctx, openFirst, firstTier)
+			}()
 		}
 		lists.Wait()
 		if err != nil {
@@ -256,18 +271,26 @@ func (m *Model) refresh(again bool) {
 		// (releases): one cache, one set of live SHAs, one Actions call per SHA
 		ciPRs := append(append([]*model.PR{}, out.allPRs...), wf.CIPRs(states)...)
 		clusters, ciWarn, err := ci.Annotate(ctx, clock.Now(), ciPRs, gh.WorkflowRuns)
-		if err != nil {
-			out.err = err.Error()
-			if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
+		if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
+			// the list and the workflows are read: they land, the last
+			// CI stays on screen, and the next refresh waits for the
+			// window (failing the whole refresh here would leave the
+			// first load's keys held until the wall lifts)
+			out.keepCI = true
+			if e.RetryAt.After(out.retryAt) {
 				out.retryAt = e.RetryAt
 			}
+			warns = append([]string{"rate limited — CI paused until " + e.RetryAt.Local().Format("15:04:05")}, warns...)
+		} else if err != nil {
+			out.err = err.Error()
 			return
-		}
-		out.ci = map[model.Ident]model.CICluster{}
-		for i, pr := range ciPRs {
-			out.ci[pr.Ident()] = clusters[i]
-			if i >= len(out.allPRs) {
-				pr.Set(workflow.CIKey, clusters[i]) // a workflow's PR: its renderers read Ext
+		} else {
+			out.ci = map[model.Ident]model.CICluster{}
+			for i, pr := range ciPRs {
+				out.ci[pr.Ident()] = clusters[i]
+				if i >= len(out.allPRs) {
+					pr.Set(workflow.CIKey, clusters[i]) // a workflow's PR: its renderers read Ext
+				}
 			}
 		}
 		if ciWarn != "" {
@@ -276,9 +299,8 @@ func (m *Model) refresh(again bool) {
 		if wantFortress {
 			fort, err := gh.Fortress(ctx, repos)
 			if err != nil {
-				if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
-					out.err, out.retryAt = err.Error(), e.RetryAt
-					return
+				if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() && e.RetryAt.After(out.retryAt) {
+					out.retryAt = e.RetryAt // the map waits; the rest lands
 				}
 				warns = append(warns, "fortress: "+err.Error())
 			} else {
@@ -329,6 +351,12 @@ func (m *Model) fetchPRDetail(ctx context.Context, repo model.Repo, number int, 
 func (m *Model) applyRefresh(out *refreshResult) {
 	m.refreshing = false
 	if out.err != "" {
+		if m.listOnly {
+			// the first load's list is up but its workflows never landed:
+			// the keys that act stay held (a workflow may own them), and
+			// now say why and what brings them back
+			m.listOnlyErr = out.err
+		}
 		m.fail(out.err)
 		now := clock.Now()
 		until := m.backoff.Fail(now, out.retryAt)
@@ -348,11 +376,13 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		// the list-only pass already cascaded the rows in: this one only
 		// takes the baseline, so the workflow rows don't glint as new
 		m.sigQuiet = m.listOnly
-		m.listOnly = false
+		m.listOnly, m.listOnlyErr = false, ""
 		m.allPRs = out.allPRs
 		m.issues = out.issues
 		m.prunePending(out.started) // refilter lays the rest over the rows
-		m.ciClusters = out.ci
+		if !out.keepCI {
+			m.ciClusters = out.ci
+		}
 		seq := m.msgSeq
 		m.wf.ApplyAll(m, out.wfStates)
 		// a workflow that spoke while applying (a release landed, or

@@ -98,6 +98,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	}
 	workflow.PrimeHead(app, pr) // the head check runs while the question is read
 	if !app.Confirm(fmt.Sprintf("submit a GitHub review approval of %s as %s?", where, m.me)) {
+		workflow.ForgetHead(pr)
 		app.Notice("approve cancelled")
 		return
 	}

@@ -306,6 +306,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		}
 		workflow.PrimeHead(app, pr)
 		if !app.Confirm(note + fmt.Sprintf(" Submit a GitHub review approval as %s?", me)) {
+			workflow.ForgetHead(pr)
 			app.Notice("approve cancelled")
 			return true
 		}
