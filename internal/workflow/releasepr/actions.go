@@ -142,6 +142,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		}
 		workflow.PrimeHead(app, pr)
 		if !app.Confirm(q) {
+			workflow.ForgetHead(pr)
 			app.Notice("approve cancelled")
 			return true
 		}
