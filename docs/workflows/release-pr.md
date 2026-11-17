@@ -69,9 +69,13 @@ the day after it is enrolled, or at once after the cache file is deleted.
   The `stage:` line then starts its tail with `lease: carol 42m`, and
   `P` asks first before merging into that repo's staging branch as anyone
   else. With a lease and no release open yet, the counts read `since the
-  lease` and start when it began. An entry past its `until`, without a
-  holder or without a start is ignored. dillodash only reads the issue:
-  whatever takes the lease writes it, and nothing is blocked by it.
+  lease` and start when it began. An entry past its `until` is over, and
+  one with no `until` stands for a day. The holder is one short word (a
+  login or a session name). An entry with a bad stamp, repo or holder is
+  skipped with a warning and the others still count; of two entries for
+  one repo the later one stands; the last block in the body is the one
+  read. dillodash only reads the issue: whatever takes the lease writes
+  it, and nothing is blocked by it.
 - **A PR into production that is not a release** (its branch has neither
   prefix) is listed last in its repo, dimmed, with the chip `not a
   release`. It is not counted, and `A`, `M` and `D` refuse it. Set

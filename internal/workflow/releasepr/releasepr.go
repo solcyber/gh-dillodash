@@ -457,10 +457,14 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 	}
 	// who is running which release, when an issue says so: one small
 	// request, before the rows that show it
-	leases, leaseErr := w.leases(ctx, gh, now)
+	leases, leaseNotes, leaseErr := w.leases(ctx, gh, now)
 	if leaseErr != nil {
+		if ghapi.IsRateLimit(leaseErr) {
+			return st, warns, leaseErr // back off, as for the other reads
+		}
 		warns = append(warns, "release leases: "+leaseErr.Error())
 	}
+	warns = append(warns, leaseNotes...)
 	// every repo's stage row side by side (the compare and the tags):
 	// the loop below reads them in order
 	type stageRead struct {
@@ -488,7 +492,7 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			if err == nil && stage != nil {
 				func() {
 					defer workflow.Recover(&sinceErr)
-					stage.Lease = leases[repo]
+					stage.Lease = leases[strings.ToLower(repo.String())]
 					stage.Since, sinceErr = w.sinceCut(ctx, gh, repo, info.StageOid, info.PRs, stage.Lease, now)
 				}()
 			}

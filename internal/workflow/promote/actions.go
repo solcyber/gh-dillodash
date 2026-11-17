@@ -532,7 +532,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 // workflow read one; "" otherwise. The release workflow's state is
 // asked through an interface: the two workflows don't import each other.
 func leaseHolder(app workflow.App, repo model.Repo) string {
-	st, ok := app.State("release_pr").(interface {
+	st, ok := app.State(releaseName).(interface {
 		LeaseHolder(model.Repo) string
 	})
 	if !ok {
