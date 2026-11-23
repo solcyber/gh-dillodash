@@ -30,6 +30,7 @@ first_tier_reviews = "open"            # every open PR into dev joins the list
 | `first_tier_reviews` | `"requested"` | Which open PRs into the first tier the pull requests section lists for a repo in `requested_repos`. `"requested"` lists the PRs that ask for your review, that you reviewed, or that you opened, like any requested repo. `"open"` lists every open, non-draft PR into the first tier that a GitHub App (dependabot and the like) didn't open, whether or not a review was requested. An agent's account counts, even when `[bots]` lists it: its PRs are the ones that never ask for a review. A repo in `[reviews] repos` already lists every PR. |
 | `lookback_days` | `14` | How far back the merged PRs are read (1 to 90). A change merged into the first tier earlier than this and never promoted drops off the list. |
 | `go_tag_prefix`, `hold_tag_prefix` | `release_pr`'s, else `"go/"`, `"hold/"` | A staging unit's tags. |
+| `tag_by_hand` | `false` | `true` lets `P` tag an untagged staging unit `go` or `hold`, for repos where no automation tags the units once their staging deploy succeeds. Off, `P` only flips a unit's tag. |
 | `branch_prefix` | `"promote/"` | A promotion branch is `<prefix><number>-<staging tier>`, for example `promote/206-stage`. |
 | `approval_comment` | `"dillodash: approved {workflow} run {run} in {repo}"` | The comment GitHub records with a deployment `D` approves from a promote row. |
 | `backmerge_title` | unset | A regular expression, for example `"^Back-merge"`. A PR whose title matches is a back-merge and isn't listed, whatever its branch or commits. Back-merges made straight from the tier branch, or through a side branch, are found without it; set it when a team cherry-picks its back-merges. |
@@ -59,9 +60,11 @@ change, the changes furthest along first:
   - `→ stage #912 · ready`: an open promotion PR carries it. The suffix is
     GitHub's merge state: `ready`, `checks`, `behind`, `conflicts` or
     `draft`.
-  - `stage · untagged` (gold), `stage · hold`, `stage · go` (green), or
-    `stage · go · after #905`. The last means a unit ahead of it isn't
-    go, so the release cut stops there.
+  - `stage · awaiting deploy` or `stage · awaiting tag` (neutral: the
+    automation tags it), `stage · deploy failed`, `stage · hold`, `stage
+    · go` (green), or `stage · go · after #905`. The last means a unit
+    ahead of it isn't go, so the release cut stops there. With
+    `tag_by_hand = true` an untagged unit is `stage · untagged` (gold).
 - **The deploy chip.** The newest run of each workflow on the tier's
   commit, summed up: `dev ✓`, `stage deploying`, `stage waits · D`
   (gold), `stage ✗ <workflow>`, or nothing when no run is on the commit
@@ -111,7 +114,7 @@ a side branch, says so: `stage · go · after back-merge #307`.
 
 ## `P`
 
-![P on a staging unit: tag it go for the next release cut, or hold to keep it on stage](../shots/promote-tag.png)
+![P on a staging unit: flip its tag, go for the next release cut or hold to keep it on stage](../shots/promote-tag.png)
 
 `P` on a change moves it one tier on. What that means depends on where
 the change is.
@@ -120,8 +123,9 @@ the change is.
 |---|---|
 | `on dev` | **Opens the promotion PR.** It reads the change's merge commit and checks each file against the staging head. A file is taken when staging still has what the first tier had before the change, or already has the result. Any other file is a conflict, and `P` refuses with the files named: promote what the change depends on first, or promote it by hand. Nothing is merged three-way. After a confirm, `P` creates `promote/<N>-stage` from the staging head, commits the change there in one commit that GitHub signs (`createCommitOnBranch`, so a signed-commits rule holds), and opens the PR `Promote #N to stage: <title>`. If the commit fails, the branch is deleted again. If the branch already exists, `P` says so and writes nothing. |
 | `→ stage` | **Merges the promotion PR** once GitHub says it can (`ready`), with `[merge] methods` for the repo and the staging branch. A squash is given the subject `<PR title> (#N)`, so the unit and its tag are still found by number. `checks`, `behind`, `conflicts` and `draft` are said, not forced. The merge's push deploys staging. |
-| `stage · …` | **Tags the unit.** A menu offers `go/<N>` (release it with the next cut) and `hold/<N>` (keep it on stage), minus the current tag. Before a go, the confirm says what staging's deploy of the unit did, and asks again unless it passed. Then a tag message (prefilled), and a last confirm. A flip deletes the other tag first. The tag is annotated, on the unit's commit, with "Tagged with dillodash by <you>." in its message. |
-| `stage · go` | Tagging is still offered (`hold`). The menu's title says the last hop: the open release PR into production that carries it (`A` approves it there), the unit ahead of it that holds the cut, or the next release cut. |
+| `stage · awaiting deploy` | **Says how it gets its tag, and writes nothing.** Tagging is automatic: an automation tags a unit `go/<N>` once its staging deploy succeeds, or `hold/<N>` when its staging PR is labelled `hold`, and keeps an unapproved release PR on the go-tagged cut. The chip is neutral while the deploy runs (`awaiting deploy`) and once it passed (`awaiting tag`, the tag follows within minutes, after every unit ahead of it); `deploy failed` when it failed, which stops the cut there until the unit is fixed or its PR labelled `hold`. |
+| `stage · go`, `stage · hold` | **Flips the tag.** A menu offers the other tag alone: `hold/<N>` (keep it on stage) for a go unit, `go/<N>` (release it with the next cut) for a hold unit. Before a go, the confirm says what staging's deploy of the unit did, and asks again unless it passed. Then a tag message (prefilled), and a last confirm. The flip deletes the other tag first. The tag is annotated, on the unit's commit, with "Tagged with dillodash by <you>." in its message. If the tag is there already when it is written (the automation got there first), `P` re-reads the unit's tags and says which it carries, instead of failing. A go unit's menu title says the last hop: the unit ahead of it that holds the cut, the open release PR (approved: it waits for the next cut, since an approved release is not re-cut; not approved: the auto-cut follows), or the next cut. |
+| with `tag_by_hand = true` | **Tags the unit by hand**, for repos no automation tags: an untagged unit is `stage · untagged` (yours to act on), and `P` offers `go/<N>` and `hold/<N>` on it too. |
 
 Every `P` write passes `allowed_repos`, which refuses it outside the
 list, and a `[bots]` login makes nothing: dillodash acts only as a

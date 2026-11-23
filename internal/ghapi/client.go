@@ -240,6 +240,9 @@ type Client interface {
 	// FileContents reads one file from a repo (its default branch, or ref):
 	// the bytes and the blob sha.
 	FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error)
+	// DirFiles is the names of the files (not subdirectories) in one
+	// directory of a repo's default branch; a missing directory is a 404.
+	DirFiles(ctx context.Context, repo model.Repo, path string) ([]string, error)
 
 	Fortress(ctx context.Context, repos []model.Repo) (map[model.Repo]FortressData, error)
 	// ReleasePRs reads every repo's release PRs into prodBranch and the

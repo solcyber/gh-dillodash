@@ -69,10 +69,16 @@ func (w *Workflow) stripSegs(info *Night, night string, now time.Time, width int
 	}
 	var marks []slotMark
 	for _, it := range info.Items {
-		if it.StartUTC == "" {
+		// where it actually started, once dispatched; else its slot (an
+		// estimate, on an event-driven lane)
+		at := it.StartUTC
+		if it.DispatchedUTC != "" {
+			at = it.DispatchedUTC
+		}
+		if at == "" {
 			continue
 		}
-		t, err := clock.ParseUTC(it.StartUTC)
+		t, err := clock.ParseUTC(at)
 		if err != nil {
 			continue
 		}

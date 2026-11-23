@@ -25,6 +25,17 @@ const changesMinReason = 10
 // fires none at all.
 const refireAfter = 2 * time.Minute
 
+// refireWait is how long a posted command waits for its run before A
+// offers to fire the dispatch: refireAfter when dillodash fires it
+// itself, unpickedAfter in comment mode, where the app repo's workflow
+// fires it and a dispatch by hand is only the fallback.
+func (w *Workflow) refireWait() time.Duration {
+	if w.cfg.ReleaseNowCommentOnly {
+		return unpickedAfter
+	}
+	return refireAfter
+}
+
 // requestChanges posts a REQUEST_CHANGES review with a reason: the
 // conductor's freeze skips a release whose review decision is not
 // approved, so this takes it out of the window.
@@ -135,7 +146,7 @@ func (w *Workflow) unpicked(pr *model.PR, now time.Time) (id int64, at time.Time
 	if id == 0 {
 		return 0, time.Time{}, false
 	}
-	if t.notTold || now.Sub(at) >= refireAfter {
+	if t.notTold || now.Sub(at) >= w.refireWait() {
 		return id, at, true
 	}
 	return 0, time.Time{}, false

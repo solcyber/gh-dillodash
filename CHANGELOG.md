@@ -1,5 +1,57 @@
 # Changelog
 
+## [2.6.0] — unreleased
+
+**The release runs itself; the dashboard keeps up.** Units are tagged and
+release PRs cut by an automation, the release repos can tell the manifest
+repo themselves, and a window's app lane starts each release as soon as
+the one ahead is done. dillodash follows all three.
+
+### Added
+
+- **`release_now_dispatch = "comment"`.** Beside `true` and `false`: the
+  release repo's own `issue_comment` workflow fires the dispatch, so
+  release NOW posts the command only. The row is on its way from the post;
+  `A` offers the dispatch by hand, once, only after five minutes with no
+  run, and `M` opens at the same five minutes. `config check` looks in each
+  release repo for a workflow on `issue_comment` that mentions the
+  command, and reports without failing. `false` still turns the dispatch,
+  its refire and the `M` gate off.
+- **Go units waiting.** An approved release keeps its cut (a re-cut would
+  dismiss the approval), so its row says how many newer go units on
+  staging wait for the next one: `2 go units waiting`.
+- **The manifest's estimates.** An item's `T_s`, `settle_s`, `lane` and
+  `lane_order` drive the countdown, the settle meter and the lane's
+  order, falling back to `apply_budget_mins`, five minutes and the
+  config's `lane_order`. `A_s`, `R_s`, `samples` and the rest are read too;
+  a manifest without them reads as before.
+- **`## Deployed — verifying`.** The release job's word at deploy success
+  starts the settle meter, and with the run out of sight the release reads
+  *verifying*. It is never an outcome, and is believed only from a bot with
+  a link to a run of the manifest repo.
+
+### Changed
+
+- **Tagging is automatic.** `P` on a staging unit flips its tag (go to
+  hold, hold to go) and says tagging is automatic; on an untagged unit it
+  says how the tag will come and writes nothing. A tag that already
+  exists when `P` writes it (the automation got there first) is re-read
+  and named, not an error. An untagged unit's chip is neutral, `awaiting
+  deploy` or `awaiting tag`, or `deploy failed`. A go unit's note says the
+  auto-cut follows, or that it waits for the next cut when the release PR
+  is approved. `[workflows.promote] tag_by_hand = true` restores tagging
+  by hand for repos nothing tags.
+- **An estimated start is an estimate.** On an event-driven lane
+  (`start_is_estimate`) a release reads `scheduled est. 23:20`, `waiting
+  in lane` while the item ahead runs, never `slot passed` while it does,
+  and is followed from well before the estimate. Its clock starts at
+  `dispatched_utc`. `W`'s `/window-cancel` counts only a dispatched item
+  as started, as the conductor does, and the night's timeline marks an
+  item where it was dispatched.
+- **A lease holder may be an automation's name** (`app[bot]`,
+  `workflow:nightly-cut`, `nightly-cut/run-1234`), up to 64 characters,
+  still one word.
+
 ## [2.5.0] — 2026-11-17
 
 **Nothing you have to remember.** A review request shows in whichever

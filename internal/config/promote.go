@@ -35,6 +35,11 @@ type PromoteConfig struct {
 	// back-merge (not listed), whatever its branch or commits: for a
 	// team that cherry-picks its back-merges. nil: off.
 	BackmergeTitle *regexp.Regexp
+	// TagByHand lets P tag an untagged staging unit go or hold. Off (the
+	// default), the units are tagged by an automation once their staging
+	// deploy succeeds, and P only flips a unit's tag (go to hold, hold
+	// to go).
+	TagByHand bool
 }
 
 // FirstTierChoices are first_tier_reviews' values.
@@ -127,6 +132,7 @@ func (p *parser) parsePromote(wt *table, cfg *Config) {
 	if w.GoTagPrefix == w.HoldTagPrefix {
 		t.errf("hold_tag_prefix", "must differ from go_tag_prefix (%q)", w.GoTagPrefix)
 	}
+	w.TagByHand = t.boolean("tag_by_hand", w.TagByHand)
 	w.BranchPrefix = t.nonEmpty("branch_prefix", w.BranchPrefix)
 	w.ApprovalComment = t.nonEmpty("approval_comment", w.ApprovalComment)
 	for _, ph := range placeholderRE.FindAllString(w.ApprovalComment, -1) {

@@ -31,11 +31,13 @@ type Lease struct {
 var leaseRE = regexp.MustCompile(`(?s)<!-- release-lease:begin\s*(\{.*?\})\s*release-lease:end\s*-->`)
 
 // leaseRepoRE is a repo as an entry may name it, in full; leaseHolderRE
-// a holder: a login or a session name, short and on one line, because
-// it is printed in a question the reader answers.
+// a holder: a login, a session name, or an automation's ("app[bot]",
+// "workflow:nightly-cut", "nightly-cut/run-1234", "cut@host#2"), short
+// and on one line with no spaces, because it is printed in a question
+// the reader answers.
 var (
 	leaseRepoRE   = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-	leaseHolderRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\[\]-]{0,39}$`)
+	leaseHolderRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._\[\]:/@#+-]{0,63}$`)
 )
 
 // leaseSkew is how far ahead of this clock a lease may be stamped and

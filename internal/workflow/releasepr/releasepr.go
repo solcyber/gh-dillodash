@@ -92,6 +92,11 @@ type Units struct {
 	Hold      int
 	Untagged  int
 	Truncated bool // the compare page was shorter than ahead_by
+	// GoPastCut is the go units newer than the open release's head (the
+	// cut), when Cut is set and that head is on the staging chain: with
+	// the release approved they wait for the next cut.
+	GoPastCut int
+	Cut       string // the open release's head the count is against ("" = not counted)
 }
 
 // Stage is a repo's synthetic stage row.
@@ -487,7 +492,11 @@ func (w *Workflow) Refresh(ctx context.Context, gh ghapi.Client, _ []model.Repo,
 			var err, sinceErr error
 			func() {
 				defer workflow.Recover(&err)
-				stage, err = w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid)
+				cut := ""
+				if rel, _ := w.cutOf(info.PRs); rel != nil {
+					cut = rel.HeadRefOid
+				}
+				stage, err = w.stageSummary(ctx, gh, repo, info.ProdOid, info.StageOid, cut)
 			}()
 			if err == nil && stage != nil {
 				func() {

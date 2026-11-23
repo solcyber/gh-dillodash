@@ -297,6 +297,7 @@ func TestLocate(t *testing.T) {
 // tier commit, and draws the rows with their chips.
 func TestRefreshAndRows(t *testing.T) {
 	w, app := newWF(t)
+	w.cfg.TagByHand = true // the by-hand chip; auto_tag_test.go covers the automatic default
 	app.Fake.Promote = map[model.Repo]ghapi.PromoteSet{web: {
 		FirstMerged: []*model.PR{merged(201, "dev", "feat/a", "opt-out flag", "d201", 3)},
 		StageMerged: []*model.PR{merged(301, "stage", "promote/150-stage", "Promote #150 to stage", "s301", 2)},
@@ -594,6 +595,7 @@ func TestPromoteMergeNamesTheLeaseHolder(t *testing.T) {
 // that isn't green asks first.
 func TestPromoteTagsAUnit(t *testing.T) {
 	w, app := newWF(t)
+	w.cfg.TagByHand = true // by hand: P tags an untagged unit (auto_tag_test.go covers the automatic default)
 	unit := merged(301, "stage", "promote/202-stage", "Promote #202", "s301", 2)
 	c := &Change{Repo: web, Promo: unit, Where: OnStage, Runs: []model.WorkflowRun{{Name: "migrate", Status: "completed", Conclusion: "success"}}}
 	selectChange(app, c)

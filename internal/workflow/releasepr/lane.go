@@ -10,7 +10,36 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
-// ---- the lane: a manual night's order (lane_order) ----
+// ---- the lane: tonight's order ----
+//
+// A release on a manifest with its own lane and lane_order (the freeze
+// writes them) follows that order; any other release follows the
+// config's lane_order, a manual night's order by repo.
+
+// itemOf is the manifest item the tracker holds for pr, or nil.
+func (w *Workflow) itemOf(pr *model.PR) *workflow.ManifestItem {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if t, ok := w.progress[pr.Ident()]; ok && t.item != nil {
+		cp := *t.item
+		return &cp
+	}
+	return nil
+}
+
+// manifestLane is pr's manifest item when it has a place in a lane
+// (lane and lane_order), or nil.
+func (w *Workflow) manifestLane(pr *model.PR) *workflow.ManifestItem {
+	if it := w.itemOf(pr); it != nil && it.Lane != "" && it.LaneOrder > 0 {
+		return it
+	}
+	return nil
+}
+
+// sameLane reports two manifest items in one lane on one night.
+func sameLane(a, b *workflow.ManifestItem) bool {
+	return a != nil && b != nil && a.Night == b.Night && a.Lane == b.Lane
+}
 
 // laneIndex is repo's place in lane_order, or -1.
 func (w *Workflow) laneIndex(repo model.Repo) int {
@@ -26,7 +55,8 @@ func (w *Workflow) laneIndex(repo model.Repo) int {
 // (posted, running or deploying), or nil: the lane runs one release at
 // a time, so NOW on the next one waits for it.
 func (w *Workflow) laneBusy(pr *model.PR) *model.PR {
-	if w.laneIndex(pr.Repo) < 0 {
+	mine := w.manifestLane(pr)
+	if mine == nil && w.laneIndex(pr.Repo) < 0 {
 		return nil
 	}
 	st := w.Current()
@@ -34,7 +64,14 @@ func (w *Workflow) laneBusy(pr *model.PR) *model.PR {
 		return nil
 	}
 	for _, other := range st.Releases {
-		if other.Ident() == pr.Ident() || w.laneIndex(other.Repo) < 0 {
+		if other.Ident() == pr.Ident() {
+			continue
+		}
+		if mine != nil {
+			if !sameLane(mine, w.manifestLane(other)) {
+				continue
+			}
+		} else if w.laneIndex(other.Repo) < 0 {
 			continue
 		}
 		if w.inFlight(other) || deploying(other) {
@@ -57,23 +94,46 @@ func deploying(pr *model.PR) bool {
 // nextInLane is the open, approved, non-draft release of the first repo
 // after pr's in lane_order that has one, or nil.
 func (w *Workflow) nextInLane(pr *model.PR) *model.PR {
-	i := w.laneIndex(pr.Repo)
 	st := w.Current()
-	if i < 0 || st == nil {
+	if st == nil {
+		return nil
+	}
+	if mine := w.manifestLane(pr); mine != nil {
+		// the manifest's order: the next place after pr's in its lane
+		var best *model.PR
+		bestOrder := 0
+		for _, cand := range st.Releases {
+			it := w.manifestLane(cand)
+			if cand.Ident() == pr.Ident() || !sameLane(mine, it) || it.LaneOrder <= mine.LaneOrder || !w.releasable(cand) {
+				continue
+			}
+			if best == nil || it.LaneOrder < bestOrder {
+				best, bestOrder = cand, it.LaneOrder
+			}
+		}
+		return best
+	}
+	i := w.laneIndex(pr.Repo)
+	if i < 0 {
 		return nil
 	}
 	for _, name := range w.cfg.LaneOrder[i+1:] {
 		for _, cand := range st.Releases {
-			if !strings.EqualFold(cand.Repo.Name, name) || cand.IsDraft || (cand.State != "" && cand.State != "OPEN") {
-				continue
+			if strings.EqualFold(cand.Repo.Name, name) && w.releasable(cand) {
+				return cand
 			}
-			if w.Kind(cand) == KindOther || !hasApproval(cand) || w.inFlight(cand) {
-				continue
-			}
-			return cand
 		}
 	}
 	return nil
+}
+
+// releasable reports an open, approved, non-draft release not already
+// on its way: one NOW can send.
+func (w *Workflow) releasable(cand *model.PR) bool {
+	if cand.IsDraft || (cand.State != "" && cand.State != "OPEN") {
+		return false
+	}
+	return w.Kind(cand) != KindOther && hasApproval(cand) && !w.inFlight(cand)
 }
 
 // laneNote is what a released release's message adds: the next release

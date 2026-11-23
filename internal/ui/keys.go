@@ -502,7 +502,7 @@ func KeysDoc() string {
 	}
 	b.WriteString("| list | `A` | with `release_pr`, on a release's row: what `A` does in its detail — release NOW alone on a release you approved (or one the window bumped), else approve with the queue-or-now choice |\n")
 	b.WriteString("| list, detail | `W` | with `maintenance_window`: `/attend`, `/release` or `/window-cancel` on the night's manifest issue, or open it |\n")
-	b.WriteString("| list | `P` | with `promote`, on a change's row: move it one tier on — open its promotion PR from the first tier, merge the open promotion PR, or tag the staging unit go or hold |\n")
+	b.WriteString("| list | `P` | with `promote`, on a change's row: move it one tier on — open its promotion PR from the first tier, merge the open promotion PR, or flip the staging unit's go or hold tag (tagging is automatic unless `tag_by_hand`) |\n")
 	b.WriteString("| prompts | enter / esc | submit / cancel (Ctrl-C and Ctrl-G cancel too). Ctrl-U, Ctrl-W, Ctrl-K, Ctrl-A/E, arrows, Home/End edit the line; a paste inserts as one edit. A prompt with a minimum length (a reason) counts down and refuses enter until it is met |\n")
 	b.WriteString("| menus | `j`/`k` + enter, `1`–`9` | choose; esc, `q`, Ctrl-C cancel |\n")
 	b.WriteString("| confirms | `y` | anything else is no |\n")

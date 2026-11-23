@@ -168,7 +168,22 @@ window-manifest:end -->
 Phases are `open`, `frozen`, `running`, `ran`, `skipped`, `closed`. Item
 ids are `#N` for a PR in the manifest repo and `rel:<repo>#<N>` for a
 release from another repo. `head_sha`, when present, is the head the
-freeze froze. When two manifests exist for a night, the lowest issue
+freeze froze.
+
+An item may also carry the freeze's estimate, every field optional (an
+older manifest has none, and a value that is not a number reads as
+unsaid): `T_s` (the whole item, in seconds), `A_s` (the apply), `R_s`
+(the revert reserve), `settle_s` (the verify step's settle before the
+alarms are read), `lane` and `lane_order` (its 1-based place among the
+lane's scheduled items), and `samples` (where the apply estimate came
+from). On an event-driven lane an item starts as soon as the one ahead of
+it is final, so its `start_utc` is an estimate (`"start_is_estimate":
+true`), its status reads `waiting for <id of the item ahead>` while it
+waits, and `dispatched_utc` records when it was sent. dillodash then shows
+`scheduled est. 16:04`, moves the item's mark on the night's timeline to
+its dispatch, and treats only a dispatched item as started: `W`'s
+`/window-cancel` is offered for an item that waits, whatever the clock
+says, as the conductor itself decides. When two manifests exist for a night, the lowest issue
 number wins. A conductor comment carrying `missed_freeze_marker` marks a
 night the freeze never ran.
 
