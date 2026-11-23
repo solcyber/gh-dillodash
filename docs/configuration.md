@@ -166,7 +166,8 @@ methods` names `owner/name` repos with `merge`, `squash` or `rebase`.
 And as warnings: `maintenance_window.manifest_repo` defaults to the first
 review repo when there are several; `release_pr.progress_poll_secs` has a
 floor of 10 (0 turns it off), and so does `waiting_runs.poll_secs`; an `apply_run_match` without `{number}`
-would match every release of a repo; `release_now_dispatch`,
+would match every release of a repo; `release_now_dispatch` (true,
+false or `"comment"`; anything else is an error),
 `apply_workflow` and `progress_poll_secs` do nothing without
 `maintenance_window`, whose `manifest_repo` runs the release.
 

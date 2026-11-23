@@ -184,6 +184,38 @@ func (t *table) boolean(key string, def bool) bool {
 	return b
 }
 
+// ReleaseNowCommentMode is the release_now_dispatch value that leaves
+// the dispatch to the app repo's own workflow.
+const ReleaseNowCommentMode = "comment"
+
+// dispatchMode reads release_now_dispatch: true (dillodash fires the
+// dispatch), false (nobody does: no refire, no M gate), or "comment"
+// (the app repo's workflow fires it; dillodash posts the comment only).
+// The strings "true" and "false" read as the booleans.
+func (t *table) dispatchMode(key string, def, defComment bool) (dispatch, commentOnly bool) {
+	v, ok := t.get(key)
+	if !ok {
+		return def, defComment
+	}
+	switch x := v.(type) {
+	case bool:
+		return x, false
+	case string:
+		switch strings.ToLower(strings.TrimSpace(x)) {
+		case ReleaseNowCommentMode:
+			return true, true
+		case "true":
+			return true, false
+		case "false":
+			return false, false
+		}
+		t.errf(key, "%q is not one of true, false, %q", x, ReleaseNowCommentMode)
+		return def, defComment
+	}
+	t.errf(key, "expected true, false or %q, got %s", ReleaseNowCommentMode, typeName(v))
+	return def, defComment
+}
+
 // strs reads an array of strings; absent returns a copy of def.
 func (t *table) strs(key string, def []string) (out []string, present bool) {
 	v, ok := t.get(key)
@@ -843,7 +875,7 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 	w.ListOtherPRs = t.boolean("list_other_prs", w.ListOtherPRs)
 	w.ReleaseNowCommand = t.nonEmpty("release_now_command", w.ReleaseNowCommand)
 	w.ReleaseNowMinReason = t.int("release_now_min_reason", w.ReleaseNowMinReason)
-	w.ReleaseNowDispatch = t.boolean("release_now_dispatch", w.ReleaseNowDispatch)
+	w.ReleaseNowDispatch, w.ReleaseNowCommentOnly = t.dispatchMode("release_now_dispatch", w.ReleaseNowDispatch, w.ReleaseNowCommentOnly)
 	w.ReleaseNowDispatchEvent = t.nonEmpty("release_now_dispatch_event", w.ReleaseNowDispatchEvent)
 	w.ApplyWorkflow = strings.TrimSpace(t.str("apply_workflow", w.ApplyWorkflow))
 	if strings.Contains(w.ApplyWorkflow, "/") {

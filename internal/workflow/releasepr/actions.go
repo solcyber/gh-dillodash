@@ -279,6 +279,16 @@ func (w *Workflow) postNow(app workflow.App, pr *model.PR, body, failLead, toldL
 		return
 	}
 	w.noteComment(pr, app.Now(), id)
+	// Comment mode: the app repo's own workflow sees the comment and
+	// tells the manifest repo. The release is on its way from here, and
+	// A fires the dispatch by hand only when no run shows in time.
+	if target := w.manifestRepo(app); w.cfg.ReleaseNowCommentOnly && !target.IsZero() {
+		w.notePosted(pr, app.Now(), true)
+		app.OK(fmt.Sprintf("%s posted %s as %s — the repo's own workflow tells %s", okLead, cmd, me, target))
+		app.Launch()
+		w.offerSlotCancel(app, pr)
+		return
+	}
 	// The comment lives in the release repo, whose events never reach
 	// the manifest repo's workflows, so tell them: a repository_dispatch
 	// naming the comment. The receiving side re-derives everything from
@@ -335,6 +345,9 @@ func (w *Workflow) offerSlotCancel(app workflow.App, pr *model.PR) {
 	slot := "its slot"
 	if t, err := time.Parse(time.RFC3339, it.StartUTC); err == nil {
 		slot = "its " + w.win.Local().In(t).Format("15:04") + " slot"
+		if it.StartIsEstimate {
+			slot = "a place in the lane (est. " + w.win.Local().In(t).Format("15:04") + ")"
+		}
 	}
 	repo := w.manifestRepo(app)
 	if repo.IsZero() {
@@ -459,7 +472,11 @@ func (w *Workflow) MergeConfirm(app workflow.App, pr *model.PR) (ok bool, handle
 	// command and tells the manifest repo; merging by hand is the last
 	// resort, for when that dispatch can't fire.
 	if w.cfg.ReleaseNowDispatch && !w.manifestRepo(app).IsZero() && !w.dispatchFailed(pr) {
-		app.Notice(fmt.Sprintf("%s: use %s — release NOW posts %s and tells %s; %s merges by hand only when that dispatch can't fire",
+		how := "posts %s and tells %s; %s merges by hand only when that dispatch can't fire"
+		if w.cfg.ReleaseNowCommentOnly {
+			how = "posts %s, which tells %s; %s merges by hand only when no run picks it up in five minutes"
+		}
+		app.Notice(fmt.Sprintf("%s: use %s — release NOW "+how,
 			wh, keymap.S(keymap.Approve), w.cfg.ReleaseNowCommand, w.manifestRepo(app), keymap.S(keymap.Merge)))
 		return false, true
 	}

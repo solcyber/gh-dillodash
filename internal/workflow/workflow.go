@@ -396,6 +396,21 @@ type ManifestItem struct {
 	Issue                                    int
 	// HeadSHA is the head the freeze froze ("" = the manifest does not say).
 	HeadSHA string
+	// TSecs is the item's whole estimate and SettleSecs its verify
+	// settle, in seconds (0 = the manifest does not say).
+	TSecs, SettleSecs int
+	// Lane and LaneOrder: the item's lane and its 1-based place among
+	// the lane's scheduled items (0 = not said).
+	Lane      string
+	LaneOrder int
+	// StartIsEstimate: StartUTC is an estimate, not a fixed slot; the
+	// item starts as soon as the one ahead in its lane is final.
+	StartIsEstimate bool
+	// DispatchedUTC is when the conductor sent it ("" = not yet).
+	DispatchedUTC string
+	// Ahead is the id of the item ahead of it in its lane that is not
+	// done yet ("" = none, or not known).
+	Ahead string
 }
 
 // HeadMoved reports a frozen head that is not the current one. Either

@@ -75,6 +75,24 @@ type Item struct {
 	// HeadSHA is the head the freeze froze for a release: a release whose
 	// PR head moved since (a re-cut) does not run that night.
 	HeadSHA string
+	// The estimate the freeze wrote, in seconds (0 = the manifest does
+	// not say): T the whole item, A the apply, R the revert reserve,
+	// Settle the verify step's settle before the alarms are read.
+	TSecs, ASecs, RSecs, SettleSecs int
+	// Lane and LaneOrder are the item's lane and its 1-based place among
+	// the lane's scheduled items (0 = not said).
+	Lane      string
+	LaneOrder int
+	// Samples says where the apply estimate came from ("registry",
+	// "live(n=10)").
+	Samples string
+	// StartIsEstimate: StartUTC is the latest the item should start if
+	// everything ahead runs to its estimate, not a fixed slot; it starts
+	// as soon as the item ahead in its lane is final.
+	StartIsEstimate bool
+	// DispatchedUTC is when the conductor sent it on its way ("" = not
+	// yet, or a manifest that does not say).
+	DispatchedUTC string
 }
 
 // Manifest is a night's manifest as its issue carries it.
@@ -163,6 +181,42 @@ func (o obj) num(k string) int {
 	return 0
 }
 
+// secs reads a duration in seconds that may be written as an integer, a
+// float (rounded up) or a numeric string; anything else, or a negative
+// value, reads as 0 (not said).
+func (o obj) secs(k string) int {
+	raw, ok := o[k]
+	if !ok {
+		return 0
+	}
+	var f float64
+	if json.Unmarshal(raw, &f) != nil {
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			return 0
+		}
+		v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+		if err != nil {
+			return 0
+		}
+		f = v
+	}
+	if math.IsNaN(f) || math.IsInf(f, 0) || f <= 0 || f > 1e7 {
+		return 0
+	}
+	return int(math.Ceil(f))
+}
+
+// flag reads a boolean written as true/false or as "true"/"false";
+// anything else is false.
+func (o obj) flag(k string) bool {
+	if b := o.boolp(k); b != nil {
+		return *b
+	}
+	b, _ := strconv.ParseBool(strings.TrimSpace(o.str(k)))
+	return b
+}
+
 func (o obj) strs(k string) []string {
 	var items []json.RawMessage
 	raw, ok := o[k]
@@ -205,7 +259,11 @@ func parseItem(o obj) Item {
 	return Item{ID: o.str("id"), Kind: o.str("kind"), Repo: o.str("repo"), PR: o.num("pr"),
 		Flag: o.str("flag"), StartUTC: o.str("start_utc"), ReleaseByUTC: o.str("release_by_utc"),
 		Status: o.str("status"), Revertible: o.boolp("revertible"), Reasons: o.strs("reasons"), Final: o.boolp("final"),
-		HeadSHA: o.str("head_sha")}
+		HeadSHA: o.str("head_sha"),
+		// the estimate fields (additive: an older manifest has none)
+		TSecs: o.secs("T_s"), ASecs: o.secs("A_s"), RSecs: o.secs("R_s"), SettleSecs: o.secs("settle_s"),
+		Lane: o.str("lane"), LaneOrder: o.secs("lane_order"), Samples: o.str("samples"),
+		StartIsEstimate: o.flag("start_is_estimate"), DispatchedUTC: o.str("dispatched_utc")}
 }
 
 // ---- markers ----
@@ -450,11 +508,67 @@ func (s *State) ManifestItem(repo string, number int) (workflow.ManifestItem, bo
 		return workflow.ManifestItem{}, false
 	}
 	m := s.Manifests[n]
-	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Flag: it.Flag, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue, HeadSHA: it.HeadSHA}
+	out := workflow.ManifestItem{ID: it.ID, Status: it.Status, Flag: it.Flag, Night: m.Night, Phase: m.Phase, StartUTC: it.StartUTC, Final: it.Final, Issue: m.Issue, HeadSHA: it.HeadSHA,
+		TSecs: it.TSecs, SettleSecs: it.SettleSecs, Lane: it.Lane, LaneOrder: it.LaneOrder,
+		StartIsEstimate: it.StartIsEstimate, DispatchedUTC: it.DispatchedUTC, Ahead: AheadInLane(m, it)}
 	if out.Night == "" {
 		out.Night = n
 	}
 	return out, true
+}
+
+// ItemDone reports a manifest item the conductor is finished with: it
+// says final, or its status is an ending (verified, failed, rolled...).
+func ItemDone(it Item) bool {
+	if it.Final != nil {
+		return *it.Final
+	}
+	s := strings.ToLower(strings.TrimSpace(it.Status))
+	for _, p := range []string{"verified", "failed", "pending", "refused", "cancelled", "rolled", "bumped", "unfinished", "run ", "reverted"} {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// AheadInLane is the id of the item ahead of it in its lane that is not
+// done yet, or "": the nearest one before it by lane_order (by start
+// when the manifest gives no order). The conductor's own "waiting for
+// <id>" status names it first. An item with no lane has none ahead.
+func AheadInLane(m *Manifest, it *Item) string {
+	if m == nil || it == nil {
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(it.Status, "waiting for "); ok && strings.HasPrefix(rest, "rel:") {
+		id := strings.Fields(rest)[0]
+		for _, x := range m.Items {
+			if x.ID == id && !ItemDone(x) {
+				return id
+			}
+		}
+	}
+	if it.Lane == "" {
+		return ""
+	}
+	before := func(x Item) bool {
+		if it.LaneOrder > 0 && x.LaneOrder > 0 {
+			return x.LaneOrder < it.LaneOrder
+		}
+		return x.StartUTC != "" && it.StartUTC != "" && x.StartUTC < it.StartUTC
+	}
+	best := ""
+	bestKey := ""
+	for _, x := range m.Items {
+		if x.ID == it.ID || x.Lane != it.Lane || x.Flag != "scheduled" || !before(x) || ItemDone(x) {
+			continue
+		}
+		key := fmt.Sprintf("%06d %s", x.LaneOrder, x.StartUTC)
+		if best == "" || key > bestKey {
+			best, bestKey = x.ID, key
+		}
+	}
+	return best
 }
 
 // RecutStatus is a scheduled release whose head moved after the freeze:
@@ -548,6 +662,11 @@ func Place(pr *model.PR, manifests map[string]*Manifest, now time.Time, cfg *con
 				return Placement{}, err
 			}
 			status = "scheduled " + local.TAt(t)
+			if item.StartIsEstimate {
+				// the latest it should start; it starts once the one
+				// ahead in its lane is final
+				status = "scheduled est. " + local.TAt(t)
+			}
 		}
 		if ReCut(item, pr) && (item.Status == "" || item.Status == "scheduled" || waitingRE.MatchString(item.Status)) {
 			status = RecutStatus

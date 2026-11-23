@@ -16,6 +16,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
+	"github.com/solcyber/gh-dillodash/internal/workflow/releasepr"
 )
 
 // Client is what the report needs of GitHub: the API plus where the
@@ -293,7 +294,10 @@ func releaseReach(cfg *config.Config) string {
 		return "; no dispatch or live progress without maintenance_window"
 	}
 	var s string
-	if r.ReleaseNowDispatch {
+	switch {
+	case r.ReleaseNowCommentOnly:
+		s += fmt.Sprintf("; %s is posted only — the release repos' own workflow tells %s", r.ReleaseNowCommand, m.ManifestRepo)
+	case r.ReleaseNowDispatch:
 		s += fmt.Sprintf("; %s is dispatched to %s", r.ReleaseNowCommand, m.ManifestRepo)
 	}
 	if r.ApplyWorkflow != "" && r.ProgressPollSecs > 0 {
@@ -315,7 +319,9 @@ func manifestReach(ctx context.Context, w io.Writer, cfg *config.Config, gh Clie
 		return
 	}
 	target := m.ManifestRepo
-	if r.ReleaseNowDispatch {
+	if r.ReleaseNowCommentOnly {
+		commentReach(ctx, w, cfg, gh)
+	} else if r.ReleaseNowDispatch {
 		res, err := gh.ListOpen(ctx, []model.Repo{target})
 		if err == nil {
 			err = res[target].Err
@@ -339,6 +345,66 @@ func manifestReach(ctx context.Context, w io.Writer, cfg *config.Config, gh Clie
 			fmt.Fprintf(w, "    %s runs in %s: readable\n", r.ApplyWorkflow, target)
 		}
 	}
+}
+
+// workflowDir is where a repo's Actions workflows live.
+const workflowDir = ".github/workflows"
+
+// commentReach probes comment mode (release_now_dispatch = "comment"):
+// each release repo needs a workflow of its own, triggered by
+// issue_comment, that tells the manifest repo about the command. It
+// reports and never fails: without one, A fires the dispatch by hand
+// once no run shows.
+func commentReach(ctx context.Context, w io.Writer, cfg *config.Config, gh Client) {
+	r := cfg.ReleasePR
+	repos := r.Repos
+	if r.Auto {
+		cached, ok := releasepr.LoadCache(r.Cache, r.Org, 365*24*time.Hour, clock.Now())
+		if !ok {
+			fmt.Fprintf(w, "    comment workflows: not checked — the release repos are discovered by the dashboard and none are cached yet\n")
+			return
+		}
+		repos = cached
+	}
+	word := strings.TrimPrefix(strings.TrimSpace(r.ReleaseNowCommand), "/")
+	for _, repo := range repos {
+		file, err := commentWorkflow(ctx, gh, repo, word)
+		switch {
+		case err != nil:
+			fmt.Fprintf(w, "    comment workflow in %s: not readable (%s) — A fires the dispatch by hand when no run shows\n", repo, verbose(err))
+		case file == "":
+			fmt.Fprintf(w, "    comment workflow in %s: NONE (no workflow on issue_comment mentions %s) — A fires the dispatch by hand when no run shows\n", repo, word)
+		default:
+			fmt.Fprintf(w, "    comment workflow in %s: %s\n", repo, file)
+		}
+	}
+}
+
+// commentWorkflow is the first workflow file in repo that runs on
+// issue_comment and mentions word, or "" when none does. A repo with no
+// workflow directory has none.
+func commentWorkflow(ctx context.Context, gh Client, repo model.Repo, word string) (string, error) {
+	names, err := gh.DirFiles(ctx, repo, workflowDir)
+	if err != nil {
+		if e, ok := ghapi.AsError(err); ok && e.Status == 404 {
+			return "", nil
+		}
+		return "", err
+	}
+	for _, name := range names {
+		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+		data, _, err := gh.FileContents(ctx, repo, workflowDir+"/"+name, "")
+		if err != nil {
+			return "", err
+		}
+		body := string(data)
+		if strings.Contains(body, "issue_comment") && (word == "" || strings.Contains(body, word)) {
+			return name, nil
+		}
+	}
+	return "", nil
 }
 
 func joinRepos(repos []model.Repo) string {

@@ -52,7 +52,7 @@ var shots = []shot{
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 2.05}}}},
 	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j"}, Expect: []string{"waiting approvals", "approve: prod"}},
 	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
-	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "P"}, Expect: []string{"#910 on stage", "go/910"}},
+	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "P"}, Expect: []string{"#907 on stage", "go/907", "P only flips it"}},
 	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy #412"}},
 	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},

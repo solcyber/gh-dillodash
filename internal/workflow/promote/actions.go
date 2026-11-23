@@ -347,12 +347,21 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		app.Fail(fmt.Sprintf("GitHub did not merge #%d: %s", n, text.OrQ(res.Message)))
 		return
 	}
-	app.OK(fmt.Sprintf("merged #%d into %s — once its deploy is green, P tags it go", n, w.cfg.Stage()))
+	if w.cfg.TagByHand {
+		app.OK(fmt.Sprintf("merged #%d into %s — once its deploy is green, P tags it go", n, w.cfg.Stage()))
+	} else {
+		app.OK(fmt.Sprintf("merged #%d into %s — it is tagged go once its deploy succeeds", n, w.cfg.Stage()))
+	}
 	app.Celebrate(false)
 	app.Refresh(true)
 }
 
-// ---- on staging: tag the unit go or hold ----
+// ---- on staging: flip the unit's go or hold tag ----
+
+// autoTagNote is what P says about tagging when units are tagged by an
+// automation: go once the staging deploy succeeds, hold for a staging
+// PR labelled hold.
+const autoTagNote = "tagging is automatic: go once its deploy succeeds, hold when its PR is labelled hold"
 
 func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 	gh, ctx := app.GH(), app.Context()
@@ -365,6 +374,18 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 	d, run := deployOf(c.Runs)
 	deploy := map[Deploy]string{DeployOK: "its deploy passed", DeployRunning: "its deploy is running",
 		DeployWaiting: "its deploy waits on an environment", DeployFailed: "its deploy failed (" + run + ")", DeployNone: "no deploy run on it"}[d]
+	if c.Tag == "" && !w.cfg.TagByHand {
+		// nothing to flip: the automation tags it
+		why := "it is tagged once its deploy succeeds"
+		switch d {
+		case DeployFailed:
+			why = "its deploy failed (" + run + "), so the cut stops here; fix it on " + w.cfg.First() + ", or label its PR hold"
+		case DeployOK:
+			why = "its deploy passed; the tag follows within minutes, once every unit ahead of it is tagged"
+		}
+		app.Notice(fmt.Sprintf("#%d on %s is untagged — %s; %s", n, w.cfg.Stage(), autoTagNote, why))
+		return
+	}
 	type opt struct{ kind, prefix, other, label string }
 	var opts []opt
 	if c.Tag != "go" {
@@ -384,6 +405,9 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 	head := fmt.Sprintf("#%d on %s: %s · %s", n, w.cfg.Stage(), tag, deploy)
 	if c.Tag == "go" {
 		head += " · " + w.releaseNote(app, c)
+	}
+	if !w.cfg.TagByHand {
+		head += " · " + autoTagNote + "; P only flips it"
 	}
 	i := app.Pick(head, labels)
 	if i < 0 || i >= len(opts) {
@@ -427,6 +451,14 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 		}
 	}
 	if err := gh.CreateTag(ctx, c.Repo, name, msg, sha); err != nil {
+		var e *ghapi.Error
+		if errors.As(err, &e) && e.Status == 422 {
+			// the tag is there already: the automation (or someone
+			// else) tagged the unit meanwhile; say what it is now
+			app.Notice(fmt.Sprintf("%s already exists — %s", name, w.currentTag(app, c)))
+			app.Refresh(true)
+			return
+		}
 		app.Fail(fmt.Sprintf("tagging %s failed: %s", name, err))
 		return
 	}
@@ -439,8 +471,36 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 	app.Refresh(true)
 }
 
-// releaseNote is the last hop for a go unit: the open release PR that
-// carries it, the unit ahead of it holding the cut, or the next cut.
+// currentTag re-reads a unit's tags after a tag write found one there
+// already: "#N is tagged hold/N now", or what could not be read.
+func (w *Workflow) currentTag(app workflow.App, c *Change) string {
+	n := c.Promo.Number
+	var found []string
+	for _, prefix := range []string{w.cfg.GoTagPrefix, w.cfg.HoldTagPrefix} {
+		tags, err := app.GH().TagRefs(app.Context(), c.Repo, prefix)
+		if err != nil {
+			return fmt.Sprintf("couldn't re-read #%d's tags (%s); r refreshes", n, err)
+		}
+		want := fmt.Sprintf("%s%d", prefix, n)
+		for _, t := range tags {
+			if t == want {
+				found = append(found, t)
+			}
+		}
+	}
+	switch len(found) {
+	case 0:
+		return fmt.Sprintf("#%d has no go or hold tag now; r refreshes", n)
+	case 1:
+		return fmt.Sprintf("#%d is tagged %s now; nothing changed", n, found[0])
+	}
+	return fmt.Sprintf("#%d carries both %s now; one of them has to go", n, strings.Join(found, " and "))
+}
+
+// releaseNote is the last hop for a go unit: the unit ahead of it
+// holding the cut, the open release PR (an approved one keeps its cut,
+// so the unit waits for the next; an unapproved one is re-cut to carry
+// it), or the next cut.
 func (w *Workflow) releaseNote(app workflow.App, c *Change) string {
 	if c.BlockedBy > 0 {
 		return fmt.Sprintf("it releases once %s ahead of it is go", c.blocker())
@@ -454,10 +514,19 @@ func (w *Workflow) releaseNote(app workflow.App, c *Change) string {
 		}
 		sort.Slice(open, func(i, j int) bool { return open[i].Number < open[j].Number })
 		if len(open) > 0 {
-			return fmt.Sprintf("release PR #%d into %s is open (%s approves it there)", open[0].Number, w.cfg.Prod(), keymap.S(keymap.Approve))
+			if w.cfg.TagByHand {
+				return fmt.Sprintf("release PR #%d into %s is open (%s approves it there)", open[0].Number, w.cfg.Prod(), keymap.S(keymap.Approve))
+			}
+			if open[0].ReviewDecision == "APPROVED" {
+				return fmt.Sprintf("release PR #%d into %s is approved, so it waits for the next cut", open[0].Number, w.cfg.Prod())
+			}
+			return fmt.Sprintf("release PR #%d into %s is open; the auto-cut follows (%s approves it there)", open[0].Number, w.cfg.Prod(), keymap.S(keymap.Approve))
 		}
 	}
-	return "it rides the next release cut into " + w.cfg.Prod()
+	if w.cfg.TagByHand {
+		return "it rides the next release cut into " + w.cfg.Prod()
+	}
+	return "the auto-cut follows: it rides the next release into " + w.cfg.Prod()
 }
 
 // ---- D: the tier deploy ----

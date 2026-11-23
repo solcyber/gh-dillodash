@@ -377,19 +377,35 @@ func CommandCheck(cmd string, info *Night, night, me string, now time.Time, item
 		}
 		return true, why
 	case CmdCancel:
-		if item != nil && item.StartUTC != "" {
-			started := false
-			if t, err := clock.ParseUTC(item.StartUTC); err == nil {
-				started = !now.Before(t)
-			}
-			waiting := strings.HasPrefix(item.Status, "waiting for "+cfg.ReleaseCommand)
-			if started && !waiting {
-				return false, fmt.Sprintf("#%d has already started", item.PR)
-			}
+		if item != nil && ItemStarted(*item, now, cfg) {
+			return false, fmt.Sprintf("#%d has already started", item.PR)
 		}
 		return true, "takes it out of this window; it needs a fresh approve to queue again"
 	}
 	return false, fmt.Sprintf("unknown window command %q", cmd)
+}
+
+// ItemStarted is the conductor's own rule for "already started", which
+// /window-cancel refuses: the item was dispatched (dispatched_utc), or,
+// for a fixed slot, the slot passed and it is not waiting (for
+// /release, for the terraform items, for the item ahead). An item whose
+// start is an estimate has started only once it is dispatched: it may
+// start before the estimate, or long after it while the item ahead
+// still runs.
+func ItemStarted(it Item, now time.Time, cfg *config.MaintenanceWindowConfig) bool {
+	if it.DispatchedUTC != "" {
+		return true
+	}
+	if it.StartIsEstimate || it.StartUTC == "" {
+		return false
+	}
+	t, err := clock.ParseUTC(it.StartUTC)
+	if err != nil || now.Before(t) {
+		return false
+	}
+	// "waiting for /release until …" on every manifest; the conductor
+	// counts any "waiting for …" as not started
+	return !strings.HasPrefix(it.Status, "waiting for ")
 }
 
 func mentions(logins []string) string {

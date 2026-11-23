@@ -580,7 +580,18 @@ func (w *Workflow) whereChip(c *Change) (string, string) {
 		case "hold":
 			return w.cfg.Stage() + " · hold", "chip.state"
 		default:
-			return w.cfg.Stage() + " · untagged", "chip.await"
+			if w.cfg.TagByHand {
+				return w.cfg.Stage() + " · untagged", "chip.await"
+			}
+			// the automation tags it: nothing for anyone to do yet,
+			// unless its deploy failed
+			switch d, _ := deployOf(c.Runs); d {
+			case DeployFailed:
+				return w.cfg.Stage() + " · deploy failed", "chip.fail"
+			case DeployOK:
+				return w.cfg.Stage() + " · awaiting tag", "chip.state"
+			}
+			return w.cfg.Stage() + " · awaiting deploy", "chip.state"
 		}
 	}
 	return "on " + w.cfg.Prod(), "chip.released"
@@ -818,9 +829,17 @@ func (w *Workflow) segs(app workflow.App, row workflow.Row, L workflow.Layout, w
 // HelpRows are the workflow's help lines.
 func (w *Workflow) HelpRows() [][2]string {
 	return [][2]string{
-		{"promote", fmt.Sprintf("P  on a change: move it one tier on (%s: open the promotion PR · → %s: merge it · %s: tag go or hold)   D  approve the deploy its tier waits on   ↵  open its PR",
-			w.cfg.First(), w.cfg.Stage(), w.cfg.Stage())},
+		{"promote", fmt.Sprintf("P  on a change: move it one tier on (%s: open the promotion PR · → %s: merge it · %s: %s)   D  approve the deploy its tier waits on   ↵  open its PR",
+			w.cfg.First(), w.cfg.Stage(), w.cfg.Stage(), w.tagVerb())},
 	}
+}
+
+// tagVerb is what P does on a staging unit.
+func (w *Workflow) tagVerb() string {
+	if w.cfg.TagByHand {
+		return "tag go or hold"
+	}
+	return "flip go and hold; tagging is automatic"
 }
 
 // LegendRows adds the promote chips to the help legend.
@@ -828,8 +847,13 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	row := []text.Seg{text.S(text.Pad("promote", 10), "section")}
 	row = append(row, scenes.Chip("on "+w.cfg.First(), "chip.state")...)
 	row = append(row, text.S(" P opens the promotion  ", "muted"))
-	row = append(row, scenes.Chip(w.cfg.Stage()+" · untagged", "chip.await")...)
-	row = append(row, text.S(" P tags it  ", "muted"))
+	if w.cfg.TagByHand {
+		row = append(row, scenes.Chip(w.cfg.Stage()+" · untagged", "chip.await")...)
+		row = append(row, text.S(" P tags it  ", "muted"))
+	} else {
+		row = append(row, scenes.Chip(w.cfg.Stage()+" · awaiting deploy", "chip.state")...)
+		row = append(row, text.S(" tagged go when its deploy succeeds  ", "muted"))
+	}
 	row = append(row, scenes.Chip(w.cfg.Stage()+" · go", "chip.approved")...)
 	row = append(row, text.S(" rides the next release", "muted"))
 	return [][]text.Seg{row}
@@ -855,7 +879,15 @@ func (w *Workflow) offerPromote(f workflow.Focus) (string, bool) {
 	case Promoting:
 		return "merge the promotion", true
 	case OnStage:
-		return "tag go / hold", true
+		switch {
+		case w.cfg.TagByHand:
+			return "tag go / hold", true
+		case c.Tag == "go":
+			return "flip to hold", true
+		case c.Tag == "hold":
+			return "flip to go", true
+		}
+		return "why untagged", true
 	}
 	return "", false
 }

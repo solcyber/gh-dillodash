@@ -408,7 +408,8 @@ type ReleasePRConfig struct {
 	ListOtherPRs            bool
 	ReleaseNowCommand       string
 	ReleaseNowMinReason     int
-	ReleaseNowDispatch      bool   // fire a repository_dispatch on the manifest repo after posting the command
+	ReleaseNowDispatch      bool   // the manifest repo is told of a posted command (true, or "comment"): refire and the M gate are on
+	ReleaseNowCommentOnly   bool   // "comment": the app repo's own workflow fires the dispatch; dillodash posts the command only
 	ReleaseNowDispatchEvent string // its event_type
 	ApplyWorkflow           string // the manifest repo's workflow file whose dispatch runs carry a release ("" = don't look)
 	ApplyRunMatch           string // the run title substring naming a release; placeholders {repo} {number}

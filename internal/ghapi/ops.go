@@ -596,6 +596,29 @@ func (c *GitHub) BranchRules(ctx context.Context, repo model.Repo, branch string
 	return out, nil
 }
 
+// DirFiles lists one directory through the contents API: the names of
+// its files.
+func (c *GitHub) DirFiles(ctx context.Context, repo model.Repo, path string) ([]string, error) {
+	var entries []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	segs := strings.Split(strings.Trim(path, "/"), "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	if err := c.restJSON(ctx, http.MethodGet, repoPath(repo, "contents/"+strings.Join(segs, "/")), nil, &entries); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if e.Type == "file" && e.Name != "" {
+			out = append(out, e.Name)
+		}
+	}
+	return out, nil
+}
+
 // FileContents reads one file through the contents API.
 func (c *GitHub) FileContents(ctx context.Context, repo model.Repo, path, ref string) ([]byte, string, error) {
 	var out struct {

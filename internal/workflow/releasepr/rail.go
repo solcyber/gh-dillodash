@@ -40,8 +40,18 @@ var phaseBudget = map[string]time.Duration{
 	PhaseFinishing: 60 * time.Second,
 }
 
-// settleSecs is the verify step's settle before the alarms are read.
+// settleSecs is the verify step's settle before the alarms are read,
+// when the manifest item does not say (its settle_s).
 const settleSecs = 300
+
+// settleOf is the release's settle: the manifest item's, else the
+// default.
+func settleOf(p Progress) time.Duration {
+	if p.SettleSecs > 0 {
+		return time.Duration(p.SettleSecs) * time.Second
+	}
+	return settleSecs * time.Second
+}
 
 // railFrac is the rail's fill, 0..1.
 func railFrac(p Progress, now time.Time) float64 {
@@ -72,7 +82,11 @@ func railFrac(p Progress, now time.Time) float64 {
 	case p.Phase == PhaseDeploying && p.DeployTotal > 0:
 		sub = float64(p.DeployDone) / float64(p.DeployTotal)
 	default:
-		if b := phaseBudget[p.Phase]; b > 0 {
+		b := phaseBudget[p.Phase]
+		if p.Phase == PhaseVerifying {
+			b = settleOf(p)
+		}
+		if b > 0 {
 			sub = el.Seconds() / b.Seconds()
 		}
 	}
@@ -177,7 +191,11 @@ func phaseSub(p Progress, now time.Time) float64 {
 	case p.Phase == PhaseDeploying && p.DeployTotal > 0:
 		sub = float64(p.DeployDone) / float64(p.DeployTotal)
 	default:
-		if b := phaseBudget[p.Phase]; b > 0 {
+		b := phaseBudget[p.Phase]
+		if p.Phase == PhaseVerifying {
+			b = settleOf(p)
+		}
+		if b > 0 {
 			sub = p.Elapsed(now).Seconds() / b.Seconds()
 		}
 	}
@@ -360,7 +378,8 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 // apply_budget_mins ("12m left", "over by 3m"), or "" with no budget, no
 // start, or a phase that is not running. measure is the widest it gets.
 func (w *Workflow) budgetLeft(p Progress, now time.Time, measure bool) string {
-	if w.cfg.ApplyBudgetMins <= 0 || p.Terminal || p.Started.IsZero() {
+	budget := w.budgetOf(p)
+	if budget <= 0 || p.Terminal || p.Started.IsZero() {
 		return ""
 	}
 	switch p.Phase {
@@ -370,11 +389,24 @@ func (w *Workflow) budgetLeft(p Progress, now time.Time, measure bool) string {
 	if measure {
 		return "over by " + widestClock
 	}
-	left := time.Duration(w.cfg.ApplyBudgetMins)*time.Minute - now.Sub(p.Started)
+	left := budget - now.Sub(p.Started)
 	if left < 0 {
 		return "over by " + deploys.FmtSecs(-left)
 	}
 	return deploys.FmtSecs(left) + " left"
+}
+
+// budgetOf is how long a release in flight is expected to take: its
+// manifest item's estimate (T_s), else apply_budget_mins, else 0 (no
+// countdown).
+func (w *Workflow) budgetOf(p Progress) time.Duration {
+	if p.BudgetSecs > 0 {
+		return time.Duration(p.BudgetSecs) * time.Second
+	}
+	if w.cfg.ApplyBudgetMins > 0 {
+		return time.Duration(w.cfg.ApplyBudgetMins) * time.Minute
+	}
+	return 0
 }
 
 // nowOffered reports a release the window left behind (bumped or
@@ -499,7 +531,13 @@ func (w *Workflow) timelineRows(p Progress, now time.Time) []phaseRow {
 			}
 		case PhaseVerifying:
 			if r.state == "running" {
-				r.tail = settleSegs(r.elapsed)
+				// from the release job's "deployed, verifying" word when
+				// it said so, else from the verify steps' own clock
+				el := r.elapsed
+				if !p.VerifyingAt.IsZero() && !now.Before(p.VerifyingAt) {
+					el = now.Sub(p.VerifyingAt)
+				}
+				r.tail = settleSegs(el, settleOf(p))
 			} else if r.state == "done" {
 				r.tail = []text.Seg{text.S("alarms quiet", "faint")}
 			}
@@ -527,13 +565,13 @@ func span(a, b time.Time) time.Duration {
 
 // settleSegs is the verify step's settle countdown: a shaded meter that
 // drains, then the alarms read.
-func settleSegs(el time.Duration) []text.Seg {
-	left := settleSecs*time.Second - el
+func settleSegs(el, settle time.Duration) []text.Seg {
+	left := settle - el
 	if left <= 0 {
 		return []text.Seg{text.S("settled; reading the alarms", "faint")}
 	}
 	width := 12
-	frac := 1 - float64(left)/float64(settleSecs*time.Second)
+	frac := 1 - float64(left)/float64(settle)
 	shade := []rune(glyphs.G("shade"))
 	var b strings.Builder
 	filled := int(math.Round(frac * float64(width)))
@@ -602,7 +640,11 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 	case p.Night != "":
 		head = append(head, text.S("  night "+p.Night, "faint"))
 		if !p.SlotAt.IsZero() && w.win != nil {
-			head = append(head, text.S(" · slot "+w.win.Local().TAt(p.SlotAt), "faint"))
+			slot := " · slot "
+			if p.SlotEstimate {
+				slot = " · est. start "
+			}
+			head = append(head, text.S(slot+w.win.Local().TAt(p.SlotAt), "faint"))
 		}
 	}
 	if !p.Started.IsZero() {
@@ -619,6 +661,9 @@ func (w *Workflow) progressCard(app workflow.App, pr *model.PR, p Progress, widt
 		clock := "T+" + fmtClock(at.Sub(p.Started))
 		if p.Phase == PhaseScheduled && !p.SlotAt.IsZero() && now.Before(p.SlotAt) {
 			clock = "T-" + fmtClock(p.SlotAt.Sub(now))
+			if p.SlotEstimate {
+				clock = "est. " + clock
+			}
 		}
 		cstyle := "strong"
 		if live && fx.Ambient && fx.Motion == "full" {

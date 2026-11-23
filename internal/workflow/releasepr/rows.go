@@ -518,9 +518,18 @@ func (w *Workflow) releaseSegs(app workflow.App, row workflow.Row, L workflow.La
 	if len(c.Failed) > 0 {
 		suffix = "  " + glyphs.G("fail") + " " + strings.Join(c.Failed, ", ")
 	}
+	// an approved release keeps its cut: newer go units wait for the next
+	waiting := goWaitingText(w.goWaiting(w.stateOf(app), pr))
+	if waiting != "" {
+		waiting = "  " + waiting
+	}
 	room := width - 3 - text.SegsWidth(segs)
 	sw := min(text.Width(suffix), max(0, room-16))
-	segs = append(segs, text.S(text.Ellip(pr.Title, room-sw), tstyle))
+	ww := min(text.Width(waiting), max(0, room-sw-16))
+	segs = append(segs, text.S(text.Ellip(pr.Title, room-sw-ww), tstyle))
+	if waiting != "" && ww > 0 {
+		segs = append(segs, text.S(text.Ellip(waiting, ww), "muted"))
+	}
 	if suffix != "" {
 		segs = append(segs, text.S(text.Ellip(suffix, sw), "failnames"))
 	}

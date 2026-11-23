@@ -21,7 +21,7 @@ var unitPR = regexp.MustCompile(`Merge pull request #(\d+)|\(#(\d+)\)\s*$`)
 // stageSummary is a repo's synthetic stage row: units ahead of
 // production by tag. The compare is fetched only when the (prod, stage)
 // pair moved.
-func (w *Workflow) stageSummary(ctx context.Context, gh ghapi.Client, repo model.Repo, prod, stage string) (*Stage, error) {
+func (w *Workflow) stageSummary(ctx context.Context, gh ghapi.Client, repo model.Repo, prod, stage, cut string) (*Stage, error) {
 	row := &Stage{Repo: repo}
 	if prod == "" || stage == "" {
 		return row, nil
@@ -60,6 +60,9 @@ func (w *Workflow) stageSummary(ctx context.Context, gh ghapi.Client, repo model
 		return row, err
 	}
 	u := StageUnits(compare, goTags, holdTags, w.cfg.GoTagPrefix, w.cfg.HoldTagPrefix)
+	if n, ok := GoPastCut(compare, goTags, w.cfg.GoTagPrefix, cut); ok {
+		u.GoPastCut, u.Cut = n, cut
+	}
 	row.Units = &u
 	return row, nil
 }
@@ -120,6 +123,79 @@ func StageUnits(compare ghapi.CompareResult, goTags, holdTags []string, goPrefix
 		}
 	}
 	return out
+}
+
+// GoPastCut counts the go units on the staging chain newer than cut (the
+// open release's head): the first-parent walk from the staging head
+// down to cut. ok is false when cut is empty or not on the walked
+// chain (production, or past the compare page).
+func GoPastCut(compare ghapi.CompareResult, goTags []string, goPrefix, cut string) (n int, ok bool) {
+	if cut == "" {
+		return 0, false
+	}
+	goSet := tagSet(goTags, goPrefix)
+	bySHA := make(map[string]ghapi.CompareCommit, len(compare.Commits))
+	for _, c := range compare.Commits {
+		bySHA[c.SHA] = c
+	}
+	sha := ""
+	if k := len(compare.Commits); k > 0 {
+		sha = compare.Commits[k-1].SHA
+	}
+	seen := map[string]bool{}
+	for sha != "" && !seen[sha] {
+		if sha == cut {
+			return n, true
+		}
+		c, found := bySHA[sha]
+		if !found {
+			return 0, false
+		}
+		seen[sha] = true
+		subject, _, _ := strings.Cut(c.Message, "\n")
+		if m := unitPR.FindStringSubmatch(subject); m != nil {
+			num := m[1]
+			if num == "" {
+				num = m[2]
+			}
+			if goSet[num] {
+				n++
+			}
+		}
+		sha = ""
+		if len(c.Parents) > 0 {
+			sha = c.Parents[0]
+		}
+	}
+	return 0, false
+}
+
+// goWaiting is the go units waiting behind an approved release, from
+// its repo's stage row: newer than the release's head, which an
+// approved release keeps (a re-cut would dismiss the approval). 0 when
+// the release is not approved, not the cut the row counted against, or
+// nothing waits.
+func (w *Workflow) goWaiting(st *State, pr *model.PR) int {
+	if st == nil || pr == nil || pr.ReviewDecision != "APPROVED" || (pr.State != "" && pr.State != "OPEN") || pr.HeadRefOid == "" {
+		return 0
+	}
+	for _, s := range st.Stages {
+		if s == nil || s.Repo != pr.Repo || s.Units == nil {
+			continue
+		}
+		if s.Units.Cut == pr.HeadRefOid {
+			return s.Units.GoPastCut
+		}
+	}
+	return 0
+}
+
+// goWaitingText is "2 go units waiting", or "".
+func goWaitingText(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d go unit%s waiting", n, plural(n, "", "s"))
 }
 
 func tagSet(tags []string, prefix string) map[string]bool {

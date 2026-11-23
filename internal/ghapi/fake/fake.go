@@ -1000,6 +1000,28 @@ func (f *Client) FileContents(ctx context.Context, repo model.Repo, path, ref st
 	return append([]byte(nil), data...), hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// DirFiles serves the names of the FileData entries directly under
+// path; none is a 404.
+func (f *Client) DirFiles(ctx context.Context, repo model.Repo, path string) ([]string, error) {
+	if err := f.fail("dir"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	prefix := repo.String() + ":" + strings.Trim(path, "/") + "/"
+	var out []string
+	for k := range f.FileData {
+		if rest, ok := strings.CutPrefix(k, prefix); ok && rest != "" && !strings.Contains(rest, "/") {
+			out = append(out, rest)
+		}
+	}
+	if len(out) == 0 {
+		return nil, &ghapi.Error{Method: "GET", URL: repo.String() + "/contents/" + path, Status: 404, Message: "Not Found"}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 // ---- promotion ----
 
 // PromotePRs serves Promote[repo].

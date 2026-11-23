@@ -157,7 +157,7 @@ enabled = false
 # list_other_prs = true                     # also list non-release PRs in release repos
 # release_now_command = "/release-now"      # comment that releases ahead of the window
 # release_now_min_reason = 20               # shortest acceptable /release-now reason
-# release_now_dispatch = true               # after posting it, fire a repository_dispatch on the manifest repo
+# release_now_dispatch = true               # after posting it, fire a repository_dispatch on the manifest repo; "comment": the app repo's own workflow fires it, dillodash posts the comment only; false: nobody tells it (no refire, M merges)
 # release_now_dispatch_event = "release-now"   # its event_type; payload {repo, pr, comment_id}
 # apply_workflow = "apply.yml"              # the manifest repo's workflow whose dispatch runs carry a release; "" = don't look
 # apply_run_match = "rel:{repo}#{number}"   # what names the release in that run's title; placeholders {repo} {number}
@@ -171,8 +171,8 @@ enabled = false
 # lease_label = ""                          # an issue label: an open issue with it says who is running which release (docs/workflows/release-pr.md)
 # deploy_refresh_secs = 30                  # poll a running deploy this often
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
-# lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, A offers the next
-# apply_budget_mins = 0                     # a release in flight counts down from this many minutes on its row (0 = no countdown)
+# lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, A offers the next (a manifest item's own lane_order comes first)
+# apply_budget_mins = 0                     # a release in flight counts down from this many minutes on its row (0 = no countdown; a manifest item's own T_s comes first)
 
 # ============================================================================
 # Workflow: waiting runs
@@ -189,9 +189,9 @@ enabled = false
 # Workflow: promote
 # Branch-per-tier repos (a first tier, a staging tier, production): one row
 # per change shows where it is and its tier's deploy. P moves it one tier on
-# (opens the promotion PR, merges it, tags the staging unit go or hold); D
-# approves the deploy its tier waits on. Production is reached through the
-# release PR (release_pr).
+# (opens the promotion PR, merges it, flips the staging unit's go or hold
+# tag); D approves the deploy its tier waits on. Production is reached
+# through the release PR (release_pr).
 # ============================================================================
 [workflows.promote]
 enabled = false
@@ -201,6 +201,7 @@ enabled = false
 # lookback_days = 14                        # read the PRs merged this many days back
 # go_tag_prefix = "go/"                     # default: release_pr's
 # hold_tag_prefix = "hold/"                 # default: release_pr's
+# tag_by_hand = false                       # true: P also tags an untagged staging unit (when no automation tags units once their deploy succeeds)
 # branch_prefix = "promote/"                # a promotion branch is <prefix><number>-<staging tier>
 # approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
 # backmerge_title = ""                      # a regular expression (e.g. "^Back-merge"): a PR whose title matches is a back-merge, not listed; side-branch back-merges are found without it, set it for cherry-picked ones

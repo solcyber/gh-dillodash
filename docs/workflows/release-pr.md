@@ -37,7 +37,12 @@ the day after it is enrolled, or at once after the cache file is deleted.
   is not on production; its PR number is read from the commit subject
   (`Merge pull request #N` or a squash's `(#N)`), and the tags
   `go_tag_prefix<N>` / `hold_tag_prefix<N>` decide the count. Untagged
-  counts as hold: a unit nobody tagged does not release. `o` and `y` give
+  counts as hold: a unit nobody tagged does not release. Where an
+  automation tags the units once their staging deploy succeeds and re-cuts
+  an unapproved release PR (the promote workflow's default), an approved
+  release keeps its cut, since a re-cut would dismiss the approval: its row
+  then ends with `2 go units waiting`, the go units on staging newer than
+  its head, which join the next cut. `o` and `y` give
   its compare page.
 - **Since the cut.** While a release is open and the
   [`promote`](promote.md) workflow names the first tier, the line ends
@@ -128,7 +133,11 @@ and a PR that is not a release, then offers:
   `manifest_repo`, event `release_now_dispatch_event` (default
   `release-now`), payload `{repo, pr, comment_id}`: the comment lives in
   the release repo, whose events never reach the manifest repo's
-  workflows, so this is how the conductor there learns to merge now. The
+  workflows, so this is how the conductor there learns to merge now.
+  With `release_now_dispatch = "comment"` the release repo's own
+  workflow (one triggered by `issue_comment`) fires that dispatch, so `A`
+  posts the comment only; the row is on its way from the post, exactly as
+  after a dispatch. The
   payload only points at the comment; the receiver re-reads it by id. If
   the dispatch fails after the comment landed, the status line says the
   manifest repo was not told and points at `M`, and the row says **`✗ not
@@ -160,7 +169,13 @@ and a PR that is not a release, then offers:
   two minutes with no run (at once when this session's dispatch failed),
   `A` on the release offers one thing: fire the `release-now` dispatch for
   **that** comment (its id is the payload), with no second comment and no
-  review. `M` stays the last resort after five minutes.
+  review. `M` stays the last resort after five minutes. In comment mode
+  the release repo's workflow is expected to fire it, so `A` offers the
+  dispatch only after five minutes with no run, as a fallback that fires
+  it once (the receiver ignores a comment it already dispatched); `M`
+  opens at the same five minutes. With `release_now_dispatch = false`
+  nobody tells the manifest repo: no dispatch is offered, and `M` is the
+  way at once.
 - **From anywhere.** The same menu comes up whether the release was
   opened from its row under `releases`, from its row under a night
   (scheduled, bumped or rolled), from `:` (`repo#N` reaches the enrolled
@@ -193,7 +208,8 @@ Without the window workflow, an approving review is just an approval, and
   at `A`: release NOW posts the command and fires the dispatch, and the
   release job merges. Merging by hand is the last resort, for when the
   dispatch can't fire (it failed this session, the command has waited
-  five minutes with no run, or `release_now_dispatch` is off); then `M` first asks you to call it an emergency (the
+  five minutes with no run, which in comment mode means the release
+  repo's workflow did not fire it, or `release_now_dispatch` is false); then `M` first asks you to call it an emergency (the
   `/release-now` reason belongs on the PR).
 - `D` on a merged release (its row, or its detail) approves the environment
   deployments waiting on its merge commit, and nothing else: only runs
@@ -255,14 +271,19 @@ replays one offline; these shots are its steps.
   message names the next approved release in the lane (`next in lane:
   <repo>#<n> — A on its row: release NOW`), or says to wait while its own
   deploys are still running. NOW on a release while another in the lane
-  is still on its way asks first.
+  is still on its way asks first. A release whose manifest item carries
+  its own `lane` and `lane_order` (its place among tonight's scheduled
+  items in that lane) follows the manifest instead of the config.
 
 ![The release lands; the status line names the next release in the lane](../shots/night-3-released.png)
 
 - **A slot on the manifest.** release NOW on a release that holds a slot
   on a manifest (the scheduler's `scheduled` flag, not yet run) asks, in
   the same flow, whether to post `/window-cancel rel:<repo>#<n>` there, so
-  the window does not reach a release that is merged already.
+  the window does not reach a release that is merged already. On an
+  event-driven lane the item holds a place in the lane, not a slot, and
+  the question says so with its estimate (`a place in the lane (est.
+  23:12)`).
 
 ![release NOW on the migration that holds a slot: the same flow offers the window-cancel of its item](../shots/night-4-cancel.png)
 
@@ -270,8 +291,9 @@ replays one offline; these shots are its steps.
   as `deploy waiting · D`, and its message names the environment. `D` on
   its row approves it; a second one is offered the same way. One that
   automation approves reads `automatic` and asks nothing of you.
-- **The countdown.** With `apply_budget_mins` set, a release in flight
-  counts down on its row (`deploying · 23m left`, then `over by 4m`).
+- **The countdown.** A release in flight counts down on its row
+  (`deploying · 23m left`, then `over by 4m`) from its manifest item's
+  estimate (`T_s`), or from `apply_budget_mins` when it has none.
 
 ![The migration merged and waits on prod, the one environment people approve: D on its row](../shots/night-5-prod.png)
 
@@ -296,14 +318,20 @@ the next refresh.
 by a `repository_dispatch`; its title names the release
 (`apply_run_match`, default `rel:{repo}#{number}`). The run's steps say the
 phase: *setup*, *validating*, *merging*, *approving envs*, *deploying*,
-*verifying* (the alarms are read after a five-minute settle), *finishing*. On the
+*verifying* (the alarms are read after a settle: the manifest item's
+`settle_s`, five minutes when it has none), *finishing*. On the
 release PR the job leaves an outcome comment and the conductor's labels
 (`applied_label`, `failed_label`, `pending_label`). dillodash reads these
 headings, each followed by ` (<how>)`: `## Released`, `## Release NOT
 RUN`, `## Release FAILED: merge refused`, `## Release merged; the deploy
 is WAITING on an environment approval`, `## Release FAILED: the deploy did
 not succeed`, `## Release UNVERIFIABLE`, and `## Release FAILED
-VERIFICATION, NOT reverted`. Any other heading is not an outcome. An
+VERIFICATION, NOT reverted`. Any other heading is not an outcome. The
+job may also say `## Deployed — verifying` the moment the deploy
+succeeds, before the settle: not an outcome, but the time the settle
+meter counts from, and, with the run out of sight, the release reads
+*verifying* from it. It is believed on the same terms as an outcome (a
+bot, and a link to a run of the `manifest_repo`). An
 outcome comment is believed only when it is the job's own: posted by a bot
 (a `[bots]` login, or the window's `conductor_bot`) **and** carrying a
 `Run:` line that names an Actions run of the `manifest_repo`
@@ -313,7 +341,12 @@ shown in the card as not believed and never turns a release green. A
 release that ends by a label alone, with no run seen, draws the outcome
 and says so, not every phase as passed. On a window night the
 manifest item's status says *scheduled*, *waiting for slot* (terraform
-items first, or `/release`), *dispatched*. The app repo's own deploy runs
+items first, or `/release`), *dispatched*. On an event-driven lane an
+item's `start_utc` is an estimate (`start_is_estimate`): it starts as
+soon as the item ahead in its lane is final, so the chip reads `scheduled
+est. 23:20`, `waiting in lane` while the conductor's status is `waiting
+for rel:<repo>#<n>`, and never `slot passed` while the item ahead still
+runs; its clock starts at the manifest's `dispatched_utc`. The app repo's own deploy runs
 on the merge give the `n/m` while deploying. The newest signal wins, so a
 `/release-now` posted again after a failed run reopens the story with the
 new run.
@@ -360,7 +393,8 @@ new run.
 flight: one listing of the apply runs when a release has no run yet, the
 jobs of each run in progress, the comments of each release waiting for its
 outcome, and nothing at all when nothing is in flight (a scheduled release
-is polled from ten minutes before its slot). The whole-dashboard refresh is
+is polled from ten minutes before its slot, or from ninety minutes before
+an estimated start). The whole-dashboard refresh is
 untouched. A release with no outcome after `progress_timeout_secs` (90
 minutes) is marked *lost track* and left alone. With `progress_poll_secs =
 0` nothing is followed and the chips read as before.
@@ -385,6 +419,10 @@ contents write there); following the release there needs Actions read on
 it (the run's jobs and steps). With `[github] approvers_team`, organization
 Members read lets dillodash check the posting login is in the team before
 `/release-now` goes out; without it dillodash warns and posts unchecked
-(the bot still refuses a non-member). A repo the token cannot see shrinks the
+(the bot still refuses a non-member). In comment mode dillodash fires the
+dispatch only as the fallback, so the manifest repo's Contents write is
+needed only for that; `config check` then looks in each release repo for
+a workflow on `issue_comment` that mentions the command, and reports
+(never fails) what it finds. A repo the token cannot see shrinks the
 section and puts the reason on the warn line; a repo whose read fails keeps
 its last good rows with a warning.

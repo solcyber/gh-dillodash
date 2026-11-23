@@ -124,6 +124,18 @@ type Progress struct {
 	Started  time.Time // when the release was sent on its way (the T+ clock)
 	Detail   string    // the step name, the manifest status, the outcome detail, the refusal reason
 	SlotAt   time.Time // the window slot, when known
+	// SlotEstimate: SlotAt is an estimate (the manifest's
+	// start_is_estimate), not a fixed slot; Ahead is the item ahead in
+	// its lane that is not done yet, when known.
+	SlotEstimate bool
+	Ahead        string
+	// SettleSecs and BudgetSecs are the manifest item's settle and whole
+	// estimate (0: the defaults, settleSecs and apply_budget_mins).
+	SettleSecs, BudgetSecs int
+	// VerifyingAt is when the release job said the deploy succeeded and
+	// verification began (its "Deployed — verifying" comment): the
+	// settle meter counts from it.
+	VerifyingAt time.Time
 
 	RunID      int64
 	RunAttempt int
@@ -401,10 +413,21 @@ func liveProgress(p Progress, now time.Time) bool {
 	case p.Phase == "" || p.Terminal:
 		return false
 	case p.Phase == PhaseScheduled:
-		return !p.SlotAt.IsZero() && now.After(p.SlotAt.Add(-10*time.Minute))
+		lead := 10 * time.Minute
+		if p.SlotEstimate {
+			// it may start as soon as the item ahead is final: as early
+			// as the window's start, an hour or so before the estimate
+			lead = estimateLead
+		}
+		return !p.SlotAt.IsZero() && now.After(p.SlotAt.Add(-lead))
 	}
 	return true
 }
+
+// estimateLead is how long before an estimated start a scheduled
+// release is polled: an event-driven lane starts it once the item ahead
+// is final, so it can go well before its estimate.
+const estimateLead = 90 * time.Minute
 
 // Poll reads what moved: one listing of the manifest repo's apply runs
 // when a live release has no run yet (or its run is done and nothing
@@ -862,6 +885,30 @@ func (w *Workflow) fromJob(c model.Comment, o outcome) bool {
 	return target.IsZero() || (strings.EqualFold(m[1], target.Owner) && strings.EqualFold(m[2], target.Name))
 }
 
+// verifyingHeadRE is the release job's word at deploy success, before
+// the settle and the alarm check: not an outcome (outcome headings all
+// start "## Release"), only a time for the settle meter. runAnyRE finds
+// the run link it carries.
+var (
+	verifyingHeadRE = regexp.MustCompile(`(?m)^## Deployed — verifying\s*$`)
+	runAnyRE        = regexp.MustCompile(`https?://[^/\s)]+/[^/\s)]+/[^/\s)]+/actions/runs/\d+`)
+)
+
+// verifyingOf is when a comment says the release deployed and is being
+// verified: the "## Deployed — verifying" heading, posted by a bot, with
+// a link to a run of the manifest repo (the same trust as an outcome).
+// w.mu is held by the caller.
+func (w *Workflow) verifyingOf(c model.Comment) (time.Time, bool) {
+	if !verifyingHeadRE.MatchString(c.Body) {
+		return time.Time{}, false
+	}
+	u := runAnyRE.FindString(c.Body)
+	if u == "" || !w.fromJob(c, outcome{url: u}) {
+		return time.Time{}, false
+	}
+	return c.CreatedAt, true
+}
+
 // refusedREFor is the dispatcher's refusal of the command.
 func refusedREFor(cmd string) *regexp.Regexp {
 	if cmd == "" {
@@ -942,6 +989,15 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 		if st, err := time.Parse(time.RFC3339, t.item.StartUTC); err == nil {
 			p.SlotAt = st
 		}
+		p.SlotEstimate, p.Ahead = t.item.StartIsEstimate, t.item.Ahead
+		p.SettleSecs, p.BudgetSecs = t.item.SettleSecs, t.item.TSecs
+	}
+	// the release job's "deployed, verifying" word, after the command
+	// (a re-dispatch's run starts over)
+	for _, c := range t.comments {
+		if at, ok := w.verifyingOf(c); ok && !at.Before(cmdAt) && at.After(p.VerifyingAt) {
+			p.VerifyingAt = at
+		}
 	}
 	if run != nil {
 		p.RunID, p.RunAttempt, p.RunURL = run.ID, run.RunAttempt, run.HTMLURL
@@ -1019,6 +1075,17 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 			p.Phase, p.Terminal, p.Source, p.Outcome = PhasePending, true, "label", "deploy_pending"
 			return p
 		}
+	}
+	if !p.VerifyingAt.IsZero() && !w.itemEnded(p, t.item, now) {
+		// the run is out of sight, but the release job said the deploy
+		// succeeded (newer than any outcome, or there would be one): it
+		// settles, then reads the alarms
+		p.Phase, p.Source, p.Since = PhaseVerifying, "comment", p.VerifyingAt
+		p.Detail = "deployed; verifying"
+		if p.Started.IsZero() {
+			p.Started = p.VerifyingAt
+		}
+		return w.timeout(p, now)
 	}
 	if t.item != nil {
 		// a release the window left behind (bumped, rolled) that was sent
@@ -1184,10 +1251,16 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 		p.Phase, p.Terminal = PhaseLost, true
 	case strings.HasPrefix(ls, "dispatched"):
 		p.Phase = PhaseDispatched
-		if p.Started.IsZero() || p.SlotAt.After(p.Started) {
-			p.Started = p.SlotAt
+		// when it was sent: the manifest says, else (an older manifest)
+		// its slot, which an event-driven lane may beat
+		sent := p.SlotAt
+		if d, err := time.Parse(time.RFC3339, it.DispatchedUTC); err == nil {
+			sent = d
 		}
-		p.Since = p.SlotAt
+		if p.Started.IsZero() || sent.After(p.Started) {
+			p.Started = sent
+		}
+		p.Since = sent
 	case strings.HasPrefix(ls, "run cancelled"):
 		p.Phase, p.Terminal = PhaseCancelled, true
 	case strings.HasPrefix(ls, "run "):
@@ -1195,9 +1268,19 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 	case strings.HasPrefix(ls, "waiting"):
 		p.Phase, p.Since = PhaseWaitingSlot, p.SlotAt
 	case s == "":
-		if !p.SlotAt.IsZero() && now.After(p.SlotAt) {
+		switch {
+		case it.StartIsEstimate && it.Ahead != "":
+			// an estimate: it goes once the item ahead is final, however
+			// long that runs
+			p.Phase, p.Detail = PhaseScheduled, "after "+it.Ahead
+			if !p.SlotAt.IsZero() {
+				p.Since = p.SlotAt
+			}
+		case it.StartIsEstimate && !p.SlotAt.IsZero() && now.After(p.SlotAt):
+			p.Phase, p.Detail, p.Since = PhaseWaitingSlot, "estimated start passed, no run yet", p.SlotAt
+		case !p.SlotAt.IsZero() && now.After(p.SlotAt):
 			p.Phase, p.Detail, p.Since = PhaseWaitingSlot, "slot passed, no run yet", p.SlotAt
-		} else {
+		default:
 			p.Phase, p.Detail = PhaseScheduled, ""
 			if !p.SlotAt.IsZero() {
 				p.Since = p.SlotAt
@@ -1210,6 +1293,17 @@ func (w *Workflow) fromItem(p *Progress, it *workflow.ManifestItem, now time.Tim
 		p.Started = p.SlotAt
 	}
 	return p.Phase, true
+}
+
+// itemEnded reports a manifest item whose status is an ending: it is
+// newer news than a "deployed, verifying" comment.
+func (w *Workflow) itemEnded(p Progress, it *workflow.ManifestItem, now time.Time) bool {
+	if it == nil {
+		return false
+	}
+	q := p
+	ph, ok := w.fromItem(&q, it, now)
+	return ok && Terminal(ph)
 }
 
 // timeout turns a release that has been in flight too long into lost,
@@ -1278,10 +1372,16 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 	switch p.Phase {
 	case PhaseScheduled:
 		if !p.SlotAt.IsZero() && w.win != nil {
+			if p.SlotEstimate {
+				return "scheduled est. " + w.win.Local().In(p.SlotAt).Format("15:04")
+			}
 			return "scheduled " + w.win.Local().In(p.SlotAt).Format("15:04")
 		}
 		return "scheduled"
 	case PhaseWaitingSlot:
+		if p.SlotEstimate && strings.HasPrefix(p.Detail, "waiting for rel:") {
+			return "waiting in lane"
+		}
 		return "waiting for slot"
 	case PhaseDispatched:
 		return "dispatched " + el
