@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.6.0] — unreleased
+## [2.6.0] — 2026-11-23
 
 **The release runs itself; the dashboard keeps up.** Units are tagged and
 release PRs cut by an automation, the release repos can tell the manifest
