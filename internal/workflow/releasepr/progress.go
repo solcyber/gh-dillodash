@@ -235,6 +235,7 @@ type pollPatch struct {
 	comments []model.Comment // nil: not read
 	infraOff bool
 	err      string
+	deploy   *deploys.State // a followed deploy read again (deployfollow.go); nil: not read
 }
 
 // progressOf is the release's progress for the renderers.
@@ -382,8 +383,16 @@ func hasApproval(pr *model.PR) bool {
 
 // ---- the poll (its own goroutine) ----
 
-// PollEvery is the poll cadence from config.
+// PollEvery is the poll cadence from config: progress_poll_secs while a
+// release is in flight, deploy_refresh_secs while only a merged
+// release's deploy is followed.
 func (w *Workflow) PollEvery() time.Duration {
+	if w.cfg.ProgressPollSecs > 0 && w.progressLive(clock.Now()) {
+		return time.Duration(w.cfg.ProgressPollSecs) * time.Second
+	}
+	if w.followsDeploys() {
+		return w.refreshEvery()
+	}
 	if w.cfg.ProgressPollSecs <= 0 {
 		return 0
 	}
@@ -394,10 +403,11 @@ func (w *Workflow) PollEvery() time.Duration {
 // scheduled that is not terminal, and a scheduled one from ten minutes
 // before its slot.
 func (w *Workflow) Live(app workflow.App) bool {
-	if w.cfg.ProgressPollSecs <= 0 {
-		return false
-	}
-	now := app.Now()
+	return (w.cfg.ProgressPollSecs > 0 && w.progressLive(app.Now())) || w.followsDeploys()
+}
+
+// progressLive reports a release in flight worth polling.
+func (w *Workflow) progressLive(now time.Time) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for _, t := range w.progress {
@@ -443,12 +453,16 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 	var jobs []job
 	w.mu.Lock()
 	for id, t := range w.progress {
-		if liveProgress(t.cur, now) {
+		if w.cfg.ProgressPollSecs > 0 && liveProgress(t.cur, now) {
 			jobs = append(jobs, job{id, *t})
 		}
 	}
 	w.mu.Unlock()
 	if len(jobs) == 0 {
+		patches := map[model.Ident]*pollPatch{}
+		if err := w.pollDeploys(ctx, gh, patches); err != nil || len(patches) > 0 {
+			return patches, err
+		}
 		return nil, nil
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].id.String() < jobs[j].id.String() })
@@ -543,7 +557,7 @@ func (w *Workflow) Poll(ctx context.Context, gh ghapi.Client) (any, error) {
 		}
 		patch(j.id).comments = cs
 	}
-	return patches, nil
+	return patches, w.pollDeploys(ctx, gh, patches)
 }
 
 // matchRun is the newest run whose title names the release, created at
@@ -623,6 +637,25 @@ func (w *Workflow) ApplyPoll(app workflow.App, patch any) {
 	st := w.stateOf(app)
 	now := app.Now()
 	var changed []*model.PR
+	moved := false
+	for id, p := range patches {
+		if p.deploy == nil || st == nil {
+			continue
+		}
+		if pr := st.Find(id); pr != nil {
+			if applyDeploy(pr, *p.deploy) {
+				moved = true
+			}
+			changed = append(changed, pr)
+		}
+	}
+	if moved {
+		app.RefreshSoon(deployMovedRefresh)
+	}
+	if st != nil {
+		w.announceDeploys(app, st)
+		w.noteFollow(st)
+	}
 	w.mu.Lock()
 	for id, p := range patches {
 		t, ok := w.progress[id]

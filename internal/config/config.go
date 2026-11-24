@@ -57,6 +57,10 @@ type GitHubConfig struct {
 	// cannot be read (a token without the organization's Members read,
 	// or an error), instead of warning and posting unchecked.
 	ApproversTeamStrict bool
+	// BudgetGovernor slows the refresh and the polls as GitHub's budget
+	// (REST or GraphQL, whichever is tighter) runs low for the hour, so
+	// the dashboard never reaches the wall; actions are never held.
+	BudgetGovernor bool
 	// AllowedRepos, when set, are the only repos dillodash writes to:
 	// every comment, review, merge, command, label, assignment, state
 	// change, dispatch and run action on any other repo is refused, even
@@ -166,6 +170,13 @@ type DisplayConfig struct {
 	// Profile is a short badge drawn in the header ("" = none): which
 	// config this dashboard runs, when one person runs more than one.
 	Profile string
+	// IdleAfterSecs is how long without a key before nobody is watching:
+	// the refresh and the polls slow down, and catch up the moment a key
+	// is pressed or the terminal is focused again. 0 never slows down.
+	IdleAfterSecs int
+	// Title sets the terminal's window title to what waits on you, so a
+	// tab or a tmux window shows it while the dashboard is out of sight.
+	Title bool
 }
 
 // ClockLocal is the header clock's second zone with its label (both
@@ -188,6 +199,10 @@ type UpdateConfig struct {
 // MinRefreshSecs is the floor for refresh_secs; lower values are clamped
 // with a warning.
 const MinRefreshSecs = 5
+
+// MinIdleAfterSecs is the floor for idle_after_secs (other than 0): a
+// pause to read a diff is not leaving.
+const MinIdleAfterSecs = 60
 
 // MinProgressPollSecs is the floor of release_pr.progress_poll_secs
 // when it is on: each poll lists Actions runs and reads a run's jobs.
@@ -471,9 +486,9 @@ func DefaultWaitingRuns() *WaitingRunsConfig {
 // DefaultReleasePR and DefaultWaitingRuns.
 func Default() *Config {
 	return &Config{
-		GitHub:  GitHubConfig{}, // Host "": $GH_HOST, then gh's default host, then github.com
+		GitHub:  GitHubConfig{BudgetGovernor: true}, // Host "": $GH_HOST, then gh's default host, then github.com
 		Reviews: ReviewsConfig{CIRecheckSecs: 900},
-		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true, FortressEpigraph: true},
+		Display: DisplayConfig{RefreshSecs: 300, Icons: "nerd", Theme: "auto", Motion: "full", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true, FortressEpigraph: true, IdleAfterSecs: 300, Title: true},
 		Bots:    BotsConfig{Logins: []string{"github-actions", "dependabot"}},
 		Update:  UpdateConfig{Auto: true, Channel: "stable"},
 	}

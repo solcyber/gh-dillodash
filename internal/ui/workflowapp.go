@@ -93,6 +93,7 @@ func (m *Model) Selected() (workflow.Row, bool) {
 
 // RefreshSoon pulls the next refresh in to at most d from now.
 func (m *Model) RefreshSoon(d time.Duration) {
+	d = m.soonEvery(d) // nobody watching, or the budget low: later
 	if t := fx.Now() + d.Seconds(); t < m.nextRefreshAt {
 		m.nextRefreshAt = t
 		m.pulledIn = true

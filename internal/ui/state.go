@@ -131,20 +131,26 @@ type Model struct {
 	// one is due on the frame clock (0: nothing in flight to watch).
 	// refreshSeq counts the refreshes applied: a poll that started before
 	// the last one carries older news than the refresh did.
-	polling         bool
-	nextPollAt      float64
-	refreshSeq      int
-	refreshAgain    bool
-	ciFlush         bool
-	nextRefreshAt   float64
-	usage           *ghapi.Usage
-	pulledIn        bool // a workflow pulled the next refresh in (RefreshSoon): counted apart
-	lastRefresh     float64
-	lastRefreshWall string
-	clockLoc        *clock.Local  // the header clock's second zone; nil: no clock
-	backoff         ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
-	ci              *ghapi.CIFallback
-	ahead           *aheadCache // commits a head is ahead of a stale approval
+	polling       bool
+	nextPollAt    float64
+	refreshSeq    int
+	refreshAgain  bool
+	ciFlush       bool
+	nextRefreshAt float64
+	usage         *ghapi.Usage
+	pulledIn      bool
+	// attention (attention.go): the terminal's focus as it last reported
+	// it (focusKnown false: it never did), the last key, and whether the
+	// refresh in flight is a catch-up after nobody watched
+	focused, focusKnown bool
+	lastInput           float64
+	caughtUp            bool // a workflow pulled the next refresh in (RefreshSoon): counted apart
+	lastRefresh         float64
+	lastRefreshWall     string
+	clockLoc            *clock.Local  // the header clock's second zone; nil: no clock
+	backoff             ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
+	ci                  *ghapi.CIFallback
+	ahead               *aheadCache // commits a head is ahead of a stale approval
 	// listOnly: the first load's list is on screen but the rest of that
 	// refresh (workflows, CI) has not landed; the keys that act wait
 	// issuesListed is the issues section's count (the summary says the
@@ -315,6 +321,8 @@ func New(ctx context.Context, o Options) *Model {
 		ctx:             ctx,
 		ver:             o.Version,
 		updater:         o.Updater,
+		focused:         true,
+		lastInput:       fx.Now(),
 		usage:           o.Usage,
 		restore:         o.Restore,
 		upd:             selfupdate.Status{Running: o.Version},

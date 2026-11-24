@@ -508,6 +508,7 @@ func (p *parser) parseGitHub(top *table, cfg *Config) {
 			cfg.GitHub.ApproversTeam = strings.TrimPrefix(team, "@")
 		}
 	}
+	cfg.GitHub.BudgetGovernor = t.boolean("budget_governor", cfg.GitHub.BudgetGovernor)
 	cfg.GitHub.ApproversTeamStrict = t.boolean("approvers_team_strict", false)
 	if cfg.GitHub.ApproversTeamStrict && cfg.GitHub.ApproversTeam == "" {
 		t.warnf("approvers_team_strict", "has no effect without approvers_team")
@@ -605,6 +606,12 @@ func (p *parser) parseDisplay(top *table, cfg *Config, ov Overrides) {
 	d.ClockTZLabel = strings.TrimSpace(t.str("clock_tz_label", d.ClockTZLabel))
 	d.Room = t.boolean("room", d.Room)
 	d.FortressEpigraph = t.boolean("fortress_epigraph", d.FortressEpigraph)
+	d.IdleAfterSecs = t.int("idle_after_secs", d.IdleAfterSecs)
+	if d.IdleAfterSecs > 0 && d.IdleAfterSecs < MinIdleAfterSecs {
+		t.warnf("idle_after_secs", "%d is below the floor of %d, using %d", d.IdleAfterSecs, MinIdleAfterSecs, MinIdleAfterSecs)
+		d.IdleAfterSecs = MinIdleAfterSecs
+	}
+	d.Title = t.boolean("title", d.Title)
 	d.Profile = strings.TrimSpace(t.str("profile", d.Profile))
 	if n := len([]rune(d.Profile)); n > 12 {
 		t.errf("profile", "%q is %d characters; a header badge holds at most 12", d.Profile, n)

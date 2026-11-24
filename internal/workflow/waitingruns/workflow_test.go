@@ -631,8 +631,8 @@ func TestHelpAndLegend(t *testing.T) {
 // PR stays out of the poll's state too.
 func TestPollPicksUpANewRunBetweenRefreshes(t *testing.T) {
 	w, app := newWF(t)
-	if !w.Live(app) || w.PollEvery() != 30*time.Second {
-		t.Fatalf("live %v every %v", w.Live(app), w.PollEvery())
+	if !w.Live(app) || w.PollEvery() != quietPoll {
+		t.Fatalf("nothing waits yet: live %v every %v, want %v", w.Live(app), w.PollEvery(), quietPoll)
 	}
 	merged := &model.PR{Repo: infra, Number: 9, State: "MERGED", MergeCommit: &model.MergeCommit{Oid: "m9"}}
 	if _, err := refresh(t, w, app, merged); err != nil {
@@ -656,6 +656,27 @@ func TestPollPicksUpANewRunBetweenRefreshes(t *testing.T) {
 			got = append(got, it.Run.ID)
 		}
 		t.Fatalf("polled items = %v, want [4242]", got)
+	}
+	if w.PollEvery() != 30*time.Second {
+		t.Errorf("a run waits on the viewer: poll_secs, got %v", w.PollEvery())
+	}
+}
+
+// TestPollQuickensAfterAnAction: with nothing waiting the poll is quiet;
+// an action quickens it to poll_secs for hotFor, then it is quiet again.
+func TestPollQuickensAfterAnAction(t *testing.T) {
+	w, _ := newWF(t)
+	if w.PollEvery() != quietPoll {
+		t.Fatalf("quiet: %v", w.PollEvery())
+	}
+	now := clock.Now()
+	w.ExpectRuns(now)
+	if w.PollEvery() != 30*time.Second {
+		t.Errorf("after an action: %v", w.PollEvery())
+	}
+	w.ExpectRuns(now.Add(-hotFor - time.Second))
+	if w.PollEvery() != quietPoll {
+		t.Errorf("hotFor later: %v", w.PollEvery())
 	}
 }
 

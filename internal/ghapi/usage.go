@@ -153,6 +153,21 @@ func (u *Usage) record(ctx context.Context, method, rawURL string, status int, h
 	}
 }
 
+// ObserveBudget takes the X-RateLimit-* headers of an answer read
+// elsewhere (and tests' fakes) as the budget's latest word.
+func (u *Usage) ObserveBudget(h http.Header) {
+	if u == nil {
+		return
+	}
+	b, ok := budgetOf(h, clock.Now())
+	if !ok {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.budgets[b.Resource] = b
+}
+
 // recordCost adds the points one GraphQL answer charged, and traces it
 // (the GraphQL trace line waits for the cost, which is in the body).
 func (u *Usage) recordCost(ctx context.Context, query string, cost int) {

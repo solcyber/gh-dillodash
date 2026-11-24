@@ -152,6 +152,12 @@ type Workflow struct {
 	mu     sync.Mutex
 	last   *State    // the last state without a rate limit (refresh and poll)
 	listed listedSet // the last refresh's listed merge commits, for the poll
+	// seen is every run that ever waited this session; active is when
+	// one first did, or when the viewer last did something that can set
+	// one off (ExpectRuns): the poll runs at poll_secs from then for
+	// hotFor, at quietPoll otherwise
+	seen   map[int64]bool
+	active time.Time
 
 	// UI goroutine only: the runs that waited on the viewer at the last
 	// apply, so a run that starts waiting on them is said once.
@@ -287,15 +293,68 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 	st.Warnings = warns
 	w.mu.Lock()
 	w.last = st
+	if w.seen == nil {
+		w.seen = map[int64]bool{}
+	}
+	for _, it := range st.Items {
+		if !w.seen[it.Run.ID] {
+			w.seen[it.Run.ID] = true
+			w.active = clock.Now()
+		}
+	}
 	w.mu.Unlock()
 	return st, warns, nil
 }
 
 // ---- poll (between refreshes) ----
 
-// PollEvery is poll_secs.
+// PollEvery is poll_secs while a run waits on the viewer, or for hotFor
+// after a run started waiting or the viewer acted; quietPoll otherwise:
+// most hours nothing waits, and a run waiting on somebody else does not
+// need the viewer's dashboard to ask twice a minute.
 func (w *Workflow) PollEvery() time.Duration {
-	return time.Duration(w.cfg.PollSecs) * time.Second
+	base := time.Duration(w.cfg.PollSecs) * time.Second
+	if base <= 0 {
+		return 0
+	}
+	w.mu.Lock()
+	hot := w.hot(clock.Now())
+	w.mu.Unlock()
+	if hot {
+		return base
+	}
+	return max(base, quietPoll)
+}
+
+const (
+	// quietPoll is the poll's cadence while nothing waits on the viewer
+	quietPoll = 2 * time.Minute
+	// hotFor is how long the poll stays at poll_secs after a run starts
+	// waiting, or after the viewer acts
+	hotFor = 15 * time.Minute
+)
+
+// hot (mu held): something waits on the viewer, or something just moved.
+func (w *Workflow) hot(now time.Time) bool {
+	if !w.active.IsZero() && now.Sub(w.active) < hotFor {
+		return true
+	}
+	if w.last != nil {
+		for _, it := range w.last.Items {
+			if len(it.Mine()) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ExpectRuns is the viewer acting (a merge, a dispatch, an approval):
+// a run may start waiting within minutes, so the poll quickens.
+func (w *Workflow) ExpectRuns(now time.Time) {
+	w.mu.Lock()
+	w.active = now
+	w.mu.Unlock()
 }
 
 // Live is always true while poll_secs is on: a run can start waiting at

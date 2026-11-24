@@ -110,7 +110,7 @@ func (m *Model) refresh(again bool) {
 	wantFortress := m.fortress != nil && m.fortress.wanted
 	m.refreshing = true
 	m.lastRefresh = started
-	m.nextRefreshAt = started + float64(m.cfg.Display.RefreshSecs)
+	m.nextRefreshAt = started + m.refreshEvery()
 	gh, repos, requested, wf, ctx := m.gh, m.repos, m.requested, m.wf, m.ctx
 	openFirst, firstTier := m.cfg.OpenFirstTier(), ""
 	if len(openFirst) > 0 {
@@ -471,6 +471,10 @@ func (m *Model) applyRefresh(out *refreshResult) {
 			m.errText = fmt.Sprintf("couldn't refresh %s: %s", m.detailRef(), out.detailErr)
 		}
 		m.warn = out.warn
+		if note := m.governNote(); note != "" {
+			m.pollWarn(note) // the budget holds the cadence back: said, not silent
+		}
+		m.caughtUp = false
 		m.lastRefreshWall = m.wallNow().Format("15:04:05")
 		// a generation, not the wall second: two refreshes in one second
 		// with the same counts must still rebuild the fortress
