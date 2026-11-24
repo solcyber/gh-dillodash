@@ -71,6 +71,7 @@ func TestEverythingSet(t *testing.T) {
 [github]
 host = "github.example.com"
 login = "alice"
+budget_governor = false
 
 [reviews]
 repos = ["acme/infra", "acme/app", "ACME/infra"]
@@ -87,6 +88,8 @@ clock_timezone = "Europe/London"
 clock_tz_label = " UK "
 room = false
 fortress_epigraph = false
+idle_after_secs = 120
+title = false
 
 [bots]
 logins = ["Infra-Bot", "github-actions", "infra-bot"]
@@ -183,7 +186,7 @@ poll_secs = 0
 	if c.Reviews.CIRecheckSecs != 60 || !c.Reviews.Multi() {
 		t.Errorf("reviews = %+v", c.Reviews)
 	}
-	if c.Display != (DisplayConfig{RefreshSecs: 30, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "none", ClockTimezone: "Europe/London", ClockTZLabel: "UK"}) {
+	if c.Display != (DisplayConfig{RefreshSecs: 30, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "none", ClockTimezone: "Europe/London", ClockTZLabel: "UK", IdleAfterSecs: 120}) {
 		t.Errorf("display = %+v", c.Display)
 	}
 	if want := []string{"infra-bot", "github-actions"}; !reflect.DeepEqual(c.Bots.Logins, want) {
@@ -562,7 +565,7 @@ func TestOverrides(t *testing.T) {
 	if want := []model.Repo{repo("acme/app"), repo("acme/web")}; !reflect.DeepEqual(c.Reviews.Repos, want) {
 		t.Errorf("--repo replaces the list: %v", c.Reviews.Repos)
 	}
-	if c.Display != (DisplayConfig{RefreshSecs: 5, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true, FortressEpigraph: true}) {
+	if c.Display != (DisplayConfig{RefreshSecs: 5, Icons: "unicode", Theme: "mono", Motion: "off", Mascot: "sprite", Clock: true, ClockTimezone: "America/New_York", Room: true, FortressEpigraph: true, IdleAfterSecs: 300, Title: true}) {
 		t.Errorf("display = %+v", c.Display)
 	}
 	if !reflect.DeepEqual(c.Warnings, []string{"--refresh: 1 is below the floor of 5, using 5"}) {

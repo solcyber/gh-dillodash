@@ -31,12 +31,27 @@ type pollDoneMsg struct{ out *pollResult }
 // schedulePoll arms the next poll from the workflows' cadence, or
 // disarms it when nothing is in flight.
 func (m *Model) schedulePoll() {
-	d := m.wf.PollEvery(m)
+	d := m.pollEvery(m.wf.PollEvery(m))
 	if d <= 0 {
 		m.nextPollAt = 0
 		return
 	}
 	m.nextPollAt = fx.Now() + d.Seconds()
+}
+
+// pollSooner re-arms the poll when the workflows' cadence now asks for
+// it sooner than it is armed (an action quickened a poller).
+func (m *Model) pollSooner() {
+	if m.polling {
+		return
+	}
+	d := m.pollEvery(m.wf.PollEvery(m))
+	if d <= 0 {
+		return
+	}
+	if at := fx.Now() + d.Seconds(); m.nextPollAt == 0 || at < m.nextPollAt {
+		m.nextPollAt = at
+	}
 }
 
 func (m *Model) pollDue() bool { return m.nextPollAt > 0 && fx.Now() >= m.nextPollAt }

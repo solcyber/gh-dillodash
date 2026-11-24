@@ -214,7 +214,7 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	if !refreshing && backoff <= 0 && m.loaded {
 		left := max(0, int(m.nextRefreshAt-fx.Now()))
 		segs := []text.Seg{text.S("  next ", "faint")}
-		segs = append(segs, fx.MeterSegs(float64(left)/float64(max(1, m.cfg.Display.RefreshSecs)), 5, "meter.ok", "meter.track")...)
+		segs = append(segs, fx.MeterSegs(float64(left)/max(1, m.refreshEvery()), 5, "meter.ok", "meter.track")...)
 		segs = append(segs, text.S(fmt.Sprintf(" %d:%02d", left/60, left%60), "faint"))
 		parts = append(parts, part{4, segs})
 	}

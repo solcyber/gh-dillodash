@@ -29,7 +29,6 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
-	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -692,41 +691,15 @@ func (w *Workflow) Apply(app workflow.App, s workflow.State) {
 }
 
 // AfterApply says so when a merged release's next environment starts
-// waiting for me (once per environment), pulls the next refresh in while
-// any deploy waits or runs, and rebuilds an open release's card.
+// waiting for me (once per environment) and rebuilds an open release's
+// card. A deploy that moves on its own is followed by the poll
+// (deployfollow.go), never by pulling whole refreshes in.
 func (w *Workflow) AfterApply(app workflow.App) {
 	st := w.stateOf(app)
 	if st == nil {
 		return
 	}
-	live := false
-	for _, pr := range st.Releases {
-		dep, ok := pr.Get(ExtDeploy).(deploys.State)
-		if !ok {
-			continue
-		}
-		if dep.Phase == "waiting" || dep.Phase == "running" {
-			live = true
-		}
-		for _, wt := range dep.Waits {
-			// an environment automation approves is not announced
-			// until automation has left it past the grace
-			if !wt.Due {
-				continue
-			}
-			key := seenKey{pr.Repo.Name, dep.SHA, wt.EnvName}
-			w.mu.Lock()
-			seen := w.seen[key]
-			w.seen[key] = true
-			w.mu.Unlock()
-			if !seen {
-				app.Next(fmt.Sprintf("%s#%d: %s now waits for your approval — press %s on its row", pr.Repo.Name, pr.Number, wt.EnvName, keymap.S(keymap.Deploys)))
-			}
-		}
-	}
-	if live {
-		app.RefreshSoon(w.refreshEvery())
-	}
+	w.announceDeploys(app, st)
 	w.noteItems(app, st)
 	for _, pr := range st.Releases {
 		w.announce(app, pr)

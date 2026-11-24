@@ -802,3 +802,15 @@ func (s *Set) FortressLaneLabel(repo model.Repo) string {
 	}
 	return ""
 }
+
+// ExpectRuns tells each RunExpecter the viewer acted.
+func (s *Set) ExpectRuns(now time.Time) {
+	if s == nil {
+		return
+	}
+	for _, w := range s.Items {
+		if e, ok := w.(RunExpecter); ok {
+			e.ExpectRuns(now)
+		}
+	}
+}

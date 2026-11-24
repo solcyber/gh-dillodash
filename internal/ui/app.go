@@ -247,6 +247,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case actionDoneMsg:
 		m.action = false
 		m.clearAck()
+		// an action may set off runs that wait: the polls that watch
+		// for them quicken, now rather than at their quiet cadence
+		m.wf.ExpectRuns(clock.Now())
+		m.pollSooner()
 		// an action may have written: no kept read, nor one already on
 		// its way, may stand for the item after it (but the re-read the
 		// action set off after its write may)
@@ -256,9 +260,17 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			m.fail(msg.panic)
 		}
 	case tea.KeyPressMsg:
+		m.noteInput()
 		return tea.Batch(m.handleKey(toKey(msg)), m.retick())
 	case tea.PasteMsg:
+		m.noteInput()
 		return tea.Batch(m.handleKey(widgets.T(msg.Content)), m.retick())
+	case tea.FocusMsg:
+		m.noteFocus(true)
+		return m.retick()
+	case tea.BlurMsg:
+		m.noteFocus(false)
+		return nil
 	case tea.PasteStartMsg, tea.PasteEndMsg:
 		return nil
 	default:
@@ -283,6 +295,7 @@ func (m *Model) View() tea.View {
 	m.draw(c)
 	v := tea.NewView(c.Render(render))
 	v.AltScreen = true
+	v.ReportFocus = true // away (attention.go): slower while out of sight
 	return v
 }
 

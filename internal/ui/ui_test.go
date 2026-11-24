@@ -71,7 +71,8 @@ func newHarness(t *testing.T, repos ...model.Repo) *harness {
 	}
 	cfg := config.Default()
 	cfg.Reviews.Repos = repos
-	cfg.Display.Clock = false // the clock would hold the idle tick at a second
+	cfg.Display.Clock = false     // the clock would hold the idle tick at a second
+	cfg.Display.IdleAfterSecs = 0 // the fake clock jumps minutes: never idle unless a test says so
 	gh := fake.New("alice")
 	gh.Open = map[model.Repo]ghapi.ListResult{}
 	gh.PRs = map[model.Ident]*model.PR{}

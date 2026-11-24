@@ -237,6 +237,8 @@ type App interface {
 	// while one is in flight.
 	Refresh(again bool)
 	// RefreshSoon pulls the next refresh in to at most d from now.
+	// It is for a step the viewer set off; something that moves on its
+	// own is followed by a Poller, which reads only what it watches.
 	RefreshSoon(d time.Duration)
 	Width() int
 	// Height is the screen's rows (a card leaves decoration out when
@@ -548,3 +550,9 @@ var Registry = map[string]Constructor{}
 
 // Register adds a constructor.
 func Register(name string, c Constructor) { Registry[name] = c }
+
+// RunExpecter is a workflow that quickens when the viewer acts: an
+// action (a merge, a dispatch, an approval) can set off runs that wait.
+type RunExpecter interface {
+	ExpectRuns(now time.Time)
+}

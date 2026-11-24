@@ -935,8 +935,8 @@ func TestRefreshAndSections(t *testing.T) {
 	if !logHas(app, "next", "web-portal#133: prod now waits for your approval — press D on its row") {
 		t.Errorf("prod waiting is announced with D: %v", app.Log)
 	}
-	if len(app.Soon) != 1 || app.Soon[0] != 30*time.Second {
-		t.Errorf("a live deploy refreshes every 30s: %v", app.Soon)
+	if len(app.Soon) != 0 {
+		t.Errorf("a deploy waiting on you pulls no refresh in (D reads it; the poll follows what moves on its own): %v", app.Soon)
 	}
 	n := len(app.Log)
 	w.AfterApply(app)
