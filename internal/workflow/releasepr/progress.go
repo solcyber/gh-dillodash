@@ -654,6 +654,7 @@ func (w *Workflow) ApplyPoll(app workflow.App, patch any) {
 	}
 	if st != nil {
 		w.announceDeploys(app, st)
+		w.noteFollow(st)
 	}
 	w.mu.Lock()
 	for id, p := range patches {

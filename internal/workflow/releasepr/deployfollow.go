@@ -46,28 +46,40 @@ type followJob struct {
 	old  deploys.State
 }
 
-// deployJobs are the releases whose deploy the poll follows now.
-func (w *Workflow) deployJobs() []followJob {
-	w.mu.Lock()
-	st := w.cur
-	w.mu.Unlock()
-	if st == nil {
-		return nil
-	}
+// noteFollow (UI goroutine) takes the snapshot of what the poll follows
+// from the applied state: the poll goroutine reads the snapshot, never
+// the PRs, whose annotations the UI goroutine writes.
+func (w *Workflow) noteFollow(st *State) {
 	var jobs []followJob
-	for _, pr := range st.Releases {
-		dep, ok := pr.Get(ExtDeploy).(deploys.State)
-		if !ok || pr.State != "MERGED" || MergeSHA(pr) == "" || !followDeploy(dep) {
-			continue
+	if st != nil {
+		for _, pr := range st.Releases {
+			dep, ok := pr.Get(ExtDeploy).(deploys.State)
+			if !ok || pr.State != "MERGED" || MergeSHA(pr) == "" || !followDeploy(dep) {
+				continue
+			}
+			jobs = append(jobs, followJob{id: pr.Ident(), repo: pr.Repo, sha: MergeSHA(pr), old: dep})
 		}
-		jobs = append(jobs, followJob{id: pr.Ident(), repo: pr.Repo, sha: MergeSHA(pr), old: dep})
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].id.String() < jobs[j].id.String() })
-	return jobs
+	w.mu.Lock()
+	w.follow = jobs
+	w.mu.Unlock()
+}
+
+// deployJobs are the releases whose deploy the poll follows now (a copy
+// of the snapshot).
+func (w *Workflow) deployJobs() []followJob {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]followJob(nil), w.follow...)
 }
 
 // followsDeploys reports whether any release's deploy is followed.
-func (w *Workflow) followsDeploys() bool { return len(w.deployJobs()) > 0 }
+func (w *Workflow) followsDeploys() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.follow) > 0
+}
 
 // pollDeploys reads each followed deploy again into its patch.
 func (w *Workflow) pollDeploys(ctx context.Context, gh ghapi.Client, patches map[model.Ident]*pollPatch) error {

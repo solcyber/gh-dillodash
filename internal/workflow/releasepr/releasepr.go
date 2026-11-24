@@ -277,7 +277,10 @@ type seenKey struct {
 // Workflow is the release workflow.
 type Workflow struct {
 	workflow.Base
-	cfg       *config.ReleasePRConfig
+	cfg *config.ReleasePRConfig
+	// follow is what the poll follows: merged releases whose deploy moves
+	// on its own (deployfollow.go), snapshot on the UI goroutine (mu)
+	follow    []followJob
 	win       *config.MaintenanceWindowConfig // nil: no window, M merges whenever GitHub allows
 	window    workflow.Workflow               // the window workflow when enabled
 	org       string
@@ -700,6 +703,7 @@ func (w *Workflow) AfterApply(app workflow.App) {
 		return
 	}
 	w.announceDeploys(app, st)
+	w.noteFollow(st)
 	w.noteItems(app, st)
 	for _, pr := range st.Releases {
 		w.announce(app, pr)
