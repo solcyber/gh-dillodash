@@ -126,7 +126,8 @@ func (m *Model) offerDeploysList() (string, bool) {
 	}
 	// a workflow's row says itself whether D is its move (a waiting run,
 	// a change whose tier deploy waits)
-	if t := m.turnOf(row); t.Kind == workflow.TurnYou && t.Key == keymap.S(keymap.Deploys) {
+	// (a wait nobody read whose it is names D too, without being pinned)
+	if t := m.turnOf(row); t.Key == keymap.S(keymap.Deploys) && t.Verb != "" {
 		return t.Verb, true
 	}
 	return "", false

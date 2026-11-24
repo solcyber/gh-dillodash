@@ -52,13 +52,15 @@ type State struct {
 	Warnings []string
 }
 
-// DeploySHAs are the commits whose deploys the change rows show
-// (workflow.DeploySHAs).
-func (s *State) DeploySHAs() []workflow.RepoSHA {
-	var out []workflow.RepoSHA
+// ShownRuns are the waiting runs the change rows show
+// (workflow.ShownRuns): the runs each row's last read saw waiting.
+func (s *State) ShownRuns() []workflow.RepoRun {
+	var out []workflow.RepoRun
 	for _, c := range s.Changes() {
-		if sha := c.SHA(); sha != "" {
-			out = append(out, workflow.RepoSHA{Repo: c.Repo, SHA: sha})
+		for _, r := range c.Runs {
+			if r.Status == "waiting" {
+				out = append(out, workflow.RepoRun{Repo: c.Repo, RunID: r.ID})
+			}
 		}
 	}
 	return out
@@ -622,7 +624,11 @@ func (w *Workflow) deployChip(app workflow.App, c *Change) (string, string) {
 	case DeployRunning:
 		return glyphs.Ico("wait") + tier + " deploying", "chip.queued"
 	case DeployWaiting:
-		if mine, known := waitOf(app, c); known && len(mine) == 0 {
+		mine, known := waitOf(app, c)
+		switch {
+		case !known:
+			return glyphs.Ico("wait") + tier + " waits · D", "chip.state" // whose is unread: D reads it
+		case len(mine) == 0:
 			return glyphs.Ico("wait") + tier + " waits", "chip.state"
 		}
 		return glyphs.Ico("wait") + tier + " waits · D", "chip.await"

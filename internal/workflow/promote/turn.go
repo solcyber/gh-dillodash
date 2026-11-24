@@ -52,7 +52,9 @@ func (w *Workflow) turn(app workflow.App, c *Change) workflow.Turn {
 		envs, known := waitOf(app, c)
 		switch {
 		case !known:
-			return workflow.You(keymap.S(keymap.Deploys), "approve its "+tier+" deploy", "deploy", workflow.PrioDeploy)
+			// nobody read whose it is (waiting runs off, or the repo not
+			// read): not pinned, but D reads and approves it
+			return workflow.Turn{Kind: workflow.TurnOthers, What: "its " + tier + " deploy's reviewers (D reads them)", Key: keymap.S(keymap.Deploys), Verb: "read its " + tier + " deploy"}
 		case len(envs) > 0:
 			return workflow.You(keymap.S(keymap.Deploys), "approve "+strings.Join(envs, ", "), "deploy", workflow.PrioDeploy)
 		}
@@ -83,6 +85,9 @@ func (w *Workflow) turn(app workflow.App, c *Change) workflow.Turn {
 		}
 		return workflow.Others("automation (tagging)")
 	case OnFirst:
+		if mine {
+			return workflow.You(keymap.S(keymap.Promote), "open the promotion PR", "promotion", workflow.PrioPromotion)
+		}
 		return workflow.Others(authorOr(c.Author(), "its author") + " to promote it")
 	}
 	return workflow.Turn{Kind: workflow.TurnDone, What: "on " + w.cfg.Prod()}

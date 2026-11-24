@@ -9,7 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
+	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
@@ -41,6 +43,18 @@ func (m *Model) turnOf(row workflow.Row) workflow.Turn {
 // PR stuck on something only they can clear.
 func (m *Model) prTurn(pr *model.PR) workflow.Turn {
 	if pr.State == "MERGED" {
+		// a PR merged from here: its deploy is the viewer's when an
+		// environment waits on them; D reads one never read
+		if st, ok := pr.Get("deploy").(deploys.State); ok {
+			if due := st.Due(); st.Phase == "waiting" && len(due) > 0 {
+				return workflow.You(keymap.S(keymap.Deploys), "approve "+strings.Join(due, ", "), "deploy", workflow.PrioDeploy)
+			}
+			if st.Phase == "running" {
+				return workflow.Running("deploying", time.Time{})
+			}
+		} else if !deploysDone(pr) {
+			return workflow.Turn{Kind: workflow.TurnOthers, What: "its deploys (D reads them)", Key: keymap.S(keymap.Deploys), Verb: "read its deploys"}
+		}
 		return workflow.Turn{Kind: workflow.TurnDone, What: "merged"}
 	}
 	label, _, needsYou, _ := m.decision(pr, nil)
@@ -49,20 +63,22 @@ func (m *Model) prTurn(pr *model.PR) workflow.Turn {
 	switch {
 	case pr.IsDraft:
 		return workflow.Others(author + " (draft)")
-	case needsYou && mine:
+	case mine && needsYou && label == model.LabelStuck:
 		why := model.StuckOf(pr, nil, m.me).Reason
 		if why == "" {
 			why = label
 		}
 		return workflow.You("↵", "clear it: "+why, "fix", workflow.PrioOwnFix)
+	case mine:
+		// my own PR waits on its reviewers until something only I can
+		// clear stops it
+		return workflow.Others("its reviewers")
 	case needsYou && label == model.LabelReReview:
 		return workflow.You("↵", "re-review it (it changed since you approved)", "review", workflow.PrioReview)
 	case needsYou:
 		return workflow.You("↵", "review it", "review", workflow.PrioReview)
 	case label == model.LabelApprovedMe:
 		return workflow.Others(author + " to merge it")
-	case mine:
-		return workflow.Others("its reviewers")
 	}
 	return workflow.Others(author)
 }
@@ -313,6 +329,7 @@ func doNextTurn(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 	}
 	was := m.selected
 	m.selected = i
+	m.movedSinceList = true
 	m.leaveTrail(was)
 	return nil
 }

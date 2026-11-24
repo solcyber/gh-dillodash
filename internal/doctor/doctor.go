@@ -452,10 +452,13 @@ func waitingReach(ctx context.Context, w io.Writer, wr *config.WaitingRunsConfig
 			}
 		}
 	}
-	found, err := waitingruns.Discover(ctx, gh, orgs)
+	found, failed, err := waitingruns.Discover(ctx, gh, orgs)
 	if err != nil {
 		fmt.Fprintf(w, "    gated environments: not read (%s)\n", err)
 		return
+	}
+	if failed > 0 {
+		fmt.Fprintf(w, "    warning: the environments of %d repos could not be read (the token needs Environments: Read there)\n", failed)
 	}
 	if wr.Auto {
 		fmt.Fprintf(w, "    discovered: %s\n", joinRepos(found))

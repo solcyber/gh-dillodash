@@ -185,8 +185,13 @@ type Workflow struct {
 
 	// discovery (repos = "auto"): its own lock, so a slow discovery never
 	// holds the list's
-	discMu sync.Mutex
-	disc   discovered
+	discMu      sync.Mutex
+	disc        discovered
+	discovering bool
+	// fallback is what a failed discovery reads instead (the review
+	// repos); writeAllowed is [github] allowed_repos (nil: every repo)
+	fallback     []model.Repo
+	writeAllowed func(model.Repo) bool
 
 	// isBot and grace decide when a wait is left to automation (as the
 	// release rows do): set from [bots] and deploy_auto_grace_secs
@@ -213,6 +218,10 @@ func init() {
 		}
 		w := New(ctx.Config.WaitingRuns)
 		w.isBot = ctx.Config.Bots.IsBot
+		w.fallback = append([]model.Repo(nil), ctx.Config.Reviews.Repos...)
+		if len(ctx.Config.GitHub.AllowedRepos) > 0 {
+			w.writeAllowed = ctx.Config.GitHub.WriteAllowed
+		}
 		if rp := ctx.Config.ReleasePR; rp != nil {
 			w.grace = deploys.GraceOf(rp.DeployAutoGraceSecs)
 		}
@@ -562,13 +571,17 @@ func (w *Workflow) visible(app workflow.App) []*Item {
 	if p, ok := app.State(releaseName).(workflow.CIProvider); ok && p != nil {
 		addSHAs(listed, p.CIPRs())
 	}
-	if p, ok := app.State(promoteName).(workflow.DeploySHAs); ok && p != nil {
-		for _, rs := range p.DeploySHAs() {
-			listed[listedKey(rs.Repo, rs.SHA)] = true
+	shown := map[string]bool{}
+	if p, ok := app.State(promoteName).(workflow.ShownRuns); ok && p != nil {
+		for _, rr := range p.ShownRuns() {
+			shown[fmt.Sprintf("%s#%d", strings.ToLower(rr.Repo.String()), rr.RunID)] = true
 		}
 	}
 	var out []*Item
 	for _, it := range st.Items {
+		if shown[fmt.Sprintf("%s#%d", strings.ToLower(it.Repo.String()), it.Run.ID)] {
+			continue // the change's row shows it, and D there approves it
+		}
 		if !listed.covers(it.Repo, it.Run) {
 			out = append(out, it)
 		}

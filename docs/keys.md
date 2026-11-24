@@ -80,7 +80,7 @@ Rendered from the offline demo fixture by `go run ./cmd/screenshot`.
 
 **The list**
 
-![The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases with a release in flight; the night's queue; the issues](shots/list.png)
+![The list: "your turn" at the top, each row with the key that moves it on and what that key does](shots/list.png)
 
 **`/` filters as you type**
 

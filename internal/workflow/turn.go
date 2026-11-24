@@ -89,15 +89,17 @@ type RunWaits interface {
 	RunWait(repo model.Repo, runID int64) (mine []string, known bool)
 }
 
-// DeploySHAs is a state whose rows show (and approve with D) the deploys
-// on these commits: the waiting runs workflow leaves a push run on one
-// of them out of its own section, so a deploy is listed once.
-type DeploySHAs interface {
-	DeploySHAs() []RepoSHA
+// ShownRuns is a state whose rows show (and approve with D) these
+// waiting runs: the waiting runs workflow leaves them out of its own
+// section, so a deploy is listed once. Only a run the row itself shows
+// as waiting is named: one the row's last read saw differently stays
+// with the waiting runs, so a wait is never hidden from both.
+type ShownRuns interface {
+	ShownRuns() []RepoRun
 }
 
-// RepoSHA is a commit in a repo.
-type RepoSHA struct {
-	Repo model.Repo
-	SHA  string
+// RepoRun is a run in a repo.
+type RepoRun struct {
+	Repo  model.Repo
+	RunID int64
 }

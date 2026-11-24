@@ -480,6 +480,9 @@ func doNav(m *Model, k widgets.Key, page int, _ *lockedApp) tea.Cmd {
 	}
 	top := k.Rune == 'g' || k.Name == "home"
 	bottom := k.Rune == 'G' || k.Name == "end"
+	if m.view == ViewList && m.loaded {
+		m.movedSinceList = true // the first whole load keeps the cursor where it is
+	}
 	switch m.view {
 	case ViewList:
 		switch {

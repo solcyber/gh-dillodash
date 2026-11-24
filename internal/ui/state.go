@@ -138,20 +138,23 @@ type Model struct {
 	ciFlush       bool
 	nextRefreshAt float64
 	usage         *ghapi.Usage
-	pulledIn      bool
+	pulledIn      bool // a workflow pulled the next refresh in (RefreshSoon): counted apart
 	// attention (attention.go): the terminal's focus as it last reported
 	// it (focusKnown false: it never did), the last key, and whether the
 	// refresh in flight is a catch-up after nobody watched
 	focused, focusKnown bool
 	lastInput           float64
 	caughtUp            bool
-	fullyLoaded         bool // a whole refresh (the workflows too) has landed once // a workflow pulled the next refresh in (RefreshSoon): counted apart
-	lastRefresh         float64
-	lastRefreshWall     string
-	clockLoc            *clock.Local  // the header clock's second zone; nil: no clock
-	backoff             ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
-	ci                  *ghapi.CIFallback
-	ahead               *aheadCache // commits a head is ahead of a stale approval
+	// fullyLoaded: a whole refresh (the workflows too) has landed once;
+	// movedSinceList: a key moved the cursor after the list first showed,
+	// so the first whole load leaves it where it is
+	fullyLoaded, movedSinceList bool
+	lastRefresh                 float64
+	lastRefreshWall             string
+	clockLoc                    *clock.Local  // the header clock's second zone; nil: no clock
+	backoff                     ghapi.Backoff // the refresh loop's failure cadence and GitHub's wall
+	ci                          *ghapi.CIFallback
+	ahead                       *aheadCache // commits a head is ahead of a stale approval
 	// listOnly: the first load's list is on screen but the rest of that
 	// refresh (workflows, CI) has not landed; the keys that act wait
 	// issuesListed is the issues section's count (the summary says the

@@ -39,7 +39,11 @@ func (m *Model) decision(pr *model.PR, listed *model.PR) (label, style string, n
 		}
 		// a conflict or a red check is the author's to clear
 		mine := m.me != "" && strings.EqualFold(pr.Author.Login, m.me)
-		return model.LabelStuck, model.ChipForLabel[model.LabelStuck], mine && s.AuthorAction(), false
+		style := model.ChipForLabel[model.LabelStuck]
+		if !(mine && s.AuthorAction()) {
+			style = "chip.state" // the author's to clear: gold is the viewer's move only
+		}
+		return model.LabelStuck, style, mine && s.AuthorAction(), false
 	}
 	label = model.DecisionLabel(pr, m.me, local)
 	style = model.ChipForLabel[label]

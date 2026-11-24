@@ -444,7 +444,7 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		}
 		hadRestore := m.restore != nil
 		m.applyRestore()
-		if firstFull && !hadRestore {
+		if firstFull && !hadRestore && !m.movedSinceList {
 			// the first whole load: the cursor starts on what is most
 			// pressing, the head of the "your turn" section
 			m.selectFirstTurn()

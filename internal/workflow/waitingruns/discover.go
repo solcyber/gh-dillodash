@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
@@ -21,9 +22,8 @@ import (
 // organizations with an environment that needs a reviewer. A repo that
 // gains one is read without anybody editing a config (a hand list that
 // missed one hid its waiting deploys entirely). The environments change
-// rarely, so discovery is kept discover_ttl_secs, in memory and on disk;
-// its reads are conditional, so a rediscovery that finds nothing new
-// costs nothing against the budget.
+// rarely, so discovery is kept discover_ttl_secs, in memory and on disk,
+// and redone in the background: about one call per repo every six hours.
 
 // discoveryFile is the on-disk shape of the discovery cache.
 type discoveryFile struct {
@@ -39,7 +39,11 @@ type discovered struct {
 }
 
 // repos is what the workflow reads: the config's list, or the discovered
-// gated repos. A discovery that fails keeps the last list and warns.
+// gated repos (less any [github] allowed_repos leaves out). A discovery
+// that is due runs in the background while the last list serves; with
+// no list at all it runs now. One that fails, or finds nothing it could
+// read, falls back to the review repos and says so: a wait is never
+// hidden because discovery broke.
 func (w *Workflow) repos(ctx context.Context, gh ghapi.Client, now time.Time) ([]model.Repo, string) {
 	if !w.cfg.Auto {
 		return append([]model.Repo(nil), w.cfg.Repos...), ""
@@ -48,43 +52,81 @@ func (w *Workflow) repos(ctx context.Context, gh ghapi.Client, now time.Time) ([
 	if ttl <= 0 {
 		ttl = 6 * time.Hour
 	}
+	orgs := strings.Join(w.cfg.Orgs, "+")
 	w.discMu.Lock()
 	defer w.discMu.Unlock()
-	if w.disc.repos != nil && now.Sub(w.disc.at) < ttl {
-		return append([]model.Repo(nil), w.disc.repos...), ""
-	}
-	orgs := strings.Join(w.cfg.Orgs, "+")
-	if cached, at, ok := loadDiscovery(w.cfg.Cache, orgs); ok && now.Sub(at) < ttl {
-		w.disc = discovered{cached, at}
-		return append([]model.Repo(nil), cached...), ""
-	}
-	found, err := Discover(ctx, gh, w.cfg.Orgs)
-	if err != nil {
-		if ghapi.IsRateLimit(err) || w.disc.repos != nil {
-			return append([]model.Repo(nil), w.disc.repos...), "repos with gated environments not discovered: " + err.Error()
+	if w.disc.repos == nil {
+		if cached, at, ok := loadDiscovery(w.cfg.Cache, orgs); ok {
+			w.disc = discovered{cached, at}
 		}
-		return nil, "repos with gated environments not discovered: " + err.Error()
 	}
-	w.disc = discovered{found, now}
-	saveDiscovery(w.cfg.Cache, orgs, found, now)
-	return append([]model.Repo(nil), found...), ""
+	if w.disc.repos != nil {
+		if now.Sub(w.disc.at) >= ttl && !w.discovering {
+			// rediscover beside the refresh; the last list serves meanwhile
+			w.discovering = true
+			go func() {
+				dctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				found, failed, err := Discover(dctx, gh, w.cfg.Orgs)
+				w.discMu.Lock()
+				defer w.discMu.Unlock()
+				w.discovering = false
+				if err == nil && failed == 0 {
+					w.disc = discovered{found, clock.Now()}
+					saveDiscovery(w.cfg.Cache, orgs, found, clock.Now())
+				} else {
+					w.disc.at = clock.Now().Add(-ttl + 10*time.Minute) // try again in ten minutes
+				}
+			}()
+		}
+		return w.allowed(w.disc.repos), ""
+	}
+	found, failed, err := Discover(ctx, gh, w.cfg.Orgs)
+	switch {
+	case err != nil && len(w.fallback) > 0:
+		return append([]model.Repo(nil), w.fallback...), "repos with gated environments not discovered (" + err.Error() + "): reading the review repos instead"
+	case err != nil:
+		return nil, "repos with gated environments not discovered: " + err.Error()
+	case failed > 0 && len(found) == 0 && len(w.fallback) > 0:
+		return append([]model.Repo(nil), w.fallback...), fmt.Sprintf("the environments of %d repos could not be read (the token needs Environments: Read): reading the review repos instead", failed)
+	}
+	note := ""
+	if failed > 0 {
+		// not kept: the next refresh tries again
+		note = fmt.Sprintf("the environments of %d repos could not be read; their waiting runs are not listed", failed)
+		w.disc = discovered{found, now.Add(-ttl + 10*time.Minute)}
+	} else {
+		w.disc = discovered{found, now}
+		saveDiscovery(w.cfg.Cache, orgs, found, now)
+	}
+	return w.allowed(found), note
+}
+
+// allowed drops the repos [github] allowed_repos keeps dillodash from
+// writing to: D there would always be refused.
+func (w *Workflow) allowed(repos []model.Repo) []model.Repo {
+	var out []model.Repo
+	for _, r := range repos {
+		if w.writeAllowed == nil || w.writeAllowed(r) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // Discover lists the organizations' repos and keeps the ones with an
-// environment that has required reviewers (not archived), sorted. The
-// environments are read eight at a time.
-func Discover(ctx context.Context, gh ghapi.Client, orgs []string) ([]model.Repo, error) {
+// environment that has required reviewers (not archived), sorted; failed
+// counts the repos whose environments could not be read. The environments
+// are read eight at a time.
+func Discover(ctx context.Context, gh ghapi.Client, orgs []string) (found []model.Repo, failed int, err error) {
 	if len(orgs) == 0 {
-		return nil, fmt.Errorf("no organization to discover repos in (set [workflows.waiting_runs] orgs or repos)")
+		return nil, 0, fmt.Errorf("no organization to discover repos in (set [workflows.waiting_runs] orgs or repos)")
 	}
-	var (
-		mu  sync.Mutex
-		out []model.Repo
-	)
+	var mu sync.Mutex
 	for _, org := range orgs {
 		listing, err := gh.OrgRepos(ctx, org)
 		if err != nil {
-			return nil, fmt.Errorf("%s repos: %w", org, err)
+			return nil, 0, fmt.Errorf("%s repos: %w", org, err)
 		}
 		g, gctx := errgroup.WithContext(ctx)
 		g.SetLimit(8)
@@ -99,12 +141,15 @@ func Discover(ctx context.Context, gh ghapi.Client, orgs []string) ([]model.Repo
 					if ghapi.IsRateLimit(err) {
 						return err
 					}
-					return nil // a repo the token can't read environments of is not one it can approve in
+					mu.Lock()
+					failed++
+					mu.Unlock()
+					return nil
 				}
 				for _, e := range envs {
 					if e.Gated() {
 						mu.Lock()
-						out = append(out, repo)
+						found = append(found, repo)
 						mu.Unlock()
 						break
 					}
@@ -113,11 +158,11 @@ func Discover(ctx context.Context, gh ghapi.Client, orgs []string) ([]model.Repo
 			})
 		}
 		if err := g.Wait(); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].String()) < strings.ToLower(out[j].String()) })
-	return out, nil
+	sort.Slice(found, func(i, j int) bool { return strings.ToLower(found[i].String()) < strings.ToLower(found[j].String()) })
+	return found, failed, nil
 }
 
 func loadDiscovery(path, orgs string) ([]model.Repo, time.Time, bool) {

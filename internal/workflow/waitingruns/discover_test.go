@@ -2,7 +2,10 @@ package waitingruns
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,5 +73,24 @@ func TestDiscoveryNeedsAnOrg(t *testing.T) {
 	warns, err := refresh(t, w, app)
 	if err != nil || len(warns) == 0 {
 		t.Fatalf("warns %v err %v", warns, err)
+	}
+}
+
+// TestADiscoveryThatCouldNotReadFallsBack: a token that cannot read any
+// repo's environments finds nothing; the review repos are read instead,
+// and nothing is kept on disk.
+func TestADiscoveryThatCouldNotReadFallsBack(t *testing.T) {
+	w, app := newWF(t)
+	w.cfg.Auto, w.cfg.Repos, w.cfg.Orgs = true, nil, []string{"acme"}
+	w.cfg.Cache = filepath.Join(t.TempDir(), "waiting.json")
+	w.fallback = []model.Repo{infra}
+	app.Fake.Orgs = map[string][]model.RepoListing{"acme": {{Name: "ship"}}}
+	app.Fake.Fail = map[string]error{"environments": errors.New("403 Resource not accessible")}
+	got, note := w.repos(context.Background(), app.Fake, clock.Now())
+	if len(got) != 1 || got[0] != infra || !strings.Contains(note, "review repos instead") {
+		t.Errorf("fallback: %v %q", got, note)
+	}
+	if _, err := os.Stat(w.cfg.Cache); err == nil {
+		t.Error("a discovery that could not read was kept on disk")
 	}
 }
