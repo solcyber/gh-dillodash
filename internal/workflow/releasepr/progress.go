@@ -1466,10 +1466,14 @@ func progressStyle(p Progress) string {
 	switch p.Phase {
 	case PhaseReleased:
 		return "chip.released"
-	case PhasePending, PhaseBumped, PhaseNotTold:
-		// you can act: D approves the waiting deploy, A releases NOW, M
-		// merges what the manifest repo was never told about
+	case PhasePending, PhaseNotTold:
+		// it stands until someone acts: D approves the waiting deploy (a
+		// wait that is not the viewer's is restyled by the chip), M merges
+		// what the manifest repo was never told about
 		return "chip.act"
+	case PhaseBumped:
+		// the next window takes it: A offers NOW, but nothing waits on it
+		return "chip.rolled"
 	case PhaseFailed, PhaseRefused, PhaseUnverifiable:
 		return "chip.fail"
 	case PhaseRolled:

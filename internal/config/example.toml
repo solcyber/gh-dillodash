@@ -184,7 +184,10 @@ enabled = false
 # ============================================================================
 [workflows.waiting_runs]
 enabled = false
-# repos = []                                # default: every [reviews] repo
+# repos = "auto"                            # every repo of orgs with an environment that needs a reviewer, found by reading the environments; or a list of "owner/name" (exactly those)
+# orgs = ["acme"]                           # auto: where to look; default: [reviews] requested_orgs, else the review repos' owners
+# discover_ttl_secs = 21600                 # auto: how long a discovery is kept (in memory and in cache)
+# cache = "~/.cache/dillodash/waiting-repos-{org}.json" # auto: the discovery cache ({org}: the orgs joined by "+")
 # approval_comment = "dillodash: approved {workflow} run {run} in {repo}"   # placeholders: {repo} {workflow} {run}
 # poll_secs = 30                            # read the waiting runs this often between refreshes (floor 10; 0 = with the refresh only)
 

@@ -34,7 +34,7 @@ merge_applies = ["acme/legacy-tf"]       # a merge here deploys: M says so first
 
 The agent's open pull requests, and the open items carrying the handoff
 label, move out of the pull request and issue sections into one section
-named for the agent. Its pull requests still count toward "need you". An
+named for the agent. Its pull requests still count toward "on you". An
 issue the agent opened stays with the issues: it is the agent's report to
 the people.
 

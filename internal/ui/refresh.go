@@ -418,6 +418,8 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		m.loaded = true
 		// the list-only pass already cascaded the rows in: this one only
 		// takes the baseline, so the workflow rows don't glint as new
+		firstFull := m.listOnly || !m.fullyLoaded
+		m.fullyLoaded = true
 		m.sigQuiet = m.listOnly
 		m.listOnly, m.listOnlyErr = false, ""
 		m.allPRs = out.allPRs
@@ -440,7 +442,13 @@ func (m *Model) applyRefresh(out *refreshResult) {
 		if !spoke {
 			m.errText = ""
 		}
+		hadRestore := m.restore != nil
 		m.applyRestore()
+		if firstFull && !hadRestore && !m.movedSinceList {
+			// the first whole load: the cursor starts on what is most
+			// pressing, the head of the "your turn" section
+			m.selectFirstTurn()
+		}
 		// the listed PR behind an open detail follows the fresh list, so
 		// cards and the header icon read this refresh's data; one that
 		// left the list keeps its last copy (nothing newer exists)

@@ -52,10 +52,16 @@ func (w *Workflow) Classify(pr, listed *model.PR, me string, localApproved bool)
 	}
 	// the detail PR carries the fresh reviews; the listed row the kind
 	label := w.labelWith(pr, InfoOf(src), me, localApproved)
+	// my own release needs somebody else's approval, not mine
+	own := me != "" && strings.EqualFold(pr.Author.Login, me)
+	style := LabelStyle(label)
+	if label == LabelNeeds && own {
+		style = "chip.state"
+	}
 	return &workflow.Classification{
 		Label:    label,
-		Style:    LabelStyle(label),
-		NeedsYou: label == LabelNeeds,
+		Style:    style,
+		NeedsYou: label == LabelNeeds && !own,
 		Done:     label == model.LabelApprovedMe || label == LabelOther || pr.IsDraft,
 	}
 }
@@ -224,6 +230,10 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 			Layout: w.releaseLayout,
 			Segs:   w.releaseSegs,
 			Live:   w.rowLive,
+			Turn: func(app workflow.App, row workflow.Row) workflow.Turn {
+				pr, _ := row.Item.(*model.PR)
+				return w.turn(app, pr)
+			},
 			Title: func(row workflow.Row) string {
 				if pr, ok := row.Item.(*model.PR); ok {
 					return pr.Title
@@ -568,7 +578,7 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 		return tail(append(segs, text.S(text.Ellip(txt, room), "faint")))
 	}
 	// ahead: the count in words, then a small chip per tag that has any
-	// (go blue, hold gold, untagged gray), so the row reads at a glance
+	// (go blue, hold and untagged gray: neither is anybody's move here), so the row reads at a glance
 	// without a whole gold sentence
 	u := s.Units
 	ge := ""
@@ -581,7 +591,7 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 		n     int
 		name  string
 		style string
-	}{{u.Go, "go", "chip.approved"}, {u.Hold, "hold", "chip.act"}, {u.Untagged, "untagged", "chip.draft"}} {
+	}{{u.Go, "go", "chip.approved"}, {u.Hold, "hold", "chip.state"}, {u.Untagged, "untagged", "chip.draft"}} {
 		if c.n > 0 {
 			chips = append(chips, text.S(" ", "text"))
 			chips = append(chips, scenes.Chip(fmt.Sprintf("%d %s", c.n, c.name), c.style)...)
@@ -591,11 +601,9 @@ func (w *Workflow) stageSegs(_ workflow.App, row workflow.Row, L workflow.Layout
 		head = fmt.Sprintf("%s%d ahead ", ge, u.Units) // the short form keeps the chips
 	}
 	if text.Width(head)+text.SegsWidth(chips) > room {
-		style := "rev.ok"
-		if u.Hold > 0 || u.Untagged > 0 {
-			style = "rev.attend"
-		}
-		return append(segs, text.S(text.Ellip(txt, room), style))
+		// a held or untagged unit is the next cut's business, not a move
+		// of the viewer's: the sentence stays plain
+		return append(segs, text.S(text.Ellip(txt, room), "rev.ok"))
 	}
 	segs = append(segs, text.S(head, "muted"))
 	return tail(append(segs, chips...))
@@ -683,7 +691,7 @@ func (w *Workflow) LegendRows() [][]text.Seg {
 	ends = append(ends, sp)
 	ends = append(ends, scenes.Chip(markErr()+"release FAILED", "chip.fail")...)
 	ends = append(ends, sp)
-	ends = append(ends, scenes.Chip("bumped — "+keymap.S(keymap.Approve)+": release NOW", "chip.act")...)
+	ends = append(ends, scenes.Chip("bumped — "+keymap.S(keymap.Approve)+": release NOW", "chip.rolled")...)
 	ends = append(ends, text.S(" yours to act on", "muted"))
 	auto := []text.Seg{text.S(text.Pad("", 10), "section")}
 	auto = append(auto, scenes.Chip("waits: prod · automatic", "chip.await")...)
@@ -749,12 +757,13 @@ func (w *Workflow) DetailCards(app workflow.App, pr, listed *model.PR, width int
 		segs = append(segs, scenes.Chip("queued", "chip.queued")...)
 	}
 	out = append(out, scenes.CardLines(segs, width, inner)...)
+	out = append(out, scenes.CardLines(w.nextSegs(app, src), width, inner)...)
 	merged := src.State == "MERGED" || pr.State == "MERGED"
 	cmd := w.cfg.ReleaseNowCommand
 	var rule string
 	switch {
 	case merged:
-		rule = fmt.Sprintf("merged: D approves the environments that wait on you; one that automation reviews is left to it and reads automatic; dillodash refreshes every %ds while one waits or runs and says when one is yours", int(w.refreshEvery().Seconds()))
+		rule = "merged: D approves an environment that waits on you; one automation reviews is left to it and reads automatic; dillodash follows the deploy and says when one is yours"
 	case kind == KindHotfix:
 		rule = fmt.Sprintf("a hotfix is an emergency by definition: A approves and posts %s with a reason", cmd)
 	case kind == KindOther:

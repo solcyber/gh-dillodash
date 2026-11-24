@@ -105,6 +105,10 @@ type RowKind struct {
 	// release in flight): the dashboard keeps its frame clock running
 	// for it instead of sleeping until the next refresh.
 	Live func(app App, row Row) bool
+	// Turn says whose move the row is (turn.go): the "your turn" section,
+	// the summary, the offers, the hint line and the title all read it.
+	// nil: the row has no move to make.
+	Turn func(app App, row Row) Turn
 	// NumText is what the rows print in the shared number column, when
 	// that isn't the core's "repo#N" (a bare "#N" beside a repo column of
 	// their own, or a label): the column is sized by it, so no room goes

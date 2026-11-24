@@ -235,6 +235,8 @@ type Client interface {
 	TagRefs(ctx context.Context, repo model.Repo, prefix string) ([]string, error)
 	OrgRepos(ctx context.Context, org string) ([]model.RepoListing, error)
 	Rulesets(ctx context.Context, repo model.Repo) ([]model.Ruleset, error)
+	// Environments is a repo's deployment environments (one page of 100).
+	Environments(ctx context.Context, repo model.Repo) ([]model.Environment, error)
 	// BranchRules is what the active rules ask of a PR into branch.
 	BranchRules(ctx context.Context, repo model.Repo, branch string) (model.BranchRules, error)
 	// FileContents reads one file from a repo (its default branch, or ref):

@@ -39,7 +39,11 @@ func (m *Model) decision(pr *model.PR, listed *model.PR) (label, style string, n
 		}
 		// a conflict or a red check is the author's to clear
 		mine := m.me != "" && strings.EqualFold(pr.Author.Login, m.me)
-		return model.LabelStuck, model.ChipForLabel[model.LabelStuck], mine && s.AuthorAction(), false
+		style := model.ChipForLabel[model.LabelStuck]
+		if !(mine && s.AuthorAction()) {
+			style = "chip.state" // the author's to clear: gold is the viewer's move only
+		}
+		return model.LabelStuck, style, mine && s.AuthorAction(), false
 	}
 	label = model.DecisionLabel(pr, m.me, local)
 	style = model.ChipForLabel[label]
@@ -135,15 +139,17 @@ func (m *Model) rowMatches(row workflow.Row, terms []string) bool {
 // same item across a refresh.
 func (m *Model) refilter() {
 	var prevKey *struct {
-		kind string
-		id   model.Ident
+		kind   string
+		id     model.Ident
+		pinned bool
 	}
 	if m.selected >= 0 && m.selected < len(m.rows) && m.rows[m.selected].Kind != "header" {
 		r := m.rows[m.selected]
 		prevKey = &struct {
-			kind string
-			id   model.Ident
-		}{r.Kind, r.Ident()}
+			kind   string
+			id     model.Ident
+			pinned bool
+		}{r.Kind, r.Ident(), pinned(r)}
 	}
 	terms := strings.Fields(strings.ToLower(m.filter))
 	var rest, agentPRs []*model.PR
@@ -215,13 +221,24 @@ func (m *Model) refilter() {
 			rows = append(rows, workflow.Row{Kind: "issue", Item: i})
 		}
 	}
+	// what is the viewer's move, pinned above everything (a copy: each
+	// row also stands in its own section)
+	rows = append(m.yourTurnRows(rows, len(terms) > 0), rows...)
 	m.rows = rows
 	if prevKey != nil {
 		found := -1
 		for i, r := range rows {
-			if r.Kind != "header" && r.Kind == prevKey.kind && r.Ident() == prevKey.id {
+			if r.Kind != "header" && r.Kind == prevKey.kind && r.Ident() == prevKey.id && pinned(r) == prevKey.pinned {
 				found = i
 				break
+			}
+		}
+		if found < 0 { // it left the your-turn section (done), or joined it
+			for i, r := range rows {
+				if r.Kind != "header" && r.Kind == prevKey.kind && r.Ident() == prevKey.id {
+					found = i
+					break
+				}
 			}
 		}
 		if found < 0 { // the item moved to another kind (PR -> queued)
@@ -728,6 +745,11 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		segs = append(segs, extra...)
 		segs = append(segs, more...)
 		segs = append(segs, text.S(" ", "text"))
+	} else if isTurn, _ := row.Meta["turn"].(bool); isTurn && txt == turnHeader {
+		// the your-turn section with nothing in it: one line that says so,
+		// and what moves instead
+		segs = []text.Seg{text.S(" "+glyphs.Ico("shield"), "section"), text.S(turnHeader, "section"), text.S("  ", "text")}
+		segs = append(segs, text.S(text.Ellip(m.turnEmptyText(), max(0, w-2-text.SegsWidth(segs))), "muted"), text.S(" ", "text"))
 	} else {
 		name, count := splitHeaderCount(txt)
 		icon := "pr"
@@ -746,9 +768,13 @@ func (m *Model) headerSegs(row workflow.Row, w, pos int) []text.Seg {
 		if ico == "" {
 			ico = "  " // a set without this icon keeps the column: names line up
 		}
-		segs = []text.Seg{text.S(" "+ico, "section")}
+		style := "section"
+		if isTurn, _ := row.Meta["turn"].(bool); isTurn {
+			style = "sum.attn" // gold: what is the viewer's move
+		}
+		segs = []text.Seg{text.S(" "+ico, style)}
 		tail := text.S("  "+count+" ", "section.count")
-		segs = append(segs, text.S(text.Ellip(name, w-2-text.SegsWidth(segs)-text.Width(tail.Text)), "section"), tail)
+		segs = append(segs, text.S(text.Ellip(name, w-2-text.SegsWidth(segs)-text.Width(tail.Text)), style), tail)
 	}
 	return append(segs, scenes.GleamSegs(w-1-text.SegsWidth(segs), pos)...)
 }

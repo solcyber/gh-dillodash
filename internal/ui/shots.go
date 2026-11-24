@@ -5,7 +5,7 @@ package ui
 // screenshot tool's manifest names the same shots; its test keeps the
 // two and the docs in step.
 var ShotCaptions = map[string]string{
-	"list":                   "The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases with a release in flight; the night's queue; the issues",
+	"list":                   "The list: \"your turn\" at the top, each row with the key that moves it on and what that key does",
 	"list-narrow":            "The list at eighty columns: the diffstat and author go first, the titles stay",
 	"narrow-50x12":           "Fifty columns by twelve rows: number, chip and title, and a key bar down to ? help",
 	"pr-detail":              "A pull request's detail: the header, the description rendered from markdown, then comments and reviews in order",
@@ -23,7 +23,7 @@ var ShotCaptions = map[string]string{
 	"release-card":           "Mission control for a release in flight: the T+ clock, a rail of one segment per phase, one row per phase with its clock and its technical tail, the run",
 	"release-launch":         "When a release lands: a kaleidoscope tunnel, spiral-galaxy fireworks, Amos tumbling through every hue and RELEASED! swinging in rainbow block letters",
 	"release-launch-burst":   "The rocket bursts: rainbow ripples roll out through the tunnel and the first spiral galaxy wheels open",
-	"waiting-runs":           "The waiting approvals section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is",
+	"waiting-runs":           "The deploys waiting section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is",
 	"promote":                "The promote section: each change on its way to production, where it is (on dev, in a promotion PR, on stage with its go or hold tag) and what its tier's deploy did",
 	"promote-tag":            "P on a staging unit: flip its tag, go for the next release cut or hold to keep it on stage",
 	"waiting-runs-approve":   "D on a waiting run: the environments you review, confirmed before they are approved",

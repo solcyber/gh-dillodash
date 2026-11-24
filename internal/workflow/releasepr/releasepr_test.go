@@ -1129,17 +1129,16 @@ func TestRowsRenderAndFit(t *testing.T) {
 	if !strings.Contains(txt, "3 units ahead of main") || !strings.Contains(txt, "1 go") || !strings.Contains(txt, "1 hold") || !strings.Contains(txt, "1 untagged") {
 		t.Errorf("the stage row: %q", txt)
 	}
-	held := false
 	for _, sg := range segs {
-		held = held || (sg.Style == "chip.act" && strings.Contains(sg.Text, "hold"))
+		if strings.Contains(sg.Text, "hold") && sg.Style != "chip.state" {
+			t.Errorf("a held unit is nobody's move: a plain chip, not %q", sg.Style)
+		}
 	}
-	if !held {
-		t.Errorf("a held unit is a gold chip: %+v", segs)
-	}
-	// too narrow for the chips: the sentence, gold while a unit is held
+	// too narrow for the chips: the sentence, plain (gold is for the
+	// viewer's turn)
 	segs = kinds[RowStage].Segs(app, srow, sl, 40, 0)
-	if segs[len(segs)-1].Style != "rev.attend" {
-		t.Errorf("a narrow stage row with a hold asks for attention: %q", segs[len(segs)-1].Style)
+	if segs[len(segs)-1].Style != "rev.ok" {
+		t.Errorf("a narrow stage row with a hold stays plain: %q", segs[len(segs)-1].Style)
 	}
 	if got := kinds[RowStage].URL(app, srow); got != "https://github.com/acme/web-portal/compare/main...stage" {
 		t.Errorf("the stage row's URL is the compare page: %q", got)

@@ -479,7 +479,7 @@ func (p *parser) checkAllowedRepos(cfg *Config) {
 	if rp := cfg.ReleasePR; rp != nil && !rp.Auto {
 		outside("[workflows.release_pr] repos", rp.Repos...)
 	}
-	if wr := cfg.WaitingRuns; wr != nil {
+	if wr := cfg.WaitingRuns; wr != nil && !wr.Auto {
 		outside("[workflows.waiting_runs] repos", wr.Repos...)
 	}
 	if pr := cfg.Promote; pr != nil {
@@ -981,8 +981,38 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 func (p *parser) parseWaitingRuns(wt *table, cfg *Config) {
 	t, enabled := p.workflowEnabled(wt, "waiting_runs")
 	w := DefaultWaitingRuns()
-	if repos, ok := t.repos("repos"); ok && len(repos) > 0 {
-		w.Repos = repos
+	w.Auto = true // unless the file lists the repos
+	if raw, ok := t.get("repos"); ok {
+		switch v := raw.(type) {
+		case string:
+			if strings.ToLower(strings.TrimSpace(v)) != "auto" {
+				t.errf("repos", "%q must be \"auto\" or a list of \"owner/name\"", v)
+			}
+		case []any:
+			if repos, ok := t.repos("repos"); ok && len(repos) > 0 {
+				w.Auto, w.Repos = false, repos
+			}
+		default:
+			t.errf("repos", "must be \"auto\" or a list of \"owner/name\", got %s", typeName(raw))
+		}
+	}
+	if orgs, ok := t.get("orgs"); ok {
+		list, isList := orgs.([]any)
+		if !isList {
+			t.errf("orgs", "expected a list of organizations, got %s", typeName(orgs))
+		}
+		for i, e := range list {
+			o, isStr := e.(string)
+			if !isStr || strings.TrimSpace(o) == "" || strings.Contains(o, "/") {
+				t.errf("orgs", "entry %d: expected an organization name", i+1)
+				continue
+			}
+			w.Orgs = append(w.Orgs, strings.TrimSpace(o))
+		}
+	}
+	w.DiscoverTTLSecs = t.int("discover_ttl_secs", w.DiscoverTTLSecs)
+	if c := strings.TrimSpace(t.str("cache", w.Cache)); c != "" {
+		w.Cache = c
 	}
 	w.ApprovalComment = t.nonEmpty("approval_comment", w.ApprovalComment)
 	w.PollSecs = t.int("poll_secs", w.PollSecs)
@@ -1002,10 +1032,32 @@ func (p *parser) parseWaitingRuns(wt *table, cfg *Config) {
 	if !enabled {
 		return
 	}
-	if len(w.Repos) == 0 {
-		w.Repos = append([]model.Repo(nil), cfg.Reviews.Repos...)
+	if w.Auto {
+		if len(w.Orgs) == 0 {
+			w.Orgs = append(w.Orgs, cfg.Reviews.RequestedOrgs...)
+		}
+		if len(w.Orgs) == 0 {
+			seen := map[string]bool{}
+			for _, r := range cfg.Reviews.Repos {
+				if o := strings.ToLower(r.Owner); !seen[o] {
+					seen[o] = true
+					w.Orgs = append(w.Orgs, r.Owner)
+				}
+			}
+		}
+		w.Cache = p.expandWaitingCache(w.Cache, strings.Join(w.Orgs, "+"))
 	}
 	cfg.WaitingRuns = w
+}
+
+// expandWaitingCache is expandCache for the waiting runs discovery.
+func (p *parser) expandWaitingCache(cache, orgs string) string {
+	if cache == DefaultWaitingCache {
+		if xdg := p.env("XDG_CACHE_HOME"); xdg != "" {
+			cache = filepath.Join(xdg, "dillodash", "waiting-repos-{org}.json")
+		}
+	}
+	return p.expandCache(strings.ReplaceAll(cache, "{org}", orgs), orgs)
 }
 
 // expandCache resolves {org}, "~" and, for the default, $XDG_CACHE_HOME.

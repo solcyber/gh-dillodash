@@ -3,6 +3,7 @@ package ghapi
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -544,6 +545,25 @@ func (c *GitHub) OrgRepos(ctx context.Context, org string) ([]model.RepoListing,
 		}
 	}
 	return repos, nil
+}
+
+// Environments is a repo's deployment environments, one page of 100 (a
+// repo with more has bigger problems than a dashboard). Read plainly, not
+// through the conditional cache: a discovery reads every repo of an
+// organization once in hours, and must not push the refresh's own reads
+// out of the cache.
+func (c *GitHub) Environments(ctx context.Context, repo model.Repo) ([]model.Environment, error) {
+	body, _, err := c.do(ctx, http.MethodGet, c.restURL(repoPath(repo, "environments?per_page=100")), nil, acceptJSON)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Environments []model.Environment `json:"environments"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, &Error{Method: http.MethodGet, URL: repoPath(repo, "environments"), Message: "bad response: " + err.Error()}
+	}
+	return out.Environments, nil
 }
 
 // Rulesets is the rulesets that apply to a repo (org and repo sourced).

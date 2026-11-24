@@ -52,6 +52,20 @@ type State struct {
 	Warnings []string
 }
 
+// ShownRuns are the waiting runs the change rows show
+// (workflow.ShownRuns): the runs each row's last read saw waiting.
+func (s *State) ShownRuns() []workflow.RepoRun {
+	var out []workflow.RepoRun
+	for _, c := range s.Changes() {
+		for _, r := range c.Runs {
+			if r.Status == "waiting" {
+				out = append(out, workflow.RepoRun{Repo: c.Repo, RunID: r.ID})
+			}
+		}
+	}
+	return out
+}
+
 // Changes is every listed change, repo by repo.
 func (s *State) Changes() []*Change {
 	if s == nil {
@@ -598,8 +612,10 @@ func (w *Workflow) whereChip(c *Change) (string, string) {
 }
 
 // deployChip is the tier deploy: "dev ✓", "stage deploying", "stage
-// waits · D", "stage ✗ <workflow>", or nothing without runs.
-func (w *Workflow) deployChip(c *Change) (string, string) {
+// waits · D" (gold: the wait is the viewer's, or nobody read whose it
+// is), "stage waits" (somebody else's), "stage ✗ <workflow>", or nothing
+// without runs.
+func (w *Workflow) deployChip(app workflow.App, c *Change) (string, string) {
 	d, name := deployOf(c.Runs)
 	tier := w.tierName(c)
 	switch d {
@@ -608,6 +624,13 @@ func (w *Workflow) deployChip(c *Change) (string, string) {
 	case DeployRunning:
 		return glyphs.Ico("wait") + tier + " deploying", "chip.queued"
 	case DeployWaiting:
+		mine, known := waitOf(app, c)
+		switch {
+		case !known:
+			return glyphs.Ico("wait") + tier + " waits · D", "chip.state" // whose is unread: D reads it
+		case len(mine) == 0:
+			return glyphs.Ico("wait") + tier + " waits", "chip.state"
+		}
 		return glyphs.Ico("wait") + tier + " waits · D", "chip.await"
 	case DeployFailed:
 		return glyphs.Ico("fail") + tier + " " + text.Ellip(name, 18), "chip.fail"
@@ -720,6 +743,10 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				}
 				return ""
 			},
+			Turn: func(app workflow.App, row workflow.Row) workflow.Turn {
+				c, _ := row.Item.(*Change)
+				return w.turn(app, c)
+			},
 			NumText: func(row workflow.Row) string {
 				if c, ok := row.Item.(*Change); ok {
 					return fmt.Sprintf("#%d", c.Number())
@@ -738,7 +765,7 @@ func (w *Workflow) layout(app workflow.App, items []workflow.Row, width, numW, r
 			continue
 		}
 		wl, _ := w.whereChip(c)
-		dl, _ := w.deployChip(c)
+		dl, _ := w.deployChip(app, c)
 		whereW = max(whereW, text.SegsWidth(scenes.Chip(wl, "chip.state")))
 		if dl != "" {
 			deployW = max(deployW, text.SegsWidth(scenes.Chip(dl, "chip.state")))
@@ -796,7 +823,7 @@ func (w *Workflow) segs(app workflow.App, row workflow.Row, L workflow.Layout, w
 		segs = append(segs, text.S(" ", "text"))
 	}
 	if dw, ok := L["deploy"]; ok {
-		lbl, st := w.deployChip(c)
+		lbl, st := w.deployChip(app, c)
 		var chip []text.Seg
 		if lbl != "" {
 			chip = scenes.Chip(lbl, st)
@@ -819,7 +846,7 @@ func (w *Workflow) segs(app workflow.App, row workflow.Row, L workflow.Layout, w
 		segs = append(segs, text.S(text.Pad(age, aw)+" ", st))
 	}
 	tstyle := "title"
-	if d, _ := deployOf(c.Runs); d == DeployWaiting {
+	if t := w.turn(app, c); t.Kind == workflow.TurnYou {
 		tstyle = "title.attn"
 	}
 	room := width - 3 - text.SegsWidth(segs)

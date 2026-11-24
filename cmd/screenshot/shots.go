@@ -21,39 +21,41 @@ type shot struct {
 	Tier       string // "" = truecolor | "256" | "16" | "mono": the color depth it is drawn at
 }
 
-// The fixture's list, top to bottom (the cursor starts on the first
-// row): infra#44 (draft), web-portal#92, infra#41 (plan digests),
-// infra#42, the waiting runs web-portal 7102 (waits on the dba team),
-// infra 7101 and infra 7103 (two runs of one workflow, both on you), the releases web-portal#91 and #90 (in
-// flight), the stage line, the window night with its manifest infra#20
-// and the queued infra#43, then the issues web-portal#19, infra#17,
+// The fixture's list, top to bottom: "your turn" first (the cursor
+// starts on its head): infra 7101 and 7103 (deploys on you), the release
+// web-portal#91 and the review infra#41; then every row in its own section: infra#44 (draft),
+// web-portal#92, infra#41 (plan digests), infra#42, the waiting runs
+// web-portal 7102 (waits on the dba team), infra 7101 and infra 7103, the
+// releases web-portal#91 and #90 (in flight), the stage line, the
+// promote changes, the window night with its manifest infra#20 and the
+// queued infra#43, then the issues web-portal#19, infra#17,
 // infra#18. Expect pins each script to what it means to show, so a new
 // row in the fixture fails the test instead of the picture.
 var shots = []shot{
-	{Name: "list", Steps: []string{"j"}},
-	{Name: "list-narrow", Cols: 80, Steps: []string{"j"}},
-	{Name: "narrow-50x12", Cols: 50, Rows: 12, Steps: []string{"j"}},
-	{Name: "pr-detail", Steps: []string{"j", "enter"}, Expect: []string{"web-portal#92", "description"}},
-	{Name: "pr-files", Steps: []string{"j", "enter", "f"}},
-	{Name: "pr-diff", Steps: []string{"j", "enter", "f", "enter"}},
+	{Name: "list", Expect: []string{"your turn", "approve prod"}},
+	{Name: "list-narrow", Cols: 80},
+	{Name: "narrow-50x12", Cols: 50, Rows: 12},
+	{Name: "pr-detail", Steps: []string{"j", "j", "j", "j", "j", "enter"}, Expect: []string{"web-portal#92", "description"}},
+	{Name: "pr-files", Steps: []string{"j", "j", "j", "j", "j", "enter", "f"}},
+	{Name: "pr-diff", Steps: []string{"j", "j", "j", "j", "j", "enter", "f", "enter"}},
 	{Name: "issue-detail", Steps: []string{"G", "enter"}, Expect: []string{"infra#18"}},
 	{Name: "help", Steps: []string{"?"}},
 	{Name: "filter", Steps: []string{"/", "infra"}},
 	{Name: "goto", Steps: []string{":", "91"}},
-	{Name: "terraform-approve", Steps: []string{"j", "j", "enter"}, Expect: []string{"infra#41", "plans"}},
-	{Name: "terraform-approve-menu", Steps: []string{"j", "j", "enter", "A"}, Expect: []string{"for which plan"}},
-	{Name: "approve-menu", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "A"}, Expect: []string{"web-portal#91", "release NOW"}},
-	{Name: "release-now-prompt", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "enter", "A", "2", "the referral fix is holding up signups"}, Expect: []string{"web-portal#91", "/release-now"}},
-	{Name: "release-rail", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"deploying 2/3"}},
-	{Name: "release-card", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "enter"}, Expect: []string{"web-portal#90", "T+"}},
-	{Name: "release-launch", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"},
+	{Name: "terraform-approve", Steps: []string{"j", "j", "j", "enter"}, Expect: []string{"infra#41", "plans"}},
+	{Name: "terraform-approve-menu", Steps: []string{"j", "j", "j", "enter", "A"}, Expect: []string{"for which plan"}},
+	{Name: "approve-menu", Steps: []string{"j", "j", "enter", "A"}, Expect: []string{"web-portal#91", "release NOW"}},
+	{Name: "release-now-prompt", Steps: []string{"j", "j", "enter", "A", "2", "the referral fix is holding up signups"}, Expect: []string{"web-portal#91", "/release-now"}},
+	{Name: "release-rail", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"deploying 2/3"}},
+	{Name: "release-card", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "enter"}, Expect: []string{"web-portal#90", "T+"}},
+	{Name: "release-launch", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 3.1}}}},
-	{Name: "release-launch-burst", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j"},
+	{Name: "release-launch-burst", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j"},
 		Opts: ui.SnapshotOptions{Motion: true, Clock: 100, Fx: []ui.FxStart{{Name: "launch", Secs: fx.LaunchSecs, Elapsed: 2.05}}}},
-	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j"}, Expect: []string{"waiting approvals", "approve: prod"}},
-	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
-	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "P"}, Expect: []string{"#907 on stage", "go/907", "P only flips it"}},
-	{Name: "waiting-runs-approve", Steps: []string{"j", "j", "j", "j", "j", "D"}, Expect: []string{"approve 1 deployment of infra deploy #412"}},
+	{Name: "waiting-runs", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"deploys waiting", "approve: prod"}},
+	{Name: "promote", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j"}, Expect: []string{"promote", "stage · go", "→ stage #912 · ready"}},
+	{Name: "promote-tag", Steps: []string{"j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "j", "P"}, Expect: []string{"#907 on stage", "go/907", "P only flips it"}},
+	{Name: "waiting-runs-approve", Steps: []string{"D"}, Expect: []string{"approve 1 deployment of infra deploy #412"}},
 	{Name: "window-card", Steps: []string{"G", "k", "k", "k", "enter"}, Expect: []string{"infra#43", "staging/15-canary"}},
 	{Name: "fortress", Steps: []string{"d"}, Expect: []string{"Manhattan"}},
 	{Name: "fortress-chicago", Steps: []string{"d"}, Opts: ui.SnapshotOptions{City: "chicago"}, Expect: []string{"Chicago"}},
@@ -80,22 +82,22 @@ var shots = []shot{
 	{Name: "agent-plan-set", Agent: true, Steps: []string{"j", "enter"}, Expect: []string{"plan-set (2 stacks)", "apply on approval", "A  /approve plan-set"}},
 	{Name: "agent-approve", Agent: true, Steps: []string{"j", "enter", "A"}, Expect: []string{"/approve", "Post that on ops#8 as dana?"}},
 	{Name: "agent-handoff", Agent: true, Steps: []string{"G", "k", "k", "enter", "H"}, Expect: []string{"hand ops#14 to Ada"}},
-	{Name: "agent-merge-applies", Agent: true, Steps: []string{"j", "j", "j", "enter", "M"}, Expect: []string{"MERGING APPLIES", "legacy-tf#197"}},
-	{Name: "icons-nerd", Steps: []string{"j"}, Icons: "nerd"},
-	{Name: "icons-unicode", Steps: []string{"j"}, Icons: "unicode"},
-	{Name: "icons-ascii", Steps: []string{"j"}, Icons: "ascii"},
+	{Name: "agent-merge-applies", Agent: true, Steps: []string{"j", "j", "j", "j", "j", "j", "enter", "M"}, Expect: []string{"MERGING APPLIES", "legacy-tf#197"}},
+	{Name: "icons-nerd", Icons: "nerd"},
+	{Name: "icons-unicode", Icons: "unicode"},
+	{Name: "icons-ascii", Icons: "ascii"},
 	// the color depths below truecolor
 	{Name: "tier-16-night", Night: true, Steps: nightSteps(3), Tier: "16"},
-	{Name: "tier-mono-list", Steps: []string{"j"}, Tier: "mono"},
+	{Name: "tier-mono-list", Tier: "mono"},
 }
 
-// heroScripts are the README's picture: the list with the cursor on the
-// second row, then (the keys continue from there) the release
+// heroScripts are the README's picture: the list with the cursor where
+// it starts, on the head of "your turn", then (the keys continue from there) the release
 // web-portal#91's detail. heroExpect is what the second frame must show.
 var (
 	heroScripts = [][]string{
-		{"j"},
-		{"j", "j", "j", "j", "j", "j", "enter"},
+		{},
+		{"j", "j", "enter"},
 	}
 	heroExpect = "web-portal#91"
 )

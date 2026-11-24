@@ -140,7 +140,7 @@ func TestRefreshListsWaitingRunsAcrossRepos(t *testing.T) {
 		t.Errorf("pending reads: %v", app.Fake.Reads)
 	}
 	rows := w.Sections(app, nil, "alice")
-	if len(rows) != 3 || rows[0].Kind != "header" || rows[0].Item != "waiting approvals (2)" || rows[0].Meta["icon"] != "shield" {
+	if len(rows) != 3 || rows[0].Kind != "header" || rows[0].Item != "deploys waiting (2)" || rows[0].Meta["icon"] != "shield" {
 		t.Fatalf("rows: %+v", rows)
 	}
 	if got := ids(rows); !reflect.DeepEqual(got, []int64{5151, 4242}) {

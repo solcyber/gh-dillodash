@@ -249,7 +249,7 @@ poll_secs = 0
 	}
 
 	wr := c.WaitingRuns
-	wantWR := &WaitingRunsConfig{Repos: []model.Repo{repo("acme/ops"), repo("acme/infra")}, ApprovalComment: "ok {workflow} #{run} ({repo})"}
+	wantWR := &WaitingRunsConfig{Repos: []model.Repo{repo("acme/ops"), repo("acme/infra")}, ApprovalComment: "ok {workflow} #{run} ({repo})", DiscoverTTLSecs: 21600, Cache: DefaultWaitingCache}
 	if !reflect.DeepEqual(wr, wantWR) {
 		t.Errorf("waiting_runs =\n %+v\nwant\n %+v", wr, wantWR)
 	}
@@ -285,8 +285,9 @@ enabled = true
 	if c.TerraformApprove.CeremonyWindow != nil {
 		t.Error("ceremony window should be nil when absent")
 	}
-	if !reflect.DeepEqual(c.WaitingRuns, &WaitingRunsConfig{Repos: c.Reviews.Repos, ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}", PollSecs: DefaultWaitingPollSecs}) {
-		t.Errorf("waiting_runs defaults = %+v", c.WaitingRuns)
+	if wr := c.WaitingRuns; !wr.Auto || len(wr.Repos) != 0 || !reflect.DeepEqual(wr.Orgs, []string{"acme"}) || wr.DiscoverTTLSecs != 21600 ||
+		!strings.HasSuffix(wr.Cache, "waiting-repos-acme.json") || wr.PollSecs != DefaultWaitingPollSecs {
+		t.Errorf("waiting_runs defaults (no repos: discover in the review repos' org) = %+v", c.WaitingRuns)
 	}
 	if got := c.WaitingRuns.Comment(repo("acme/app"), "deploy", 4242); got != "dillodash: approved deploy run 4242 in acme/app" {
 		t.Errorf("default approval comment = %q", got)

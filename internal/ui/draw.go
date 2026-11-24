@@ -16,6 +16,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
+	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 // draw paints one frame: the dashboard, or in the room (room.go) the
@@ -443,23 +444,13 @@ func fitSummary(segs []text.Seg, room int) []text.Seg {
 	return text.EllipSegs(out, room)
 }
 
-// summarySegs: the list's summary row.
+// summarySegs: the list's summary row. Three counts in fixed words
+// first, from the rows' turns: what is the viewer's move (gold, by
+// kind), what runs (blue, the soonest landing), what waits on somebody
+// else; then failing CI, the window's queue and the issues.
 func (m *Model) summarySegs() []text.Seg {
-	me := strings.ToLower(m.me)
-	need := 0
-	for _, p := range append(append([]*model.PR(nil), m.prs...), m.agentPRs...) {
-		if p.IsDraft {
-			continue
-		}
-		label, _, needsYou, _ := m.decision(p, nil)
-		// my own PR counts only when it is stuck on me (a conflict, a red check)
-		if strings.ToLower(p.Author.Login) == me && label != model.LabelStuck {
-			continue
-		}
-		if needsYou {
-			need++
-		}
-	}
+	tc := m.countTurns()
+	need := tc.you
 	failing := 0
 	for _, p := range m.allPRs {
 		if c, ok := m.ciOf(p); ok && len(c.Failed) > 0 {
@@ -474,7 +465,11 @@ func (m *Model) summarySegs() []text.Seg {
 		}
 		return "sum.muted"
 	}
-	segs := []text.Seg{text.S(fmt.Sprintf(" %s%d need you", glyphs.Ico("shield"), need), attn(need, "sum.attn"))}
+	youTxt := fmt.Sprintf(" %s%d on you", glyphs.Ico("shield"), need)
+	if need > 0 {
+		youTxt += ": " + tc.youText()
+	}
+	segs := []text.Seg{text.S(youTxt, attn(need, "sum.attn"))}
 	if m.filter != "" {
 		// right after the count, so a narrow row still shows the filter
 		// is on (it would be the first thing clipped at the end)
@@ -486,7 +481,7 @@ func (m *Model) summarySegs() []text.Seg {
 		// row count is the one number that is the filter's
 		n := 0
 		for _, r := range m.rows {
-			if r.Kind != "header" {
+			if r.Kind != "header" && !pinned(r) { // a your-turn copy is the same row
 				n++
 			}
 		}
@@ -498,7 +493,16 @@ func (m *Model) summarySegs() []text.Seg {
 	}
 	// a count of nothing is left out: the row says what there is
 	var items [][]text.Seg
-	if wf := m.wf.SummarySegs(m); len(wf) > 0 {
+	if tc.running > 0 {
+		items = append(items, []text.Seg{text.S(fmt.Sprintf("%s%d running%s", glyphs.Ico("sync"), tc.running, m.landsText(tc.eta)), "sum.info")})
+	}
+	if tc.failed > 0 {
+		items = append(items, []text.Seg{text.S(fmt.Sprintf("%s%d failed", glyphs.Ico("fail"), tc.failed), "sum.fail")})
+	}
+	if tc.others > 0 {
+		items = append(items, []text.Seg{text.S(fmt.Sprintf("%s%d waiting on others", glyphs.Ico("clock"), tc.others), "sum.muted")})
+	}
+	if wf := m.wf.SummarySegsWithoutTurns(m); len(wf) > 0 {
 		items = append(items, wf)
 	}
 	if failing > 0 {
@@ -909,6 +913,15 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 			gut := scenes.Gutter(m.fx, identKey(row.Ident()), sel, breathe, age, has)
 			c.PutSegs(y, 0, append(gut, text.S(" ", "text")), right, sel, false)
 			c.PutSegs(y, 2, m.rowSegs(row, L[row.Kind], w, i), min(w-1, right), sel, false)
+			if pinned(row) {
+				// what the key does, at the row's end: the section is a to-do list
+				if t := m.turnOf(row); t.Kind == workflow.TurnYou && t.Key != "" {
+					chip := []text.Seg{text.S(" ", "text"), text.S(" "+t.Key+" ", "chip.key.act"), text.S(" "+text.Ellip(t.Verb, 40)+" ", "keylabel.act")}
+					if x := min(w-1, right) - text.SegsWidth(chip); x > w/2 {
+						c.PutSegs(y, x, chip, min(w-1, right), sel, false)
+					}
+				}
+			}
 			if p, ok := row.Item.(*model.PR); ok && row.Kind == "pr" {
 				if cl, ok := m.ciOf(p); ok && strings.Contains(cl.Glyphs, "~") {
 					m.animating = true

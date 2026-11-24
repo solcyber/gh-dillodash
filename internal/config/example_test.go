@@ -120,7 +120,8 @@ func TestExampleCoversEveryKey(t *testing.T) {
 		t.Errorf("release_pr defaults differ:\n got %+v\nwant %+v", *c.ReleasePR, *rp)
 	}
 	wr := DefaultWaitingRuns()
-	wr.Repos = c.Reviews.Repos
+	wr.Auto, wr.Orgs = true, []string{"acme"}
+	wr.Cache = c.WaitingRuns.Cache // expanded
 	if !reflect.DeepEqual(c.WaitingRuns, wr) {
 		t.Errorf("waiting_runs defaults differ:\n got %+v\nwant %+v", c.WaitingRuns, wr)
 	}

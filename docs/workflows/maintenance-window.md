@@ -76,7 +76,7 @@ assume the example window.
   The queued label stays on a PR until the freeze re-validates it, so
   dillodash compares the queue notice's plan id with the PR's plans: still
   one of them, the row stays; dead with no `/approve` on the new plan, the
-  PR moves back as gold `re-planned since queued` and counts in "need you";
+  PR moves back as gold `re-planned since queued` and counts in "on you";
   dead but a newer plan is approved or applied, it moves back with its
   ordinary chip.
 - **The summary row** counts `N queued tonight`.

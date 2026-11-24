@@ -354,6 +354,14 @@ func (w *Workflow) progressChipSegs(app workflow.App, pr *model.PR, p Progress, 
 		segs = append(segs, railSegs(p, now, app.Fx(), ident, railCells, live)...)
 		segs = append(segs, text.S(" ", style))
 	}
+	if p.Phase == PhasePending {
+		// "deploy waiting · D" only when the wait is the viewer's: one on
+		// automation or on somebody else reads as the deploy read says it
+		if dep, ok := pr.Get(ExtDeploy).(deploys.State); ok && dep.Phase == "waiting" && len(dep.Due()) == 0 && dep.Text != "" {
+			label, style = dep.Text, "chip.state"
+			segs[0] = text.S(glyphs.G("capl"), "cap:"+style)
+		}
+	}
 	if w.nowOffered(app, pr, p) {
 		if compact {
 			label += " · A: NOW"
