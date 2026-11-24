@@ -5,7 +5,7 @@ import "testing"
 func TestForPager(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"plain\tline\n", "plain\tline\n"},
-		{"\x1b[32mok\x1b[0m", "\x1b[32mok\x1b[0m"},                           // colour stays
+		{"\x1b[32mok\x1b[0m", "\x1b[32mok\x1b[0m"},                           // color stays
 		{"a\x1b]52;c;ZXZpbA==\x07b", "ab"},                                   // clipboard write gone
 		{"a\x1b]8;;https://evil.example\x1b\\link\x1b]8;;\x1b\\b", "alinkb"}, // hyperlink gone
 		{"a\x1b[2Jb", "ab"},                                                  // clear screen gone

@@ -46,7 +46,7 @@ import (
 )
 
 // pinHost makes a shot independent of the machine drawing it: the
-// gallery is colour whatever NO_COLOR says (theme.Setup honours it), and
+// gallery is color whatever NO_COLOR says (theme.Setup honors it), and
 // the host zone is UTC, so nothing that reads time.Local differs between
 // a CI runner and a laptop.
 func pinHost() {

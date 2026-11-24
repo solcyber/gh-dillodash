@@ -185,7 +185,7 @@ func TestAnswerIsAcknowledgedAtOnce(t *testing.T) {
 	h.m.UnmarkApproved(h.gh.PRs[model.Ident{Repo: infra, Number: 101}])
 	h.key('A')
 	h.key('n')
-	if h.m.statusKind == "spin" || !strings.Contains(h.m.status, "cancelled") {
+	if h.m.statusKind == "spin" || !strings.Contains(h.m.status, "canceled") {
 		t.Errorf("after n: status %q (%s)", h.m.status, h.m.statusKind)
 	}
 }
@@ -320,11 +320,11 @@ func TestRereadIsTheEndingActionsOwn(t *testing.T) {
 // cancel with a reason (the input was refused) keeps the warning.
 func TestCancelIsPlainARefusalIsNot(t *testing.T) {
 	h := newHarness(t)
-	h.m.notice("approve cancelled")
+	h.m.notice("approve canceled")
 	if h.m.statusKind == "warn" {
 		t.Error("a plain cancel is styled as a warning")
 	}
-	h.m.notice("approve cancelled (destroy count not confirmed)")
+	h.m.notice("approve canceled (destroy count not confirmed)")
 	if h.m.statusKind != "warn" {
 		t.Error("a refused input is not a warning")
 	}

@@ -143,7 +143,7 @@ fast reviewer.
 **Shift acts, lowercase looks.** Every key that changes something (on
 GitHub, your install or your config) is a capital and asks first; the
 lowercase keys only move, open and show. The key bar leads with what you
-can do to the selected row, in gold and labelled with what it does there
+can do to the selected row, in gold and labeled with what it does there
 (`A release NOW`, `A /approve plan-set`, `P open the promotion PR`), and
 the line above it says what the row is waiting on.
 

@@ -157,7 +157,7 @@ type DisplayConfig struct {
 	Motion      string // full | off
 	Mascot      string // sprite | ascii | none
 	// Clock draws the header clock: UTC, then the same instant in
-	// ClockTimezone (labelled ClockTZLabel, or the zone's abbreviation).
+	// ClockTimezone (labeled ClockTZLabel, or the zone's abbreviation).
 	Clock         bool
 	ClockTimezone string // IANA zone, validated at parse
 	ClockTZLabel  string // "" = derived (EST/EDT)

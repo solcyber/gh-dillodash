@@ -40,7 +40,7 @@ type quotePage struct {
 
 // quoteZone is a stretch of wall the page may hang on: columns [x0, x1)
 // and rows [y0, y1), a frame minW to maxW columns wide. The page is
-// centred across the zone; down it, centred too (mid) or as high as it
+// centered across the zone; down it, centered too (mid) or as high as it
 // fits.
 type quoteZone struct {
 	x0, x1, y0, y1 int

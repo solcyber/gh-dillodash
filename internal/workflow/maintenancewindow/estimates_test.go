@@ -73,14 +73,14 @@ func TestManifestEstimateFields(t *testing.T) {
 // TestCancelAnEstimatedItem: /window-cancel refuses what the conductor
 // counts as started: a dispatched item, or a fixed slot that passed and
 // is not waiting. An estimated start that passed while the item waits
-// in the lane is still cancellable.
+// in the lane is still cancelable.
 func TestCancelAnEstimatedItem(t *testing.T) {
 	mw := testCfg().MaintenanceWindow
 	info := &Night{Phase: "running"}
 	now := at("2026-10-22T03:30:00Z")
 	est := Item{PR: 158, Flag: "scheduled", StartUTC: "2026-10-22T03:20:00Z", StartIsEstimate: true, Status: "waiting for rel:web-portal#212"}
 	if ok, why := CommandCheck(CmdCancel, info, night, "alice", now, &est, mw); !ok {
-		t.Errorf("past its estimate, still waiting in the lane: cancellable: %s", why)
+		t.Errorf("past its estimate, still waiting in the lane: cancelable: %s", why)
 	}
 	est.Status = "scheduled"
 	if ok, _ := CommandCheck(CmdCancel, info, night, "alice", now, &est, mw); !ok {

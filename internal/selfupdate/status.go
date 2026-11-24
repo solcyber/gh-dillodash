@@ -51,7 +51,7 @@ func (s Status) Banner() string {
 	return fmt.Sprintf("dillodash %s — %s is out: %s", s.Running, s.Latest, s.Hint())
 }
 
-// Need is the release that a release action's current behaviour landed
+// Need is the release that a release action's current behavior landed
 // in, and how a person would name the action.
 type Need struct {
 	Min  string

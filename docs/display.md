@@ -140,7 +140,7 @@ rule.
 
 **The status line** (second from the bottom) shows the newest message for
 six seconds, or until a newer one replaces it. Results are blue. Refusals
-and cancellations (`approve cancelled`, `you authored #N`) are gold and
+and cancellations (`approve canceled`, `you authored #N`) are gold and
 shake once. Errors are gold on a gold chip and stay until something
 supersedes them.
 

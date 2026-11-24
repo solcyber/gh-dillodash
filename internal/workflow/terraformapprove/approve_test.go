@@ -87,7 +87,7 @@ func TestApproveBodies(t *testing.T) {
 	check(t, "0 destroys: celebrates big", len(app.Celebrated) == 1 && app.Celebrated[0])
 
 	app, _ = approve(t, cfg, simple("prod/07-warehouse", idA, 0), script{confirms: []bool{false}})
-	check(t, "0 destroys, declined: nothing posted", len(app.Fake.CommentsPosted) == 0 && len(app.Fake.Approvals) == 0 && hasLog(app, "notice:", "approve cancelled"))
+	check(t, "0 destroys, declined: nothing posted", len(app.Fake.CommentsPosted) == 0 && len(app.Fake.Approvals) == 0 && hasLog(app, "notice:", "approve canceled"))
 
 	pr2 := simple("prod/07-warehouse", idA, 2)
 	app, _ = approve(t, cfg, pr2, script{prompts: []string{"2"}})
@@ -111,10 +111,10 @@ func TestApproveBodies(t *testing.T) {
 	check(t, "unparseable, typed 3 then declined: nothing posted", len(app.Fake.CommentsPosted) == 0)
 	for _, typed := range []string{"²", "", "x1"} {
 		app, _ = approve(t, cfg, prU, script{prompts: []string{typed}, confirms: []bool{true}})
-		check(t, fmt.Sprintf("unparseable, typed %q: cancelled", typed), len(app.Fake.CommentsPosted) == 0)
+		check(t, fmt.Sprintf("unparseable, typed %q: canceled", typed), len(app.Fake.CommentsPosted) == 0)
 	}
 	app, _ = approve(t, cfg, prU, script{confirms: []bool{true}})
-	check(t, "unparseable, Esc: cancelled", len(app.Fake.CommentsPosted) == 0)
+	check(t, "unparseable, Esc: canceled", len(app.Fake.CommentsPosted) == 0)
 
 	// ten live plans in one run: the menu reaches the tenth
 	var ten []model.Comment
@@ -125,7 +125,7 @@ func TestApproveBodies(t *testing.T) {
 	check(t, "menu lists all ten plans", len(app.Menus) == 1 && len(app.Menus[0]) == 11)
 	check(t, "the tenth plan is postable", eq(posted(app), one(3622, "/approve "+idA)))
 	app, _ = approve(t, cfg, makePR(ten, "sha1"), script{})
-	check(t, "menu cancelled: nothing posted", len(app.Fake.CommentsPosted) == 0)
+	check(t, "menu canceled: nothing posted", len(app.Fake.CommentsPosted) == 0)
 }
 
 func TestApproveReviewOnly(t *testing.T) {
@@ -206,9 +206,9 @@ func TestApproveWindow(t *testing.T) {
 		check(t, "...and the backstop's refusal is an error", hasLog(app, "fail:", "20 characters"))
 	}
 	app, _ = approve(t, cfg, windowed("disruptive · revertible", 0, false), script{picks: []int{1}, confirms: []bool{true}})
-	check(t, "reason prompt cancelled: nothing posted", len(app.Fake.CommentsPosted) == 0 && hasLog(app, "notice:", "approve cancelled"))
+	check(t, "reason prompt canceled: nothing posted", len(app.Fake.CommentsPosted) == 0 && hasLog(app, "notice:", "approve canceled"))
 	app, _ = approve(t, cfg, windowed("disruptive · revertible", 0, false), script{confirms: []bool{true}})
-	check(t, "window question cancelled: nothing posted", len(app.Fake.CommentsPosted) == 0)
+	check(t, "window question canceled: nothing posted", len(app.Fake.CommentsPosted) == 0)
 	app, _ = approve(t, cfg, windowed("disruptive · revertible", 0, true), script{confirms: []bool{true}})
 	check(t, "shadow-mode verdict: no window question", eq(posted(app), one(3622, "/approve "+idA)) && len(app.Menus) == 0)
 	app, _ = approve(t, cfg, windowed("non-disruptive", 0, false), script{confirms: []bool{true}})

@@ -16,10 +16,10 @@ you can read it:
   St is 14 days old, Houston St is today and older is north; past 220th St
   is "the Bronx". In Chicago 35th St is 35 days old, Madison is today and
   older is south; past 138th St is "Indiana". In the Kowloon Walled City a
-  row is a metre: 30 m north of the south wall is 30 days old, the south
+  row is a meter: 30 m north of the south wall is 30 days old, the south
   wall is today and older is north; past the north wall (105 days) is
   "Lion Rock". Outside the walls the map is squeezed: Kai Tak's runway and
-  Lion Rock are kilometres off.
+  Lion Rock are kilometers off.
 - **Lane = repo.** The city's land at each row is cut west to east into one
   lane per repo, in config order. The legend lists the order.
 - **Shape = what it is; color and motion = its state:**

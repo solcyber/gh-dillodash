@@ -23,7 +23,7 @@
 // Geography is hand-traced (lat, lon) projected at load: Manhattan onto
 // its street grid (rotated 29 degrees; one unit = one 264 ft block),
 // Chicago onto its address grid (hundreds from State and Madison; one
-// unit = one street), the Kowloon Walled City onto metres inside its walls
+// unit = one street), the Kowloon Walled City onto meters inside its walls
 // (squeezed outside them).
 package fortress
 
@@ -103,24 +103,24 @@ func interp(pts [][2]float64, v float64) float64 {
 	return a[1] + (v-a[0])/(b[0]-a[0])*(b[1]-a[1])
 }
 
-// The Kowloon Walled City is metres inside its walls (one row = one
-// metre = one day, the south wall today, the north wall about 105 m on),
+// The Kowloon Walled City is meters inside its walls (one row = one
+// meter = one day, the south wall today, the north wall about 105 m on),
 // and squeezed outside them: Kai Tak's runway and Lion Rock are a few
-// kilometres off, so the land beyond the walls is drawn not to scale.
+// kilometers off, so the land beyond the walls is drawn not to scale.
 var (
-	// latitude -> metres north of the south wall
+	// latitude -> meters north of the south wall
 	kwLat = [][2]float64{
 		{22.3000, -60}, {22.3240, -36}, {22.3300, -12}, {22.33208, 0},
 		{22.33317, 120.7}, {22.3345, 134}, {22.3500, 150},
 	}
-	// longitude -> metres east of the city's middle
+	// longitude -> meters east of the city's middle
 	kwLon = [][2]float64{
 		{114.1700, -200}, {114.1880, -130}, {114.1893, -103},
 		{114.1913, 103}, {114.1935, 135}, {114.2300, 220},
 	}
 )
 
-// KowloonXY projects a (lat, lon) into the walled city's metres: (east of
+// KowloonXY projects a (lat, lon) into the walled city's meters: (east of
 // its middle, north of its south wall).
 func KowloonXY(lat, lon float64) (x, y float64) {
 	return interp(kwLon, lon), interp(kwLat, lat)
@@ -134,14 +134,14 @@ type XY struct{ X, Y float64 }
 
 // Shape is a traced polygon (or polyline) with its terrain code: w water,
 // o land outside the city, L city land, p park, B a road, = a bridge or
-// pier, # elevated rail; - is a labelled street, added at raster time.
+// pier, # elevated rail; - is a labeled street, added at raster time.
 type Shape struct {
 	Code byte
 	Name string
 	Pts  []LL
 }
 
-// Street is a labelled street: its grid y and the margin label.
+// Street is a labeled street: its grid y and the margin label.
 type Street struct {
 	Y     int
 	Label string
@@ -501,7 +501,7 @@ var Cities = map[string]*City{
 	// City Park is now, drawn as its wall (the stones went in 1943; the
 	// line held), the Yamen near its middle, Kowloon City to the south, Kai Tak's runway out in Kowloon Bay to
 	// the south-east (its approach passed low over the roofs), and Lion
-	// Rock to the north. Inside the walls one row is one metre; outside
+	// Rock to the north. Inside the walls one row is one meter; outside
 	// them the map is squeezed (KowloonXY). Hand-traced and approximate.
 	"kowloon": {
 		Key: "kowloon", Name: "Kowloon Walled City", Proj: KowloonXY, Dir: 1, Limit: 105,

@@ -38,7 +38,7 @@ var regular []byte
 //go:embed HackNerdFontMono-Bold.ttf
 var bold []byte
 
-// The licences the fonts are redistributed under: MIT and Bitstream Vera
+// The licenses the fonts are redistributed under: MIT and Bitstream Vera
 // for Hack, SIL OFL 1.1 and MIT for the Nerd Fonts patch. They travel
 // with the binary and are written beside the installed fonts.
 //
@@ -48,7 +48,7 @@ var hackLicense []byte
 //go:embed NERD-FONTS-LICENSE.md
 var nerdLicense []byte
 
-// Licenses lists the licence texts, as files to write beside the fonts.
+// Licenses lists the license texts, as files to write beside the fonts.
 func Licenses() []File {
 	return []File{
 		{Name: "LICENSE-Hack.md", Data: hackLicense},
@@ -381,7 +381,7 @@ func Install(o Options) (Result, error) {
 			res.Installed = append(res.Installed, p)
 			changed = true
 		}
-		// the licences go beside the fonts (not counted as font files:
+		// the licenses go beside the fonts (not counted as font files:
 		// a missing one never makes a font "missing")
 		for _, l := range Licenses() {
 			p := filepath.Join(t.dir, l.Name)

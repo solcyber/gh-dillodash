@@ -207,7 +207,7 @@ type Client interface {
 	// the run fails at that environment.
 	RejectDeployments(ctx context.Context, repo model.Repo, runID int64, envIDs []int64, comment string) error
 	// RerunRun re-runs every job of a finished run; RerunFailedJobs only
-	// its failed and cancelled jobs (and what depends on them). CancelRun
+	// its failed and canceled jobs (and what depends on them). CancelRun
 	// cancels a queued, waiting or running run (actions write).
 	RerunRun(ctx context.Context, repo model.Repo, runID int64) error
 	RerunFailedJobs(ctx context.Context, repo model.Repo, runID int64) error

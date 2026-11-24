@@ -315,7 +315,7 @@ func cellsOf(segs []text.Seg) []text.Seg {
 	return out
 }
 
-// joinCells merges neighbouring cells of one style.
+// joinCells merges neighboring cells of one style.
 func joinCells(cells []text.Seg) []text.Seg {
 	var out []text.Seg
 	for _, c := range cells {

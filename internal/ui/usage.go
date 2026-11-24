@@ -10,7 +10,7 @@ import (
 )
 
 // budget is the header meter's reading: the tighter of GitHub's REST
-// (core) and GraphQL budgets as the last answers reported them, labelled
+// (core) and GraphQL budgets as the last answers reported them, labeled
 // "rest" or "gql"; else the GraphQL list's own rateLimit read.
 func (m *Model) budget() (*model.RateLimit, string) {
 	if m.usage != nil {

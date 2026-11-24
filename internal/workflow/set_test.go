@@ -225,7 +225,7 @@ func (w *timed) Refresh(ctx context.Context, _ ghapi.Client, _ []model.Repo, prs
 		select {
 		case <-w.release:
 		case <-ctx.Done():
-			return w.name + " cancelled", nil, nil
+			return w.name + " canceled", nil, nil
 		}
 	}
 	return w.name + " state", []string{w.name + " warn"}, w.err
@@ -287,7 +287,7 @@ func TestRefreshingRateLimit(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 	if _, ok := states["a"]; ok {
-		t.Errorf("the cancelled workflow kept a state: %v", states)
+		t.Errorf("the canceled workflow kept a state: %v", states)
 	}
 	if states["b"] != "b state" {
 		t.Errorf("the walled workflow's state is lost: %v", states)

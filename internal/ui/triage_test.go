@@ -68,7 +68,7 @@ func TestTriageLabels(t *testing.T) {
 	}
 	h.m.tp.Pick = func(string, []string) int { return -1 }
 	h.key('L')
-	if len(h.gh.CallsFor("add_labels"))+len(h.gh.CallsFor("remove_label")) != 2 || !strings.Contains(h.m.status, "label cancelled") {
+	if len(h.gh.CallsFor("add_labels"))+len(h.gh.CallsFor("remove_label")) != 2 || !strings.Contains(h.m.status, "label canceled") {
 		t.Errorf("cancel posts nothing: status %q", h.m.status)
 	}
 }

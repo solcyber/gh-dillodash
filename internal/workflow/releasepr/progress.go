@@ -1437,7 +1437,7 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 	case PhaseRefused:
 		return markErr() + "release refused"
 	case PhaseCancelled:
-		return "release cancelled"
+		return "release canceled"
 	case PhaseRolled:
 		if p.Detail == RecutDetail {
 			return "rolled · re-cut"

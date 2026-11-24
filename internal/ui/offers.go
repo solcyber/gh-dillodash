@@ -18,7 +18,7 @@ import (
 )
 
 // The key bar shows what can be done here: a key that acts appears when
-// it acts on the selected row or the open item, labelled with what it
+// it acts on the selected row or the open item, labeled with what it
 // will do there. The offers below are read under the lock, at draw time,
 // from the model alone.
 

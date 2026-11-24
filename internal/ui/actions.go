@@ -157,7 +157,7 @@ func (m *Model) doApprove(app *lockedApp) {
 	workflow.PrimeHead(app, pr) // the head check runs while the question is read
 	if !app.Confirm(fmt.Sprintf("submit a GitHub review approval of %s as %s?", where, m.me)) {
 		workflow.ForgetHead(pr)
-		app.Notice("approve cancelled")
+		app.Notice("approve canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("approving %s as %s...", where, m.me))
@@ -198,7 +198,7 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 		// one line here; Enter on an empty line opens $EDITOR for more
 		t, ok := app.Prompt(fmt.Sprintf("comment on %s as %s (Enter posts; Enter on an empty line opens $EDITOR; Esc cancels):", where, m.me), workflow.PromptOpts{})
 		if !ok {
-			app.Notice("comment cancelled")
+			app.Notice("comment canceled")
 			return
 		}
 		if strings.TrimSpace(t) == "" {
@@ -218,19 +218,19 @@ func (m *Model) doComment(app *lockedApp, useEditor bool, seed string) {
 			return
 		}
 		if !ok {
-			app.Notice("comment cancelled (editor exited non-zero)")
+			app.Notice("comment canceled (editor exited non-zero)")
 			return
 		}
 		if seed != "" && strings.TrimSpace(txt) == strings.TrimSpace(seed) {
 			// quitting the editor on the bare "@login" must not post just
 			// the mention
-			app.Notice(fmt.Sprintf("comment cancelled (nothing added to %s)", strings.TrimSpace(seed)))
+			app.Notice(fmt.Sprintf("comment canceled (nothing added to %s)", strings.TrimSpace(seed)))
 			return
 		}
 		body = txt
 	}
 	if strings.TrimSpace(body) == "" {
-		app.Notice("comment cancelled (empty)")
+		app.Notice("comment canceled (empty)")
 		return
 	}
 	// one endpoint for both kinds: the issue-comment API is the
@@ -285,7 +285,7 @@ func (m *Model) doTag(app *lockedApp) {
 	}
 	i := app.Pick("tag whom? ($EDITOR opens with the @mention; quit it unchanged to cancel)", labels)
 	if i < 0 {
-		app.Notice("tag cancelled")
+		app.Notice("tag canceled")
 		return
 	}
 	m.doComment(app, true, "@"+others[i].Login+" ")
@@ -378,7 +378,7 @@ func (m *Model) doMerge(app *lockedApp) {
 		ok = app.Confirm(what)
 	}
 	if !ok {
-		app.Notice("merge cancelled")
+		app.Notice("merge canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("merging %s at %s...", where, model.ShortSHA(head)))
@@ -531,7 +531,7 @@ func (m *Model) doDeployApprove(app *lockedApp) {
 		lines[i] = fmt.Sprintf("%s (%s, run %d)", w.EnvName, text.Ellip(text.OrQ(w.Run.Name), 40), w.Run.ID)
 	}
 	if !app.Confirm(fmt.Sprintf("%sapprove %s of %s on merge %s as %s?\n%s", early, plural(len(mine), "deployment"), where, model.ShortSHA(sha), m.me, strings.Join(lines, "\n"))) {
-		app.Notice("deployment approval cancelled")
+		app.Notice("deployment approval canceled")
 		return
 	}
 	comment := m.wf.DeployComment(pr, model.ShortSHA(sha))
@@ -674,7 +674,7 @@ func (m *Model) doGoto(app *lockedApp) {
 			}
 			i := app.Pick(fmt.Sprintf("go to #%d — listed in %d repos", n, len(cands)), labels)
 			if i < 0 || i >= len(cands) {
-				app.Notice("go to cancelled")
+				app.Notice("go to canceled")
 				return
 			}
 			repo, listed = cands[i], prs[i]

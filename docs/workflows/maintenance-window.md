@@ -61,7 +61,7 @@ assume the example window.
 - **Attended nights.** With `attended_days` set (`["tue", "thu"]`), only
   those nights ask for `/attend`. Another night says `not an attended
   night — held items wait for Thu (W attends tonight anyway)` in the
-  plain header colour, and past the cutoff `held items roll to Thu`.
+  plain header color, and past the cutoff `held items roll to Thu`.
   This is a team's convention, not a rule the conductor checks: `W`
   posts the commands on any night, and they count. Unset, every night
   asks, as before.

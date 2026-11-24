@@ -622,7 +622,7 @@ func TestProgressChipAndStyle(t *testing.T) {
 		{Progress{Phase: PhaseFailed, Terminal: true}, markErr() + "release FAILED", "chip.fail"},
 		{Progress{Phase: PhaseRefused, Terminal: true}, markErr() + "release refused", "chip.fail"},
 		{Progress{Phase: PhaseRolled, Terminal: true}, "rolled", "chip.rolled"},
-		{Progress{Phase: PhaseCancelled, Terminal: true}, "release cancelled", "chip.state"},
+		{Progress{Phase: PhaseCancelled, Terminal: true}, "release canceled", "chip.state"},
 		{Progress{Phase: PhaseLost, Terminal: true}, "lost track", "chip.state"},
 	}
 	for _, c := range cases {

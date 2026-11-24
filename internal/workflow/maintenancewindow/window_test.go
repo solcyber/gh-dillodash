@@ -29,7 +29,7 @@ const (
 )
 
 // testCfg is the acme fixture: manifests on acme/infra, the conductor
-// infra-bot, the default New York window labelled ET.
+// infra-bot, the default New York window labeled ET.
 func testCfg() *config.Config {
 	cfg := config.Default()
 	cfg.Reviews.Repos = []model.Repo{infra}
@@ -1040,7 +1040,7 @@ func TestNightStrip(t *testing.T) {
 }
 
 // TestNightLabelPastAndDST: a manifest still open after midnight is last
-// night's; a night past the fall-back is labelled with its own zone.
+// night's; a night past the fall-back is labeled with its own zone.
 func TestNightLabelPastAndDST(t *testing.T) {
 	cfg := config.DefaultMaintenanceWindow()
 	cfg.TZLabel = ""

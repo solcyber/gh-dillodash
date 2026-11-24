@@ -509,7 +509,7 @@ type geometry struct {
 	rodY             int // the curtain rod's row
 	curtW            int // a curtain's width at the rod
 	leftOut, rightIn int // the left curtain's outer column; the right one's outer column
-	lampX, lampTop   int // the lamp's centre column and its shade's top pixel row
+	lampX, lampTop   int // the lamp's center column and its shade's top pixel row
 	glowX, glowY     float64
 	glowR            float64
 }
@@ -968,7 +968,7 @@ func monstera(p *pix, r cellRect, cx, top int, t float64) {
 	}
 }
 
-// leafAt draws one monstera leaf centred on (x, y), pointing at angle a
+// leafAt draws one monstera leaf centered on (x, y), pointing at angle a
 // (from up), rx long, with its splits.
 func leafAt(p *pix, x, y, a, rx, seed float64) {
 	ry := rx * 0.78

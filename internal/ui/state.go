@@ -411,7 +411,7 @@ func (m *Model) next(msg string) {
 }
 
 // notice is a refusal: gold, with a shake, so it is seen. A
-// cancellation ("approve cancelled") is the answer you just gave, not a
+// cancellation ("approve canceled") is the answer you just gave, not a
 // refusal: it is said plainly.
 func (m *Model) notice(msg string) {
 	m.setStatus(msg)
@@ -422,10 +422,10 @@ func (m *Model) notice(msg string) {
 	m.fx.Start("toast.shake", 0.3, nil)
 }
 
-// cancelRE is a plain cancellation: "cancelled" or "<what> cancelled",
-// nothing after it. One with a reason ("approve cancelled (destroy count
+// cancelRE is a plain cancellation: "canceled" or "<what> canceled",
+// nothing after it. One with a reason ("approve canceled (destroy count
 // not confirmed)") was refused, and is said as a refusal.
-var cancelRE = regexp.MustCompile(`^([a-z][a-z -]* )?cancelled$`)
+var cancelRE = regexp.MustCompile(`^([a-z][a-z -]* )?canceled$`)
 
 func (m *Model) fail(msg string) {
 	m.errText = msg

@@ -85,7 +85,7 @@ func (m *Model) doDispatch(app *lockedApp) {
 	}
 	i := app.Pick("run which workflow?", labels)
 	if i < 0 || i >= len(list) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	d := list[i]
@@ -97,7 +97,7 @@ func (m *Model) doDispatch(app *lockedApp) {
 	for _, in := range d.Inputs {
 		s, ok := askInput(app, d, in)
 		if !ok {
-			app.Notice("cancelled")
+			app.Notice("canceled")
 			return
 		}
 		if strings.TrimSpace(s) == "" && !in.Required {
@@ -124,7 +124,7 @@ func (m *Model) doDispatch(app *lockedApp) {
 	}
 	workflow.WarmMembership(app)
 	if !app.Confirm(fmt.Sprintf("%s\nsend that as %s?", q, m.me)) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	if !workflow.PostGuard(app, d.Name) {

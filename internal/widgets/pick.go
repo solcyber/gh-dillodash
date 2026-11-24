@@ -123,10 +123,10 @@ func (p *Pick) Open(f *fx.Fx) {
 	}
 }
 
-// Result is the chosen index, -1 when cancelled (or not yet answered).
+// Result is the chosen index, -1 when canceled (or not yet answered).
 func (p *Pick) Result() int { return p.result }
 
-// Done says the menu was answered or cancelled.
+// Done says the menu was answered or canceled.
 func (p *Pick) Done() bool { return p.done }
 
 // Selected is the highlighted index.

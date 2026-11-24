@@ -129,7 +129,7 @@ func TestInFlightCap(t *testing.T) {
 }
 
 // TestSharedFollowerOutlivesACancelledLeader: when the reader that set a
-// shared GET off is cancelled (a workflow stopped by another's rate
+// shared GET off is canceled (a workflow stopped by another's rate
 // limit), a reader waiting on the same URL whose own context is live
 // asks for itself instead of failing with the leader's cancel.
 func TestSharedFollowerOutlivesACancelledLeader(t *testing.T) {
@@ -139,7 +139,7 @@ func TestSharedFollowerOutlivesACancelledLeader(t *testing.T) {
 	s.handle("GET", "/repos/acme/web/git/matching-refs/tags/go/", func(w http.ResponseWriter, r *http.Request) {
 		if hits.Add(1) == 1 {
 			started <- struct{}{}
-			<-r.Context().Done() // the leader's read hangs until it is cancelled
+			<-r.Context().Done() // the leader's read hangs until it is canceled
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -165,7 +165,7 @@ func TestSharedFollowerOutlivesACancelledLeader(t *testing.T) {
 	time.Sleep(20 * time.Millisecond) // the follower joins the leader's flight
 	cancel()
 	if err := <-leaderErr; err == nil {
-		t.Error("the cancelled leader succeeded")
+		t.Error("the canceled leader succeeded")
 	}
 	select {
 	case err := <-follower:

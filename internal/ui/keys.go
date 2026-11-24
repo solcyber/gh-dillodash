@@ -246,7 +246,7 @@ type barItem struct {
 const lookPrio = 100
 
 // barFor is the key bar of a view: first the keys that act on the
-// selected row or the open item (each labelled with what it does
+// selected row or the open item (each labeled with what it does
 // there), then the keys that move, open and show, ending with q (or
 // back). The "? help" chip is appended by drawKeys.
 func (m *Model) barFor(view string) []barItem {
@@ -492,7 +492,7 @@ func KeysDoc() string {
 	var b strings.Builder
 	b.WriteString("# Keys\n\n")
 	b.WriteString("<!-- generated from internal/ui/keys.go by `go test ./internal/ui -update`; edit the table, not this file -->\n\n")
-	b.WriteString("**Shift acts, lowercase looks.** A capital changes something (on GitHub, your install or your config) and asks first; a lowercase key only moves, opens or shows. The only capitals that just move are the vim motions `G`, `N` and the fortress's `HJKL`. The key bar leads with the keys that act on the selected row, labelled with what they do there; the line above it says what the row waits on.\n\n")
+	b.WriteString("**Shift acts, lowercase looks.** A capital changes something (on GitHub, your install or your config) and asks first; a lowercase key only moves, opens or shows. The only capitals that just move are the vim motions `G`, `N` and the fortress's `HJKL`. The key bar leads with the keys that act on the selected row, labeled with what they do there; the line above it says what the row waits on.\n\n")
 	b.WriteString("| View | Key | Action |\n|---|---|---|\n")
 	for i := range bindings {
 		bd := &bindings[i]

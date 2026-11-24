@@ -86,7 +86,7 @@ const epiBlocked = 1 << 20
 
 // epigraphCosts is what covering each screen cell costs: blocked for
 // what must stay seen (the panels, the log, the edge counters, the look
-// cursor and its neighbours, the rows that are not the map's), 10 for a
+// cursor and its neighbors, the rows that are not the map's), 10 for a
 // thing, 3 for the city proper, 2 for a map label, 0 for the land and
 // water round the city.
 func (v *View) epigraphCosts(h, w, top, mh, x0, mw, vt, vl int) [][]int {

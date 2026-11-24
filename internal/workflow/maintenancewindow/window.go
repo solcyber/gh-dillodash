@@ -380,7 +380,7 @@ func HasQueuedLabel(pr *model.PR, cfg *config.MaintenanceWindowConfig) bool {
 	return pr != nil && pr.Labels.Has(cfg.QueuedLabel)
 }
 
-// IsQueued: labelled queued, and the queued plan is still the PR's plan.
+// IsQueued: labeled queued, and the queued plan is still the PR's plan.
 // A push after the queueing re-plans it; the label stays, but what's
 // queued is dead and the PR needs a fresh approve, so it belongs in the
 // approval list.

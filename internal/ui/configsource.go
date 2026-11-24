@@ -98,7 +98,7 @@ func (m *Model) doConfigPull(app *lockedApp) {
 		return
 	}
 	if !app.Confirm(fmt.Sprintf("pull %s @ %s into %s and restart into it? (keeps your place)", src.Spec(), model.ShortSHA(newer), path)) {
-		app.Notice("cancelled — gh dillodash config pull does it by hand")
+		app.Notice("canceled — gh dillodash config pull does it by hand")
 		return
 	}
 	app.Flash(fmt.Sprintf("reading %s...", src.Spec()))

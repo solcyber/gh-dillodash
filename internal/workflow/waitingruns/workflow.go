@@ -947,7 +947,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		q += "\nships " + s
 	}
 	if !app.Confirm(q + "\n" + strings.Join(lines, "\n")) {
-		app.Notice("deployment approval cancelled")
+		app.Notice("deployment approval canceled")
 		return true
 	}
 	app.Flash(fmt.Sprintf("approving %s of %s...", plural(len(mine), "deployment"), where))

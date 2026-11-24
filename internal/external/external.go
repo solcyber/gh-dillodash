@@ -211,7 +211,7 @@ func WriteTempDiff(number int, diff string) (path string, cleanup func(), err er
 	}
 	path = f.Name()
 	cleanup = func() { os.Remove(path) }
-	// the diff is the PR author's text: no escape but colour reaches the pager
+	// the diff is the PR author's text: no escape but color reaches the pager
 	if _, err := f.WriteString(text.ForPager(diff)); err != nil {
 		f.Close()
 		cleanup()
