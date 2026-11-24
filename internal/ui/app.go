@@ -212,6 +212,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		if m.cfg != nil && m.cfg.Path != "" && fx.Now() >= m.nextCfgCheckAt {
 			m.checkConfig()
 		}
+		m.goHome() // idle off "your turn": back to its head
 		if m.restartQueued && m.modal == nil && !m.action {
 			return m.restartNow()
 		}
@@ -481,7 +482,7 @@ func doNav(m *Model, k widgets.Key, page int, _ *lockedApp) tea.Cmd {
 	top := k.Rune == 'g' || k.Name == "home"
 	bottom := k.Rune == 'G' || k.Name == "end"
 	if m.view == ViewList && m.loaded {
-		m.movedSinceList = true // the first whole load keeps the cursor where it is
+		m.cursorPlaced = true // from here the cursor is where the keys put it
 	}
 	switch m.view {
 	case ViewList:
@@ -547,6 +548,7 @@ func doOpen(m *Model, _ widgets.Key, _ int, app *lockedApp) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	m.cursorPlaced = true // the row you opened is where you are
 	if rk, has := m.wf.RowKinds()[row.Kind]; has && rk.Open != nil && rk.Open(m, row) {
 		return nil
 	}

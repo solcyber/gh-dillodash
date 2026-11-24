@@ -18,7 +18,21 @@ next window), **failed**, or **done**.
   reviews), each ending with its key and what that key does
   (`D approve prod`). Each row also stands in its own section. With
   nothing to do, one line says so, and what is running or waiting instead.
-- **The cursor** starts on the head of the section.
+- **The cursor** starts on the head of the section and follows it
+  until you press a key that moves it or opens a row. After that it stays
+  where you put it, except:
+  - **A move that is done** (its row leaves the section) puts the cursor
+    on the next row of the section, or the one before when it was the
+    last. Only when the section empties does the cursor follow the item
+    to its own section, where you can see what the move started.
+  - **A row that leaves the list** (merged, closed, hidden) puts the
+    cursor on its neighbor in the same section, never on whatever row
+    took its place on the screen.
+  - **Idle** (`idle_after_secs` with no key): a cursor outside the
+    section goes back to its head, when the section has rows. A cursor on
+    one of your moves, in a PR or under a filter stays where it is.
+  - **Rows arriving or leaving above the cursor** leave its row on the
+    same line of the screen.
 - **`n` and `N`** walk it, next and previous.
 - **The summary row** counts the moves in fixed words:
   `3 on you: 2 deploys · 1 release`, `1 running, lands ~23:20`,
