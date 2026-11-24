@@ -244,6 +244,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case execMsg:
 		return m.handleExec(msg)
 	case execDoneMsg:
+		m.noteInput() // back from a pager or an editor: someone was there all along
 		msg.done <- msg.err
 	case actionDoneMsg:
 		m.action = false

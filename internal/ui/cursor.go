@@ -107,14 +107,17 @@ func (m *Model) resolve(a cursorAnchor, exact bool) int {
 			return i // a section of new to-dos only
 		}
 	}
-	// the same item in another section, or as another kind (PR -> queued)
+	// the same item in another section, or as another kind (PR -> queued);
+	// its own row before a "your turn" copy
 	for _, sameKind := range []bool{true, false} {
 		if !sameKind && a.key.id.Number == 0 {
 			break // a numberless row (a branch) is only itself
 		}
-		for i, r := range m.rows {
-			if r.Kind != "header" && (!sameKind || r.Kind == a.key.kind) && r.Ident() == a.key.id {
-				return i
+		for _, wantPin := range []bool{false, true} {
+			for i, r := range m.rows {
+				if r.Kind != "header" && (!sameKind || r.Kind == a.key.kind) && r.Ident() == a.key.id && pinned(r) == wantPin {
+					return i
+				}
 			}
 		}
 	}
@@ -147,8 +150,9 @@ func (m *Model) firstTurn() int {
 	return -1
 }
 
-// idleSinceKey: no key for idle_after_secs (the timer, not the focus: a
-// glance at a browser is no reason to move the cursor).
+// idleSinceKey: no key for idle_after_secs. The focus alone never moves
+// the cursor (a glance at a browser is no reason to); a focus regained
+// counts as a look and restarts the timer.
 func (m *Model) idleSinceKey() bool {
 	secs := m.cfg.Display.IdleAfterSecs
 	return secs > 0 && fx.Now()-m.lastInput > float64(secs)
@@ -157,20 +161,41 @@ func (m *Model) idleSinceKey() bool {
 // wantsHome: the cursor belongs on the head of "your turn" rather than
 // where the rule put it at i.
 func (m *Model) wantsHome(i int) bool {
+	if m.held() {
+		return false
+	}
 	if !m.cursorPlaced {
 		return true
 	}
-	if !m.idleSinceKey() || m.view != ViewList || m.modal != nil || m.filter != "" || m.filtering {
+	if !m.idleSinceKey() || m.view != ViewList || m.overlay != "" || m.filter != "" || m.filtering {
 		return false
 	}
 	return i < 0 || i >= len(m.rows) || !pinned(m.rows[i])
 }
 
+// held: a question is open, or an action runs, about the selected row
+// (the filter's own prompt aside): the cursor keeps that item, so the row
+// highlighted beside a confirm is the one it names, and an action that
+// has yet to read the row reads the one the key was pressed on.
+func (m *Model) held() bool {
+	return !m.filtering && (m.modal != nil || m.action)
+}
+
 // placeCursor settles the cursor after the rows were rebuilt (lock held).
 func (m *Model) placeCursor(a cursorAnchor, had bool) {
 	at := -1
-	if had {
-		at = m.resolve(a, m.filtering)
+	switch {
+	case m.filtering && m.filterHad:
+		// the row the filter started from, whenever it matches again (a
+		// typo, then a backspace), else the row now under the cursor
+		if at = m.resolve(m.filterFrom, true); at < 0 && had {
+			at = m.resolve(a, true)
+		}
+	case had:
+		at = m.resolve(a, m.filtering || m.held())
+		if at < 0 && m.held() {
+			at = m.resolve(a, false) // the item itself is gone
+		}
 	}
 	if at < 0 || m.wantsHome(at) {
 		if i := m.firstTurn(); i >= 0 {
@@ -204,6 +229,9 @@ func (m *Model) holdViewport(a cursorAnchor) {
 		return
 	}
 	top := max(0, m.selected-a.offset)
+	if m.selected > 0 && m.rows[m.selected-1].Kind == "header" {
+		top = min(top, m.selected-1) // the frame keeps a section's header above its first row
+	}
 	if d := top - m.listTop; d != 0 {
 		m.listTop = top
 		if g, ok := m.glide["list"]; ok {

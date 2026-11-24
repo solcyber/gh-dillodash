@@ -30,7 +30,11 @@ next window), **failed**, or **done**.
     took its place on the screen.
   - **Idle** (`idle_after_secs` with no key): a cursor outside the
     section goes back to its head, when the section has rows. A cursor on
-    one of your moves, in a PR or under a filter stays where it is.
+    one of your moves, in a PR, under a filter, behind the help or a pager
+    stays where it is.
+  - **A question open about the row** (a confirm) keeps the cursor on that
+    item whatever a refresh brings, so the highlighted row is the one the
+    question names.
   - **Rows arriving or leaving above the cursor** leave its row on the
     same line of the screen.
 - **`n` and `N`** walk it, next and previous.
