@@ -123,6 +123,8 @@ type RestoreRef struct {
 	Repo   string `json:"repo"`
 	Number int    `json:"number"`
 	Kind   string `json:"kind,omitempty"` // a detail: "pr" or "issue"
+	// Pinned: the selected row was the "your turn" copy, not its home row
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 // RestoreEnv is the environment variable that carries a Restore.
@@ -158,7 +160,7 @@ func (m *Model) captureRestore() Restore {
 	r := Restore{Filter: m.filter, ShowAll: m.showAll}
 	if row, ok := m.Selected(); ok {
 		id := row.Ident()
-		r.Selected = &RestoreRef{Repo: id.Repo.String(), Number: id.Number}
+		r.Selected = &RestoreRef{Repo: id.Repo.String(), Number: id.Number, Pinned: pinned(row)}
 	}
 	if m.view != ViewList && m.view != ViewFortress {
 		switch d := m.detail.(type) {
@@ -186,11 +188,23 @@ func (m *Model) applyRestore() {
 	if r.Selected != nil {
 		if repo, ok := model.ParseRepo(r.Selected.Repo); ok {
 			want := model.Ident{Repo: repo, Number: r.Selected.Number}
+			// the copy it was on (pinned or home), else the other one
+			best := -1
 			for i, row := range m.rows {
-				if row.Kind != "header" && row.Ident() == want {
-					m.selected = i
+				if row.Kind == "header" || row.Ident() != want {
+					continue
+				}
+				if best < 0 {
+					best = i
+				}
+				if pinned(row) == r.Selected.Pinned {
+					best = i
 					break
 				}
+			}
+			if best >= 0 {
+				m.selected = best
+				m.cursorPlaced = true
 			}
 		}
 	}

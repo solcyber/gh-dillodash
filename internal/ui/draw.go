@@ -871,6 +871,7 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 		visible = max(1, min(visible, cf.Top(h, w)-top))
 	}
 	n := len(m.rows)
+	m.listVisible = visible
 	// sticky viewport: scroll only when the cursor leaves it, and keep a
 	// section's header in view above its first row
 	wantTop := m.selected

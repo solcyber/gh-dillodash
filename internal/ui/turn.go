@@ -304,17 +304,6 @@ func (m *Model) turnIndex() (int, int) {
 	return at, total
 }
 
-// selectFirstTurn puts the cursor on the head of the "your turn"
-// section, when it has one.
-func (m *Model) selectFirstTurn() {
-	for i, r := range m.rows {
-		if pinned(r) {
-			m.selected = i
-			return
-		}
-	}
-}
-
 // windowTitle is the terminal's title: what waits on the viewer, else
 // what runs, else the name, so a tab or a tmux window says it while the
 // dashboard is out of sight.
@@ -350,7 +339,7 @@ func doNextTurn(m *Model, k widgets.Key, _ int, _ *lockedApp) tea.Cmd {
 	}
 	was := m.selected
 	m.selected = i
-	m.movedSinceList = true
+	m.cursorPlaced = true
 	m.leaveTrail(was)
 	return nil
 }

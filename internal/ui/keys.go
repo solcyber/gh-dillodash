@@ -73,7 +73,7 @@ var bindings = []binding{
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('n'), R('N')}, Bar: "n", Label: "next on you", Group: "list", Prio: 85, when: (*Model).hasTurns,
 		Help: "n/N  the next / previous thing that is your move", Doc: "the cursor to the next (`N`: previous) row that is your move, in its own section: a deploy that waits on you, a release or a review to approve, a promotion of yours to merge (the bar shows it while one is; the hint line names where it goes)", Do: doNextTurn},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R('/')}, Bar: "/", Label: "filter", Group: "list", Prio: 20,
-		Help: "/  filter (live)", Doc: "filter, live as you type: words match the number, title, author, labels and a workflow's own text (a stack, a repo)", Do: doFilter},
+		Help: "/  filter (live)", Doc: "filter, live as you type: words match the number, title, author, labels and a workflow's own text (a stack, a repo); the cursor keeps its row while it matches, else goes to the first match, and Esc in the prompt puts it back where it was", Do: doFilter},
 	{Views: []string{ViewList}, Keys: []widgets.Key{R(':')}, Bar: ":", Label: "go to #", Group: "any", Prio: 20, Do: doGoto}, // the chip; the "any" row below documents it
 	{Views: []string{ViewList}, Keys: []widgets.Key{K("esc")}, Group: "list",
 		Help: "esc  clear the filter", Doc: "clear the filter (Esc never quits: a stray escape from an Alt chord must not close the dashboard)", Do: doClearFilter},
