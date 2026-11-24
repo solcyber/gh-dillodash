@@ -85,9 +85,16 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   (`v`). `A` approves, `C` comments, `T` tags someone, `M` merges an
   approved PR (or one whose branch asks for no review), `D` approves the
   deployments waiting on a merged one that are yours to approve.
-- **The summary row** counts what needs you and what is failing; the status
-  line explains every refusal in words; the header shows a UTC + local clock,
-  the GraphQL budget and when the next refresh lands.
+- **Your turn.** Every row is someone's move, and the dashboard says whose.
+  What is yours is pinned at the top with the key that does it (`D approve
+  prod`, `A approve the release`). The cursor starts there and `n` walks it.
+  The summary row counts what is on you, what runs and what waits on
+  others. The line above the keys says what to do with the selected row,
+  or that nothing is yours and where `n` goes
+  ([docs/display.md](docs/display.md#your-turn)).
+- **The status line** explains every refusal in words; the header shows a UTC
+  and local clock, the tighter of the token's REST and GraphQL budgets, and
+  when the next refresh lands.
 - **Fortress mode** (`d`): everything open as a Dwarf Fortress map over
   Manhattan, Chicago or the Kowloon Walled City. Row is age, lane is repo,
   shape is what it is. Borges's "On Exactitude in Science" lies over the
@@ -99,7 +106,10 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   ([docs/display.md](docs/display.md#the-room)).
 
 It refreshes in the background every five minutes by default (`r` refreshes
-now) and backs off by itself when GitHub rate-limits the token.
+now). It slows down while nobody is watching and catches up the moment
+someone is, follows deploys by reading their runs rather than refreshing
+everything, and paces itself by the token's budget, so it does not reach
+GitHub's rate limit ([docs/display.md](docs/display.md#githubs-budget)).
 
 ## Workflows
 

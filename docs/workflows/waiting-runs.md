@@ -5,14 +5,32 @@ approval without a pull request behind them: a production deploy someone
 dispatched by hand, an ops workflow run from `main`. The core's `D` finds
 waiting runs only through a merged PR's merge commit, so these never showed
 on the dashboard and the approver had to go to the Actions page. With this
-workflow on, every run waiting on an environment in the configured repos
-gets a row, and `D` approves it.
+workflow on, every run waiting on an environment gets a row, and `D`
+approves it.
 
 ```toml
 [workflows.waiting_runs]
 enabled = true
-repos = ["acme/infra", "acme/etl-jobs"]   # default: every [reviews] repo
+# repos = "auto" (the default): every repo of the organization with an
+# environment that needs a reviewer; or a list, read exactly:
+# repos = ["acme/infra", "acme/etl-jobs"]
 ```
+
+## Which repos
+
+With `repos = "auto"`, the default, dillodash reads the organizations'
+repos and keeps every one with an environment that has required
+reviewers. A repo that gains such an environment is read without anybody
+editing a config. A hand-written list that missed one hid its waiting
+deploys entirely, so this is the default. The organizations are `orgs`,
+else `[reviews] requested_orgs`, else the review repos' owners.
+Environments change rarely, so the discovery is kept for
+`discover_ttl_secs` in memory and in `cache`, and a new dashboard starts
+from the cache. Its reads are conditional, so a rediscovery that finds
+nothing new costs no rate limit. Only the repos found are polled.
+
+A list reads exactly those repos. `gh dillodash config check` then names
+any repo with a gated environment the list leaves out.
 
 No bot protocol is involved: the rows come from GitHub's own Actions and
 deployment APIs.
@@ -22,14 +40,17 @@ deployment APIs.
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `false` | Turn the workflow on. |
-| `repos` | every `[reviews]` repo | The repos whose waiting runs are listed, as `"owner/name"`. A repo need not be a review repo. |
+| `repos` | `"auto"` | `"auto"`: every repo of `orgs` with an environment that needs a reviewer (see [Which repos](#which-repos)). A list of `"owner/name"`: exactly those repos, which need not be review repos. |
+| `orgs` | `requested_orgs`, else the review repos' owners | With `"auto"`: the organizations to look in. |
+| `discover_ttl_secs` | `21600` | With `"auto"`: how long a discovery is kept. |
+| `cache` | `~/.cache/dillodash/waiting-repos-{org}.json` | With `"auto"`: the discovery cache. `{org}` is the organizations joined by `+`. |
 | `approval_comment` | `"dillodash: approved {workflow} run {run} in {repo}"` | The comment GitHub records with each approval. `{repo}` is `owner/name`, `{workflow}` the workflow's name, `{run}` the run id; any other placeholder is a config error. |
 
 ## What you see
 
-![The waiting approvals section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is](../shots/waiting-runs.png)
+![The deploys waiting section: Actions runs waiting on an environment with no listed PR behind them, approve: prod when you are a reviewer, waits: when someone else is](../shots/waiting-runs.png)
 
-- **The `waiting approvals` section** sits between the pull requests and
+- **The `deploys waiting` section** sits between the pull requests and
   the releases, one row per waiting run, the one waiting longest first:
   the run number (`#412`, as the Actions page numbers it), the repo (when
   more than one repo is configured or reviewed), a chip per environment,
@@ -38,11 +59,20 @@ deployment APIs.
   started it (the run's `actor`: the dispatcher of a `workflow_dispatch`,
   kept across re-runs), its age, and its title.
 - **The chips.** `approve: prod` (gold, the title gold too) is an
-  environment you are a required reviewer of; `waits: prod` waits on
-  someone else; `waiting` means the environments couldn't be read (the
-  warn line says why).
-- **The summary row** counts `N runs waiting`, gold with `, M on you (D)`
-  when some wait on you. Nothing shows when nothing waits.
+  environment that is yours to approve now. `waits: prod · automatic` is
+  one a `[bots]` login reviews, still within `deploy_auto_grace_secs`:
+  automation approves it, and it becomes yours only after the grace.
+  `waits: prod` waits on someone else. `waiting` means the environments
+  couldn't be read (the warn line says why).
+- **Your turn.** A run that waits on you is also pinned in the `your turn`
+  section at the top of the list, with `D` and what it approves at the
+  row's end. The hint line says how long it has waited, and the summary row
+  counts it among the deploys on you. Its row in this section says who it
+  waits on when it is not yours.
+- **The poll.** The runs are read every `poll_secs` while one waits on you,
+  or for 15 minutes after a run starts waiting or you act. Otherwise they
+  are read every two minutes, and slower still while nobody is watching
+  (`[display] idle_after_secs`).
 - `/` matches the repo, the workflow, the title, the branch, who started
   it, the environments, the run number and the run id. `o` opens the run
   on GitHub, `y` copies its URL; Enter shows the URL (a run has no detail
@@ -58,6 +88,10 @@ run-name: deploy ${{ inputs.service }} ${{ inputs.version }} to ${{ inputs.envir
 ```
 
 ## Runs that belong to a listed PR
+
+A run on the commit of a change the `promote` workflow lists shows on that
+change's row: `D` there approves it, and the row reads its environments
+from this workflow.
 
 A run the merge of a listed PR pushed is left out: its event is `push`
 and its head commit is the merge commit of a merged PR the dashboard lists

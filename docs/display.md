@@ -1,5 +1,39 @@
 # Display
 
+## Your turn
+
+![The list: "your turn" at the top, each row with the key that moves it on and what that key does](shots/list.png)
+
+Every row is someone's move, and the dashboard says whose. A row is
+**your move** only when nothing happens until you act: a deploy waiting on
+an environment you approve (and not on automation), a release that needs
+your approval (not your own), a review requested of you, a promotion of
+yours that is ready to merge, your own PR stuck on something only you can
+clear. Everything else is **running** (a deploy, a release in flight: you
+watch it), **waiting on others** (named: a team, a login, automation, the
+next window), **failed**, or **done**.
+
+- **The `your turn` section** is pinned at the top: a copy of every row
+  that is your move, most pressing first (deploys, then releases, then
+  reviews), each ending with its key and what that key does
+  (`D approve prod`). Each row also stands in its own section. With
+  nothing to do, one line says so, and what is running or waiting instead.
+- **The cursor** starts on the head of the section.
+- **`n` and `N`** walk it, next and previous.
+- **The summary row** counts the moves in fixed words:
+  `3 on you: 2 deploys · 1 release`, `1 running, lands ~23:20`,
+  `4 waiting on others`.
+- **The hint line** (above the key bar) says it for the selected row: `▸
+  #412 — your move (waiting 24m): D approve prod · n next (1 of 3)`, or
+  `↻ #90 — deploying 2/3 · nothing for you to do · x follows its log`, or
+  `◷ #57 — waits on team dba · not yours`. When the row is not yours and
+  something else is, it ends with where `n` goes.
+- **Gold** is your move and nothing else. A held staging unit, a bumped
+  release (the next window takes it) and a deploy that waits on someone
+  else are not gold.
+- **The terminal's title** says what waits on you (`[display] title`), so a
+  tab or a tmux window shows it while the dashboard is out of sight.
+
 ## The list
 
 ![The list: pull requests with their review chips, CI glyphs, diffstat, author and age; the releases with a release in flight; the night's queue; the issues](shots/list.png)
@@ -26,7 +60,8 @@ The chips keep one meaning each, so a color never has to be read twice:
 |---|---|
 | pale blue `✓ released` | a release landed and verified; also a deploy run that succeeded |
 | steel `scheduled 23:12` | waits for its slot in the window (apart from the deeper blue `approved by me`) |
-| bold gold `deploy waiting · D`, `bumped — a: release NOW` | yours to act on now, with the key that does it |
+| bold gold `deploy waiting · D`, `approve: prod` | yours to act on now, with the key that does it |
+| rolled `bumped — A: release NOW` | the next window takes it; `A` offers NOW, but nothing waits on you |
 | dark gold `✗ release FAILED`, `✗ release refused` | it broke; the card says where |
 
 **A release's rail** is drawn per run phase (setup, validating, merging,
@@ -77,7 +112,8 @@ gray, older dim.
 
 **The header** is a powerline bar: `dillodash` on blue, the repos on navy,
 then the acting login. On the right are the clock, the refresh time, the
-GraphQL budget as a meter (`gql ████ 4,812/5,000`, gold under 20%), the
+tighter of the token's two hourly budgets as a meter (`gql ████
+4,812/5,000` or `rest ...`, gold under 20%), the
 countdown to the next refresh as a draining meter, and the version. A
 narrow terminal drops the countdown first, then the budget, the refresh
 time and the clock; the acting login and the version stay. Inside a PR the
@@ -92,8 +128,9 @@ changes, so nothing beside it shifts as it runs. The hundredths redraw at
 about 30 frames a second; with `motion = "off"` the clock shows whole
 seconds and the dashboard wakes once a second for it instead.
 
-**The summary row** counts what needs you, failing CI, open issues, and the
-workflows' own counts, and shows an active filter as a chip. On a narrow
+**The summary row** counts what is on you (by kind), what runs, what fails
+and what waits on others, then failing CI, the window's queue and open
+issues, and shows an active filter as a chip. On a narrow
 screen the counts with nothing to count go first, then the row ends in an
 ellipsis; what needs you always stays. Inside a PR it
 is a breadcrumb (`list › #42 › files`) with the scroll position and the
@@ -211,3 +248,28 @@ luminance by 10% and back more than three times a second; the launch
 cycles every hue at a fixed lightness, and the tests sample every frame
 at 30 fps to check); mono terminals keep the moves
 without the colors.
+
+## GitHub's budget
+
+Every answer from GitHub carries the token's hourly budgets. The header
+shows the tighter of the two. The help (`?`) ends with what this session
+has asked of GitHub: calls, the free 304s among them, GraphQL points per
+hour, and the reader that spent the most. `--trace-requests FILE` writes
+one JSON line per request (the time, who asked, the endpoint's shape with
+no repo or number, the status and the points) to measure it.
+
+The dashboard spends the budget on a screen someone reads:
+
+- **Watched**, it refreshes every `refresh_secs` and polls what moves (a
+  release in flight, a deploy, a run that waits on you) every 30 seconds.
+- **Idle** (no key for `[display] idle_after_secs`), it refreshes half as
+  often and polls every two minutes.
+- **Out of focus**, it refreshes a third as often and polls every five
+  minutes.
+- **On return** (a key, or the terminal focused again) it refreshes at
+  once, so nobody sees a stale screen.
+
+A deploy is followed by reading its runs, never by whole refreshes. Reads
+are conditional, so an answer that did not change costs nothing. When the
+budget runs ahead of its hour anyway, the governor slows everything
+(`[github] budget_governor`).

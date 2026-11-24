@@ -29,12 +29,13 @@ with one), create it with:
 | Setting | Value |
 |---|---|
 | Resource owner | your organization (not your personal account, or the repos 404) |
-| Repository access | every repo in `[reviews] repos` and, for `release_pr`, every release repo; for `waiting_runs`, every repo in its `repos` |
+| Repository access | every repo in `[reviews] repos` and, for `release_pr`, every release repo; for `waiting_runs`, every repo in its `repos`, or every repo of the organization with `repos = "auto"` |
 | Pull requests | **Read and write**: the dashboard, reviews, approval comments |
 | Issues | **Read and write**: the issues section, issue comments, tagging, labels (`L`), assignees (`S`), close and reopen (`Z`), the hand-off to an agent (`H`), and the window and release commands, which are comments. Without it the dashboard shows PRs only and says so on the warn line |
 | Actions | **Read**: the CI column, see below; the deploy state of merged releases; the waiting runs |
 | Contents | **Read**: commit data and the diff viewers |
 | Metadata | Read (added automatically); `release_pr` discovery reads the org's repos and rulesets with it |
+| Environments | **Read**, for `waiting_runs` with `repos = "auto"`: it finds the repos whose environments need a reviewer. A repo whose environments the token cannot read is skipped |
 | Commit statuses | Read, only if some CI posts classic statuses; harmless to include |
 
 Merging, approving deployments and acting on runs need more, on the repos

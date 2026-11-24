@@ -21,6 +21,7 @@ default and a comment. This page explains the sections.
 | `login` | unset | The login you expect to act as. When `gh` is signed in as someone else dillodash warns, pauses three seconds, and continues as that account (`gh auth switch` changes it). |
 | `approvers_team` | unset | `"org/team"`. Before posting a command a bot accepts only from an approver (the review that queues a release, `/release-now`, `/attend`, `/release`, `/window-cancel`, `/approve`), dillodash checks the login is an active member, and refuses otherwise. Reading the team needs the organization's Members read on a fine-grained token; without it dillodash warns and posts. |
 | `approvers_team_strict` | `false` | `true` refuses that command when the team cannot be read (a fine-grained token without the organization's Members read, or a failed check) instead of warning and posting unchecked. Use it on a dashboard whose approvals must come from the team: grant the token Members read. |
+| `budget_governor` | `true` | Paces the dashboard by GitHub's own budget. Every answer carries the token's hourly REST and GraphQL budgets; while the tighter one runs more than 10% ahead of its hour, the refresh and the polls slow down in proportion (at most eight times). Below 15% the polls pause, and below 5% the refresh waits at least ten minutes. The status line says so. Actions are never held. `false` turns it off. |
 | `allowed_repos` | unset | `["owner/name", ...]`: the only repos dillodash writes to. Every comment, review, merge, command, label, assignment, close or reopen, deployment approval or rejection, re-run, cancel and dispatch to any other repo is refused before a prompt, and again in the GitHub client underneath, so no key can go around it, including an item opened with `:`. Reading is unaffected. A workflow or `[[workflows.dispatch]]` set to write to a repo outside the list is a warning. Unset, every repo may be written to. |
 
 There is no token in the config. dillodash asks the `gh` CLI for the token
@@ -65,6 +66,8 @@ it runs whatever it wraps.
 | `clock_tz_label` | `""` | | Label for the second time, e.g. `ET`. Empty uses the zone's own abbreviation for the instant, so New York reads `EST` in winter and `EDT` in summer. |
 | `room` | `true` | | While the release window is open, the dashboard is the view out of a window: it shrinks to the glass in the middle of the screen, behind a cross of mullions, and the room around it has curtains, plants, pictures, a wall clock and a mug of something hot. `w` steps out to the plain dashboard (and back in); the next window opens in the room again. Needs a terminal of at least 100×30. `false` keeps the plain dashboard, and `w` still shows the room. |
 | `fortress_epigraph` | `true` | | Borges's "On Exactitude in Science" laid over the fortress map, where it covers the least of the city; `b` toggles it ([fortress.md](fortress.md)). |
+| `idle_after_secs` | `300` | | How long without a key before nobody is counted as watching. Idle, the refresh runs at twice `refresh_secs` and the live polls every two minutes. With the terminal out of focus, the refresh runs at three times `refresh_secs` (at most 15 minutes) and the polls every five minutes. A key, or focusing the terminal again, refreshes at once, so the screen is current when someone looks at it. `0` never slows down. Focus needs a terminal that reports it (in tmux, `set -g focus-events on`); without that, the idle timer alone applies. |
+| `title` | `true` | | The terminal's title says what waits on you (`dillodash ▸ 2 on you`), else what runs, so a tab or a tmux window shows it while the dashboard is out of sight. `false` leaves the title alone. |
 | `profile` | unset | | A short badge in the header (at most 12 characters), e.g. `OPS`: which config this dashboard runs, for someone who runs more than one (`--config` or `$DILLODASH_CONFIG` switches between them). |
 
 ## `[agent]`
@@ -75,7 +78,7 @@ it runs whatever it wraps.
 | `handoff_comment` | unset | Posted with the label when set: the agent's first instruction, or a note for the humans watching the item. |
 | `name` | unset | What the dashboard calls the agent: `H` asks "hand #6 to <name>?", the bar says "to <name>", and its PRs and comments show the name. Unset: "the agent". |
 | `login` | unset | The agent's GitHub login (an App's bot login, with or without `[bot]`): its rows, comments and reviews are drawn as the agent's, by name, not as a bot's. |
-| `section` | `false` | A list section named for the agent: its own open PRs and the open items carrying `handoff_label`, moved out of the PR and issue sections (its PRs still count toward "need you"). See [Working with an AI agent](agents.md). |
+| `section` | `false` | A list section named for the agent: its own open PRs and the open items carrying `handoff_label`, moved out of the PR and issue sections (its PRs still count toward "on you"). See [Working with an AI agent](agents.md). |
 
 ## `[bots]`
 
