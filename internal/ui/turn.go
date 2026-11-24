@@ -143,6 +143,27 @@ func (m *Model) yourTurnRows(rows []workflow.Row, filtered bool) []workflow.Row 
 	return out
 }
 
+// turnChip is what a "your turn" row's key does, drawn at the row's end
+// (`D  approve prod`); nil when the row is not the viewer's move.
+func (m *Model) turnChip(row workflow.Row) []text.Seg {
+	t := m.turnOf(row)
+	if t.Kind != workflow.TurnYou || t.Key == "" {
+		return nil
+	}
+	return []text.Seg{text.S(" "+t.Key+" ", "chip.key.act"), text.S(" "+text.Ellip(t.Verb, 40)+" ", "keylabel.act")}
+}
+
+// turnChipW is the widest turnChip of the section (0: none).
+func (m *Model) turnChipW() int {
+	n := 0
+	for _, r := range m.rows {
+		if pinned(r) {
+			n = max(n, text.SegsWidth(m.turnChip(r)))
+		}
+	}
+	return n
+}
+
 // turnCounts tallies the home rows (not the pinned copies) by kind, the
 // viewer's by noun, and the soonest landing of what runs.
 type turnCounts struct {

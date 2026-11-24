@@ -16,7 +16,6 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/theme"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
-	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
 
 // draw paints one frame: the dashboard, or in the room (room.go) the
@@ -886,6 +885,12 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 	m.listTop = max(0, min(m.listTop, max(0, n-visible)))
 	first := max(0, min(m.glideTo("list", m.listTop), max(0, n-visible)))
 	L := m.listLayout(w)
+	// "your turn" rows end with their key's chip: their columns are fitted
+	// to what is left, so a column drops before the title is crushed
+	Lpin := L
+	if cw := m.turnChipW(); cw > 0 {
+		Lpin = m.listLayout(w - cw - 1)
+	}
 	now := fx.Now()
 	trail := map[int]float64{}
 	for _, t := range m.trail {
@@ -912,15 +917,23 @@ func (m *Model) drawList(c *canvas.Canvas, h, w int) {
 			age, has := trail[idx]
 			gut := scenes.Gutter(m.fx, identKey(row.Ident()), sel, breathe, age, has)
 			c.PutSegs(y, 0, append(gut, text.S(" ", "text")), right, sel, false)
-			c.PutSegs(y, 2, m.rowSegs(row, L[row.Kind], w, i), min(w-1, right), sel, false)
+			// a your-turn row ends with what its key does (the section is a
+			// to-do list); the row is laid out to stop short of it, so its
+			// text ends on an ellipsis, not cut under the chip
+			var chip []text.Seg
+			chipX, rowW, lay := 0, w, L[row.Kind]
 			if pinned(row) {
-				// what the key does, at the row's end: the section is a to-do list
-				if t := m.turnOf(row); t.Kind == workflow.TurnYou && t.Key != "" {
-					chip := []text.Seg{text.S(" ", "text"), text.S(" "+t.Key+" ", "chip.key.act"), text.S(" "+text.Ellip(t.Verb, 40)+" ", "keylabel.act")}
-					if x := min(w-1, right) - text.SegsWidth(chip); x > w/2 {
-						c.PutSegs(y, x, chip, min(w-1, right), sel, false)
+				if chip = m.turnChip(row); chip != nil {
+					if chipX = min(w-1, right) - text.SegsWidth(chip); chipX > w/2 {
+						rowW, lay = chipX-1, Lpin[row.Kind]
+					} else {
+						chip = nil
 					}
 				}
+			}
+			c.PutSegs(y, 2, m.rowSegs(row, lay, rowW, i), min(rowW-1, right), sel, false)
+			if chip != nil {
+				c.PutSegs(y, chipX, chip, min(w-1, right), sel, false)
 			}
 			if p, ok := row.Item.(*model.PR); ok && row.Kind == "pr" {
 				if cl, ok := m.ciOf(p); ok && strings.Contains(cl.Glyphs, "~") {
