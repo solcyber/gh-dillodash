@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/solcyber/gh-dillodash/internal/fx"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/selfupdate"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
@@ -42,7 +43,7 @@ func (m *Model) checkBuild(force bool) {
 		return
 	}
 	m.checking = true
-	ctx, u, last := m.ctx, m.updater, m.upd
+	ctx, u, last := ghapi.WithSource(m.ctx, "update"), m.updater, m.upd
 	go func() {
 		st := last
 		defer func() {

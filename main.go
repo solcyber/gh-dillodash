@@ -141,6 +141,10 @@ flags:
   --demo             open the dashboard on an offline fixture, no GitHub needed
   --demo-night       replay a manual release night offline
   --demo-agent       replay a team working with an AI agent offline (apply on approval, a legacy repo, handoffs)
+  --trace-requests FILE
+                     append one JSON line per GitHub request to FILE: when, who asked (the
+                     refresh, a workflow's poll, a detail read, an action), the endpoint's
+                     shape with no repo names or numbers, the status and GraphQL's points
 
 environment:
   DILLODASH_CONFIG   the config file, when --config is not given
@@ -307,6 +311,7 @@ type flags struct {
 	theme      string
 	motion     string
 	mono       bool
+	trace      string // --trace-requests: one JSON line per GitHub request
 }
 
 // parseFlags reads the dashboard flags. --help prints the usage and
@@ -324,6 +329,7 @@ func parseFlags(args []string) (flags, error) {
 	fs.StringVar(&f.theme, "theme", "", "theme")
 	fs.StringVar(&f.motion, "motion", "", "motion")
 	fs.BoolVar(&f.mono, "mono", false, "no colors")
+	fs.StringVar(&f.trace, "trace-requests", "", "append one JSON line per GitHub request to this file")
 	fs.BoolVar(&f.demo, "demo", false, "run on an offline fixture (no GitHub)")
 	fs.BoolVar(&f.demoNight, "demo-night", false, "replay a manual release night offline")
 	fs.BoolVar(&f.demoAgent, "demo-agent", false, "run on an offline team that works with an AI agent (apply on approval)")
@@ -412,7 +418,16 @@ func dashboard(args []string) error {
 	if err := needTerminal(); err != nil {
 		return err
 	}
-	gh, err := newClient(ghapi.Options{Host: cfg.GitHub.Host, Version: version})
+	usage := ghapi.NewUsage()
+	if f.trace != "" {
+		tf, err := os.OpenFile(f.trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return exitError{2, fmt.Errorf("--trace-requests: %w", err)}
+		}
+		defer tf.Close()
+		usage.SetTrace(tf)
+	}
+	gh, err := newClient(ghapi.Options{Host: cfg.GitHub.Host, Version: version, Usage: usage})
 	if err != nil {
 		return exitError{2, err}
 	}
@@ -457,6 +472,7 @@ func dashboard(args []string) error {
 		Updater:   newChecker(gh),
 		Restore:   restore,
 		WhatsNew:  whatsNewOnce(),
+		Usage:     usage,
 	})
 	var re *ui.RestartError
 	if errors.As(err, &re) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/fx"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
@@ -258,7 +259,7 @@ func (m *Model) readDetail(id model.Ident, kind string, listed *model.PR, seq in
 		c.Ext = maps.Clone(listed.Ext)
 		listed = &c
 	}
-	gh, wf, ctx := m.gh, m.wf, m.ctx
+	gh, wf, ctx := m.gh, m.wf, ghapi.WithSource(m.ctx, "detail")
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {

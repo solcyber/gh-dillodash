@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 )
@@ -165,6 +166,7 @@ func (m *Model) followDispatch(app *lockedApp, d config.DispatchConfig, since ti
 	defer func() { _ = recover() }() // a broken follow never takes the dashboard down
 	var run *model.WorkflowRun
 	deadline := time.Now().Add(dispatchFindFor)
+	followCtx := ghapi.WithSource(m.ctx, "dispatch-follow")
 	last := ""
 	for {
 		select {
@@ -173,7 +175,7 @@ func (m *Model) followDispatch(app *lockedApp, d config.DispatchConfig, since ti
 		case <-time.After(dispatchPollEvery / 2):
 		}
 		if run == nil {
-			runs, err := m.gh.WorkflowFileRuns(m.ctx, d.Repo, d.Workflow, "workflow_dispatch", since)
+			runs, err := m.gh.WorkflowFileRuns(followCtx, d.Repo, d.Workflow, "workflow_dispatch", since)
 			if err == nil {
 				for i := range runs {
 					r := runs[i]
@@ -192,7 +194,7 @@ func (m *Model) followDispatch(app *lockedApp, d config.DispatchConfig, since ti
 			}
 			deadline = time.Now().Add(dispatchFollowFor)
 		} else {
-			runs, err := m.gh.WorkflowFileRuns(m.ctx, d.Repo, d.Workflow, "workflow_dispatch", since)
+			runs, err := m.gh.WorkflowFileRuns(followCtx, d.Repo, d.Workflow, "workflow_dispatch", since)
 			if err == nil {
 				for i := range runs {
 					if runs[i].ID == run.ID {

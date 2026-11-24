@@ -189,7 +189,7 @@ func (r *Refreshing) start(w Workflow, prs []*model.PR, issues []*model.Issue) *
 		defer close(run.done)
 		func() {
 			defer Recover(&run.panic)
-			run.st, run.warns, run.err = w.Refresh(r.ctx, r.gh, r.repos, prs, issues)
+			run.st, run.warns, run.err = w.Refresh(ghapi.WithSource(r.ctx, w.Name()), r.gh, r.repos, prs, issues)
 		}()
 		if ghapi.IsRateLimit(run.err) {
 			if r.limited.CompareAndSwap(false, true) {
@@ -327,7 +327,7 @@ func (s *Set) PollAll(ctx context.Context, gh ghapi.Client) (map[string]any, err
 		if !ok {
 			continue
 		}
-		patch, err := p.Poll(ctx, gh)
+		patch, err := p.Poll(ghapi.WithSource(ctx, w.Name()), gh)
 		if patch != nil {
 			out[w.Name()] = patch
 		}

@@ -292,6 +292,9 @@ type Options struct {
 	BaseURL string
 	// Transport replaces the default round tripper (tests).
 	Transport http.RoundTripper
+	// Usage counts the requests and reads GitHub's budget headers; nil
+	// counts nothing. One Usage may serve several clients.
+	Usage *Usage
 }
 
 // GitHub is the real Client.
@@ -306,6 +309,8 @@ type GitHub struct {
 	slots chan struct{}
 	// etags remembers REST GETs for conditional requests
 	etags etagCache
+	// usage counts requests by source (nil: not counted)
+	usage *Usage
 }
 
 var _ Client = (*GitHub)(nil)
@@ -362,6 +367,7 @@ func New(opts Options) (*GitHub, error) {
 		restBase:    restBase(host),
 		graphqlURL:  graphQLURL(host),
 		slots:       make(chan struct{}, maxInFlight),
+		usage:       opts.Usage,
 	}
 	if opts.BaseURL != "" {
 		base := strings.TrimRight(opts.BaseURL, "/")
@@ -393,6 +399,21 @@ func (c *GitHub) TokenSource() string { return c.tokenSource }
 
 // LastRate is the GraphQL budget from the latest list-shaped query.
 func (c *GitHub) LastRate() *model.RateLimit { return c.lastRate.Load() }
+
+// withCost asks a query that does not read its rate limit for its cost:
+// `rateLimit { cost }` costs nothing and says what the query was
+// charged, for the usage counts. Mutations are left as they are.
+func withCost(query string) string {
+	t := strings.TrimSpace(query)
+	if strings.Contains(t, "rateLimit") || !(strings.HasPrefix(t, "query") || strings.HasPrefix(t, "{")) {
+		return query
+	}
+	i := strings.IndexByte(query, '{')
+	if i < 0 {
+		return query
+	}
+	return query[:i+1] + "\n  rateLimit { cost }" + query[i+1:]
+}
 
 func (c *GitHub) setRate(r *model.RateLimit) {
 	if r != nil && r.Limit > 0 {
@@ -448,10 +469,13 @@ func (c *GitHub) doH(ctx context.Context, method, rawURL string, payload any, ac
 	}
 	defer c.release()
 	resp, err := c.http.Do(req)
+	gql := rawURL == c.graphqlURL
 	if err != nil {
+		c.usage.record(ctx, method, rawURL, 0, nil, gql)
 		return nil, nil, &Error{Method: method, URL: rawURL, Message: "network error: " + netErrorText(err)}
 	}
 	defer resp.Body.Close()
+	c.usage.record(ctx, method, rawURL, resp.StatusCode, resp.Header, gql)
 	if resp.StatusCode == http.StatusNotModified {
 		return nil, resp.Header, &Error{Method: method, URL: rawURL, Status: http.StatusNotModified, Message: "not modified"}
 	}
@@ -586,6 +610,7 @@ func isNull(raw json.RawMessage) bool {
 // they are absent, so we still stop hammering.
 func (c *GitHub) graphql(ctx context.Context, query string, variables map[string]any) (gqlData, []gqlError, error) {
 	rawURL := c.graphqlURL
+	query = withCost(query)
 	payload := map[string]any{"query": query, "variables": variables}
 	body, hdrs, err := c.do(ctx, http.MethodPost, rawURL, payload, acceptJSON)
 	if err != nil {
@@ -614,12 +639,17 @@ func (c *GitHub) graphql(ctx context.Context, query string, variables map[string
 		}
 		return nil, out.Errors, e
 	}
+	cost := 1 // a mutation, or a query GitHub did not price
 	if raw, ok := out.Data["rateLimit"]; ok && !isNull(raw) {
 		var rl model.RateLimit
 		if json.Unmarshal(raw, &rl) == nil {
 			c.setRate(&rl)
+			if rl.Cost > 0 {
+				cost = rl.Cost
+			}
 		}
 	}
+	c.usage.recordCost(ctx, query, cost)
 	return out.Data, out.Errors, nil
 }
 

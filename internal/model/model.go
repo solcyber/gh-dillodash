@@ -373,6 +373,7 @@ type RateLimit struct {
 	Limit     int       `json:"limit"`
 	Remaining int       `json:"remaining"`
 	ResetAt   time.Time `json:"resetAt"`
+	Cost      int       `json:"cost"` // what the query that read it was charged
 }
 
 // WorkflowRun is the subset of an Actions run the dashboard reads.

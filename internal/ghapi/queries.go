@@ -7,7 +7,7 @@ import (
 
 // The rateLimit block every list-shaped query carries for the header
 // meter.
-const rateLimitField = "rateLimit { limit remaining resetAt }"
+const rateLimitField = "rateLimit { limit remaining resetAt cost }"
 
 // listRepoFragment carries the list query's fields: the viewer's
 // repository permission (for config check), open issues and open PRs
@@ -209,7 +209,7 @@ query($owner: String!, $name: String!, $number: Int!) {
 const releaseQuery = `
 query($owner: String!, $name: String!, $prod: String!,
       $prodRef: String!, $stageRef: String!) {
-  rateLimit { limit remaining resetAt }
+  rateLimit { limit remaining resetAt cost }
   r0: repository(owner: $owner, name: $name) {
     nameWithOwner isArchived
     prod: ref(qualifiedName: $prodRef) { target { oid } }
