@@ -1009,22 +1009,43 @@ Moved:  a → A approve (release NOW, /approve)   c → C comment (Enter on an e
 
 An old key does nothing now but say where it went. ? lists every key. Any key closes this.`
 
-// whatsNewOnce is the 2.0 card the first time this machine starts 2.x,
-// a restart into it included (that is when the keys change under your
-// hands): a marker in the cache directory remembers it was shown.
+const whatsNew27 = `dillodash 2.7: whose move is it.
+
+"your turn", pinned at the top, is what waits on you: a deploy to approve, a release or a review to approve, your own PR stuck on something only you can clear. Each row ends with the key that moves it on (D approve prod). The cursor starts there; n and N walk it. Everything else says who it waits on, or that it is running and when it lands. Gold means your move and nothing else.
+
+The line above the keys says what to do with the selected row. The summary counts what is on you, what runs and what waits on others; the terminal title says it too.
+
+It also spends GitHub's budget only on a screen someone is reading: slower while you are away, current the moment you are back. Any key closes this.`
+
+// whatsNewOnce is a card the first time this machine starts a release
+// that changes how it is used, a restart into it included: the 2.0 keys
+// for a machine that never saw them, else the 2.7 "your turn". A marker
+// in the cache directory remembers each was shown.
 func whatsNewOnce() string {
 	home, _ := os.UserHomeDir()
 	p := selfupdate.CachePath(os.Getenv, home)
 	if p == "" {
 		return ""
 	}
-	marker := filepath.Join(filepath.Dir(p), "seen-2.0")
-	if _, err := os.Stat(marker); err == nil {
-		return ""
+	dir := filepath.Dir(p)
+	seen := func(name string) bool {
+		_, err := os.Stat(filepath.Join(dir, name))
+		return err == nil
 	}
-	_ = os.MkdirAll(filepath.Dir(marker), 0o700)
-	_ = os.WriteFile(marker, []byte(version+"\n"), 0o600)
-	return whatsNew20
+	mark := func(name string) {
+		_ = os.MkdirAll(dir, 0o700)
+		_ = os.WriteFile(filepath.Join(dir, name), []byte(version+"\n"), 0o600)
+	}
+	switch {
+	case !seen("seen-2.0"):
+		mark("seen-2.0")
+		mark("seen-2.7") // a first 2.x start learns the keys; the list explains itself
+		return whatsNew20
+	case !seen("seen-2.7"):
+		mark("seen-2.7")
+		return whatsNew27
+	}
+	return ""
 }
 
 func btoi(b bool) int {
