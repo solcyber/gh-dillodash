@@ -1,5 +1,78 @@
 # Changelog
 
+## [2.7.0] — 2026-11-24
+
+**Whose move is it.** Every row says whose turn it is, what is yours is
+pinned at the top with the key that does it, and the dashboard spends
+GitHub's budget only on a screen someone is reading.
+
+### Added
+
+- **Your turn.** A row is your move only when nothing happens until you
+  act. That covers a deploy waiting on an environment you approve (and not
+  on automation), a release that needs your approval (not your own), a
+  review requested of you, a promotion of yours that is ready to merge,
+  and your own PR stuck on something only you can clear. Everything else
+  is running, waiting on someone named, failed or done.
+  - **The `your turn` section** is pinned at the top with a copy of each
+    such row, most pressing first, each ending with its key and verb
+    (`D approve prod`). With nothing to do, one line says so, and what is
+    running or waiting instead.
+  - **The cursor** starts on its head.
+  - **`n` / `N`** walk it.
+- **The summary row** counts moves in fixed words: `3 on you: 2 deploys ·
+  1 release`, `1 running, lands ~23:20`, `4 waiting on others`, then
+  failed, CI, the window's queue and issues.
+- **The hint line** says the move for the selected row, how long it has
+  waited and `n next (2 of 5)`. On a row that isn't yours, it says what
+  happens, who it waits on, and where `n` goes.
+- **A release card** opens with a `next:` line.
+- **The terminal's title** says what waits on you (`[display] title`).
+- **Waiting runs discover their repos.** `repos = "auto"` is the new
+  default: every repo of the organizations with an environment that needs
+  a reviewer, kept `discover_ttl_secs` in memory and on disk. A list reads
+  exactly those repos, and `config check` names any gated repo it leaves
+  out.
+- **Request accounting.** Every request is counted by who asked, with
+  GraphQL's points.
+  - The header meter shows the tighter of the REST and GraphQL budgets.
+  - The help ends with this session's calls, free 304s, points per hour
+    and the biggest spender.
+  - `--trace-requests FILE` writes a JSON line per request.
+- **A one-time card** on the first start of 2.7 says what changed.
+- **Attention.** `[display] idle_after_secs` (300): idle, the refresh runs
+  half as often and polls every 2 min. Out of focus, a third as often
+  (at most 15 min), with polls every 5 min. A key or the focus coming back
+  refreshes at once.
+- **Budget governor** (`[github] budget_governor`, on). It slows
+  everything in proportion while the budget runs ahead of its hour, pauses
+  the polls below 15 % and holds the refresh to at least 10 min below 5 %.
+  Actions are never held.
+
+### Changed
+
+- **A deploy is followed by the poll, not by whole refreshes.** A merged
+  release whose deploy waited or ran pulled a whole refresh in every
+  30 s, about 6,900 GraphQL points an hour for as long as it waited. Now
+  the poll reads the merge commit's runs while the deploy runs or waits on
+  automation, and a phase change pulls one refresh. Measured on a real
+  config: 917 points an hour, down from 6,880.
+- **Waiting runs** poll at `poll_secs` only while one waits on you, or for
+  15 min after a run starts waiting or you act; every 2 min otherwise.
+  They also honour automation's grace (`waits: prod · automatic`), as
+  release rows do.
+- **`D`** is offered exactly when a deploy waits on you, under what it
+  approves. It is no longer offered on a run waiting on somebody else, or
+  on a deploy that only runs.
+- **A promote change** reads its waiting run's environments, so its
+  `waits · D` is gold only when the wait is yours. The run is listed once,
+  on the change.
+- **Gold is your move only.** A held or untagged staging unit and a bumped
+  release are no longer gold.
+- **Your own release** no longer counts as needing you.
+- "waiting approvals" is now "deploys waiting", and "need you" is now "on
+  you".
+
 ## [2.6.0] — 2026-11-23
 
 **The release runs itself; the dashboard keeps up.** Units are tagged and
@@ -1327,6 +1400,8 @@ dashboard, as a GitHub CLI extension.
 - Fortress mode, the splash, wipes, confetti, the release launch, and Amos.
 - The bundled Hack Nerd Font Mono and `font install`.
 
+[2.7.0]: https://github.com/solcyber/gh-dillodash/compare/v2.6.0...v2.7.0
+[2.6.0]: https://github.com/solcyber/gh-dillodash/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/solcyber/gh-dillodash/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/solcyber/gh-dillodash/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/solcyber/gh-dillodash/compare/v2.2.0...v2.3.0
