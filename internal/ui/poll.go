@@ -54,7 +54,7 @@ func (m *Model) poll() {
 	}
 	m.polling = true
 	m.nextPollAt = 0 // re-armed by applyPoll
-	gh, wf, ctx := m.gh, m.wf, m.ctx
+	gh, wf, ctx := m.gh, m.wf, ghapi.WithSource(m.ctx, "poll")
 	seq := m.refreshSeq
 	go func() {
 		out := &pollResult{seq: seq}

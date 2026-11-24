@@ -6,6 +6,7 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/config"
 	"github.com/solcyber/gh-dillodash/internal/fx"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 )
 
@@ -49,7 +50,7 @@ func (m *Model) checkConfig() {
 		src = s
 	}
 	m.cfgSource, m.cfgChecking = src, true
-	ctx, gh := m.ctx, m.gh
+	ctx, gh := ghapi.WithSource(m.ctx, "config"), m.gh
 	go func() {
 		msg := configCheckMsg{}
 		defer func() {

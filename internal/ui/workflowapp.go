@@ -95,6 +95,7 @@ func (m *Model) Selected() (workflow.Row, bool) {
 func (m *Model) RefreshSoon(d time.Duration) {
 	if t := fx.Now() + d.Seconds(); t < m.nextRefreshAt {
 		m.nextRefreshAt = t
+		m.pulledIn = true
 	}
 }
 

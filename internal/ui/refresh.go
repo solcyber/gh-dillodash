@@ -122,6 +122,13 @@ func (m *Model) refresh(again bool) {
 	// one Shared per refresh: two readers of the same URL (two workflows
 	// reading one compare) cost one request
 	ctx = ghapi.WithShared(ctx)
+	src := "refresh"
+	if m.pulledIn {
+		// a workflow pulled this refresh in ahead of refresh_secs
+		src = "refresh(pulled)"
+	}
+	m.pulledIn = false
+	ctx = ghapi.WithSource(ctx, src)
 	go func() {
 		out := &refreshResult{started: started}
 		var running *workflow.Refreshing
@@ -279,8 +286,8 @@ func (m *Model) refresh(again bool) {
 				warns = append(warns, og.Notes...)
 			}
 		}
-		ahead.annotate(ctx, gh, out.allPRs, me)
-		annotateBlocked(ctx, gh, out.allPRs)
+		ahead.annotate(ghapi.WithSource(ctx, "ahead"), gh, out.allPRs, me)
+		annotateBlocked(ghapi.WithSource(ctx, "blocked"), gh, out.allPRs)
 		sort.SliceStable(out.allPRs, func(i, j int) bool {
 			return out.allPRs[i].CreatedAt.Before(out.allPRs[j].CreatedAt)
 		})
@@ -306,7 +313,7 @@ func (m *Model) refresh(again bool) {
 		// one CI pass for the review PRs and the PRs the workflows contribute
 		// (releases): one cache, one set of live SHAs, one Actions call per SHA
 		ciPRs := append(append([]*model.PR{}, out.allPRs...), wf.CIPRs(states)...)
-		clusters, ciWarn, err := ci.Annotate(ctx, clock.Now(), ciPRs, gh.WorkflowRuns)
+		clusters, ciWarn, err := ci.Annotate(ghapi.WithSource(ctx, "ci"), clock.Now(), ciPRs, gh.WorkflowRuns)
 		if e, ok := ghapi.AsError(err); ok && e.IsRateLimit() {
 			// the list and the workflows are read: they land, the last
 			// CI stays on screen, and the next refresh waits for the
@@ -350,7 +357,7 @@ func (m *Model) refresh(again bool) {
 			if detailKind == "issue" {
 				d, derr = gh.IssueDetail(ctx, detailRepo, detailNumber)
 			} else {
-				d, derr = fetchPRDetail(ctx, gh, wf, detailRepo, detailNumber, detailListed)
+				d, derr = fetchPRDetail(ghapi.WithSource(ctx, "detail"), gh, wf, detailRepo, detailNumber, detailListed)
 			}
 			if derr != nil {
 				if e, ok := ghapi.AsError(derr); ok && e.IsRateLimit() {

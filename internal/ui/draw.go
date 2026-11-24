@@ -200,13 +200,13 @@ func (m *Model) drawHeader(c *canvas.Canvas, w int) {
 	if backoff > 0 {
 		parts = append(parts, part{2, []text.Seg{text.S(fmt.Sprintf("  held %ds", backoff), "budget.low")}})
 	}
-	if rate := m.gh.LastRate(); rate != nil && rate.Limit > 0 {
+	if rate, which := m.budget(); rate != nil && rate.Limit > 0 {
 		low := rate.Remaining < rate.Limit/5
 		st, fill := "budget.ok", "meter.ok"
 		if low {
 			st, fill = "budget.low", "meter.short"
 		}
-		segs := []text.Seg{text.S("  "+glyphs.Ico("budget")+"gql ", st)}
+		segs := []text.Seg{text.S("  "+glyphs.Ico("budget")+which+" ", st)}
 		segs = append(segs, fx.MeterSegs(float64(rate.Remaining)/float64(rate.Limit), 5, fill, "meter.track")...)
 		segs = append(segs, text.S(fmt.Sprintf(" %s/%s", commas(rate.Remaining), commas(rate.Limit)), st))
 		parts = append(parts, part{3, segs})
@@ -786,6 +786,9 @@ func (m *Model) drawHelp(c *canvas.Canvas, h, w int) {
 		nil,
 		[]text.Seg{text.S(fmt.Sprintf("%s %s icons %s %s theme %s %s motion %s %s refresh every %ds", m.ver, glyphs.G("sep"), glyphs.Active(), glyphs.G("sep"), theme.Current(), glyphs.G("sep"), fx.Motion, glyphs.G("sep"), m.cfg.Display.RefreshSecs), "faint")},
 	)
+	if line := m.usageLine(); line != "" {
+		rows = append(rows, []text.Seg{text.S(line, "faint")})
+	}
 	widest := 0
 	for _, r := range rows {
 		widest = max(widest, text.SegsWidth(r))

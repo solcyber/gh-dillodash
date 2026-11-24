@@ -426,7 +426,7 @@ func TestWebURLs(t *testing.T) {
 func TestQueryShapes(t *testing.T) {
 	q := listQuery(2)
 	for _, want := range []string{"$o0: String!", "$n1: String!", "r0: repository(owner: $o0, name: $n0) { ...ListRepo }",
-		"r1: repository(owner: $o1, name: $n1)", "fragment ListRepo on Repository", "rateLimit { limit remaining resetAt }",
+		"r1: repository(owner: $o1, name: $n1)", "fragment ListRepo on Repository", "rateLimit { limit remaining resetAt cost }",
 		"pullRequests(states: OPEN, last: 100", "statusCheckRollup"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("list query lacks %q", want)

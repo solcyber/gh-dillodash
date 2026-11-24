@@ -137,6 +137,8 @@ type Model struct {
 	refreshAgain    bool
 	ciFlush         bool
 	nextRefreshAt   float64
+	usage           *ghapi.Usage
+	pulledIn        bool // a workflow pulled the next refresh in (RefreshSoon): counted apart
 	lastRefresh     float64
 	lastRefreshWall string
 	clockLoc        *clock.Local  // the header clock's second zone; nil: no clock
@@ -291,6 +293,9 @@ type Options struct {
 	// WhatsNew, when set, opens over the dashboard once at start (the
 	// first run of a release that changes how it is used).
 	WhatsNew string
+	// Usage is the client's request count and GitHub's budget headers
+	// (nil: the header falls back to the GraphQL list's own read).
+	Usage *ghapi.Usage
 }
 
 // New makes the model; Run starts it.
@@ -310,6 +315,7 @@ func New(ctx context.Context, o Options) *Model {
 		ctx:             ctx,
 		ver:             o.Version,
 		updater:         o.Updater,
+		usage:           o.Usage,
 		restore:         o.Restore,
 		upd:             selfupdate.Status{Running: o.Version},
 		fx:              fx.New(),
