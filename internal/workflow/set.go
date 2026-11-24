@@ -89,7 +89,7 @@ func NewSet(ctx *Context, items ...Workflow) (*Set, error) {
 // ui package's key table, view:key (a test keeps the two equal).
 var coreKeys = map[string]bool{
 	// Shift acts, lowercase looks: the dashboard's own keys per view
-	"list:/": true, "list::": true, "list:D": true, "list:G": true, "list:U": true, "list:X": true, "list:d": true, "list:g": true, "list:j": true, "list:k": true, "list:l": true, "list:o": true, "list:q": true, "list:r": true, "list:s": true, "list:u": true, "list:w": true, "list:x": true, "list:y": true,
+	"list:/": true, "list::": true, "list:D": true, "list:G": true, "list:N": true, "list:U": true, "list:X": true, "list:d": true, "list:g": true, "list:j": true, "list:k": true, "list:l": true, "list:n": true, "list:o": true, "list:q": true, "list:r": true, "list:s": true, "list:u": true, "list:w": true, "list:x": true, "list:y": true,
 	"detail:/": true, "detail:A": true, "detail:C": true, "detail:D": true, "detail:G": true, "detail:H": true, "detail:L": true, "detail:M": true, "detail:N": true, "detail:T": true, "detail:U": true, "detail:X": true, "detail:f": true, "detail:g": true, "detail:h": true, "detail:j": true, "detail:k": true, "detail:m": true, "detail:n": true, "detail:o": true, "detail:q": true, "detail:r": true, "detail:u": true, "detail:v": true, "detail:w": true, "detail:x": true, "detail:y": true,
 	"issue:/": true, "issue:C": true, "issue:G": true, "issue:H": true, "issue:L": true, "issue:N": true, "issue:S": true, "issue:T": true, "issue:U": true, "issue:Z": true, "issue:g": true, "issue:h": true, "issue:j": true, "issue:k": true, "issue:m": true, "issue:n": true, "issue:o": true, "issue:q": true, "issue:r": true, "issue:w": true, "issue:y": true,
 	"any::": true, "any:?": true, "any:e": true, "any:w": true,
@@ -498,6 +498,37 @@ func (s *Set) SummarySegs(app App) []text.Seg {
 	}
 	var out []text.Seg
 	for _, w := range s.Items {
+		segs := w.SummarySegs(app)
+		if len(segs) == 0 {
+			continue
+		}
+		if len(out) > 0 {
+			out = append(out, text.S("  "+glyphs.G("sep")+"  ", "rule"))
+		}
+		out = append(out, segs...)
+	}
+	return out
+}
+
+// SummarySegsWithoutTurns is SummarySegs less the workflows whose rows
+// say whose turn they are (RowKind.Turn): the core's turn counts speak
+// for those, in one vocabulary.
+func (s *Set) SummarySegsWithoutTurns(app App) []text.Seg {
+	if s == nil {
+		return nil
+	}
+	var out []text.Seg
+	for _, w := range s.Items {
+		turns := false
+		for _, rk := range w.RowKinds() {
+			if rk.Turn != nil {
+				turns = true
+				break
+			}
+		}
+		if turns {
+			continue
+		}
 		segs := w.SummarySegs(app)
 		if len(segs) == 0 {
 			continue

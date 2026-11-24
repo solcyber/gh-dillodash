@@ -35,7 +35,7 @@ func TestDOnAWaitingRun(t *testing.T) {
 	h.gh.Pending = map[int64][]model.PendingDeployment{4242: {prod}}
 	h.load()
 	s := h.screen()
-	for _, want := range []string{"waiting approvals  1", "  #17  [approve: prod] deploy main @ddddddd bob ", "deploy web-portal to prod", "1 run waiting, 1 on you (D)"} {
+	for _, want := range []string{"deploys waiting  1", "  #17  [approve: prod] deploy main @ddddddd bob ", "deploy web-portal to prod", "2 on you: 1 deploy"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("screen lacks %q:\n%s", want, s)
 		}
@@ -45,7 +45,7 @@ func TestDOnAWaitingRun(t *testing.T) {
 			h.m.selected = i
 		}
 	}
-	if s := h.screen(); !strings.Contains(s, " D  approve deploys ") {
+	if s := h.screen(); !strings.Contains(s, " D  approve prod ") {
 		t.Errorf("a waiting run selected: the bar lacks D:\n%s", s)
 	}
 	// a run has nothing to open in the dashboard: o opens it, not enter

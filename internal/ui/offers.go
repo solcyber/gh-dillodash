@@ -10,6 +10,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/text"
 	"github.com/solcyber/gh-dillodash/internal/widgets"
@@ -84,15 +85,6 @@ func deploysDone(pr *model.PR) bool {
 	return pr.MergedAt != nil && clock.Now().Sub(*pr.MergedAt) > deploysSettledAfter
 }
 
-// deploysNotMine: the merged PR's deploy waits, and nothing it waits on
-// is the viewer's to approve now (somebody else reviews it, or
-// automation does and still has its grace), so D is not offered. The
-// key still reads the deploys and says so.
-func deploysNotMine(pr *model.PR) bool {
-	st, ok := pr.Get("deploy").(deploys.State)
-	return ok && st.Phase == "waiting" && len(st.Waits) > 0 && len(st.Due()) == 0
-}
-
 // browseLabel is what o opens on the selected row when the row has
 // nothing to open in the dashboard (RowKind.Browse); "" otherwise.
 func (m *Model) browseLabel() string {
@@ -130,23 +122,44 @@ func (m *Model) offerDeploysList() (string, bool) {
 		return "", false
 	}
 	if pr, ok := row.Item.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
-		if deploysDone(pr) || deploysNotMine(pr) {
-			return "", false
-		}
-		return "approve deploys", true
+		return deployOffer(pr)
 	}
-	if row.Kind == "waiting_run" {
-		return "approve deploys", true
+	// a workflow's row says itself whether D is its move (a waiting run,
+	// a change whose tier deploy waits)
+	if t := m.turnOf(row); t.Kind == workflow.TurnYou && t.Key == keymap.S(keymap.Deploys) {
+		return t.Verb, true
 	}
 	return "", false
 }
 
 func (m *Model) offerDeploysDetail() (string, bool) {
 	if pr, ok := m.detail.(*model.PR); ok && pr != nil && strings.EqualFold(pr.State, "MERGED") {
-		if deploysDone(pr) || deploysNotMine(pr) {
+		if l := m.detailListed; l != nil {
+			if _, read := l.Get("deploy").(deploys.State); read {
+				return deployOffer(l)
+			}
+		}
+		return deployOffer(pr)
+	}
+	return "", false
+}
+
+// deployOffer is D on a merged PR: offered, under what it approves, when
+// an environment waits on the viewer; not while the deploy only runs,
+// failed or finished, or waits on somebody else. A PR whose deploys were
+// never read (a core PR merged from here) offers D to read them.
+func deployOffer(pr *model.PR) (string, bool) {
+	st, ok := pr.Get("deploy").(deploys.State)
+	if !ok {
+		if deploysDone(pr) {
 			return "", false
 		}
 		return "approve deploys", true
+	}
+	if st.Phase == "waiting" {
+		if due := st.Due(); len(due) > 0 {
+			return "approve " + strings.Join(due, ", "), true
+		}
 	}
 	return "", false
 }
@@ -266,32 +279,10 @@ func (m *Model) hintSegs() []text.Seg {
 		if !ok {
 			return nil
 		}
-		switch it := row.Item.(type) {
-		case *model.PR:
-			if it != nil {
-				label, _, _, _ := m.decision(it, it)
-				subject = fmt.Sprintf("%s %s", m.where(m.repoOf(it), it.Number), label)
-			}
-		case *model.Issue:
-			if it != nil {
-				subject = m.where(m.repoOf(it), it.Number)
-			}
-		default:
-			// a workflow's row (a waiting run, a change to promote): its
-			// number column and its title
-			if rk, ok := m.wf.RowKinds()[row.Kind]; ok {
-				var parts []string
-				if rk.NumText != nil {
-					parts = append(parts, rk.NumText(row))
-				}
-				if rk.Title != nil {
-					if t := rk.Title(row); len(parts) == 0 || t != parts[0] {
-						parts = append(parts, text.Ellip(t, 40))
-					}
-				}
-				subject = strings.TrimSpace(strings.Join(parts, " "))
-			}
+		if segs := m.turnHintSegs(row); segs != nil {
+			return segs
 		}
+		subject = m.rowSubject(row)
 	case ViewDetail, "issue":
 		switch it := m.detail.(type) {
 		case *model.PR:
@@ -346,6 +337,138 @@ func (m *Model) hintSegs() []text.Seg {
 			}
 		}
 		segs = append(segs, text.S(lead, "hint"), text.S(it.key, "hint.key"), text.S(" "+it.label, "hint"))
+	}
+	return segs
+}
+
+// rowSubject names a list row as the hint line does: "infra#41 awaiting
+// review" for a PR, "infra#17" for an issue, a workflow row's number and
+// title.
+func (m *Model) rowSubject(row workflow.Row) string {
+	switch it := row.Item.(type) {
+	case *model.PR:
+		if it != nil {
+			label, _, _, _ := m.decision(it, it)
+			return fmt.Sprintf("%s %s", m.where(m.repoOf(it), it.Number), label)
+		}
+	case *model.Issue:
+		if it != nil {
+			return m.where(m.repoOf(it), it.Number)
+		}
+	default:
+		if rk, ok := m.wf.RowKinds()[row.Kind]; ok {
+			var parts []string
+			if rk.NumText != nil {
+				parts = append(parts, rk.NumText(row))
+			}
+			if rk.Title != nil {
+				if t := rk.Title(row); len(parts) == 0 || t != parts[0] {
+					parts = append(parts, text.Ellip(t, 40))
+				}
+			}
+			return strings.TrimSpace(strings.Join(parts, " "))
+		}
+	}
+	return ""
+}
+
+// rowRef names a row briefly for a pointer to it ("#412", "infra#41").
+func (m *Model) rowRef(row workflow.Row) string {
+	switch it := row.Item.(type) {
+	case *model.PR:
+		if it != nil {
+			return m.where(m.repoOf(it), it.Number)
+		}
+	case *model.Issue:
+		if it != nil {
+			return m.where(m.repoOf(it), it.Number)
+		}
+	}
+	if rk, ok := m.wf.RowKinds()[row.Kind]; ok && rk.NumText != nil {
+		return rk.NumText(row)
+	}
+	return ""
+}
+
+// turnHintSegs is the status line for a list row whose turn is known:
+// what the row is, whose move it is and the key that makes it, or what
+// is happening and that nothing is the viewer's to do; and, when the
+// row is not the viewer's but another is, where n goes. nil: the row
+// has no turn (an issue, a stage line), and the plain hint applies.
+func (m *Model) turnHintSegs(row workflow.Row) []text.Seg {
+	t := m.turnOf(row)
+	if t.Kind == workflow.TurnNone {
+		return nil
+	}
+	dot := " " + glyphs.G("sep") + " "
+	subject := m.rowSubject(row)
+	var segs []text.Seg
+	lead := func(icon, style string) {
+		segs = append(segs, text.S(" "+icon+" ", style))
+		if subject != "" {
+			segs = append(segs, text.S(subject, "hint.subject"))
+		}
+	}
+	key := func(k, label string) {
+		segs = append(segs, text.S(k, "hint.key"), text.S(" "+label, "hint"))
+	}
+	now := clock.Now()
+	switch t.Kind {
+	case workflow.TurnYou:
+		lead(glyphs.G("arrow"), "hint.key")
+		waited := ""
+		if !t.Since.IsZero() && now.Sub(t.Since) >= time.Minute {
+			waited = " (waiting " + deploys.FmtSecs(now.Sub(t.Since)) + ")"
+		}
+		segs = append(segs, text.S(" — your move"+waited+": ", "hint"))
+		key(t.Key, t.Verb)
+		if at, total := m.turnIndex(); total > 1 && at > 0 {
+			segs = append(segs, text.S(dot, "hint"))
+			key("n", fmt.Sprintf("next (%d of %d)", at, total))
+		}
+		return segs
+	case workflow.TurnRunning:
+		lead(glyphs.G("sync"), "hint")
+		what := t.What
+		if what == "" {
+			what = "running"
+		}
+		segs = append(segs, text.S(" — "+what+m.landsText(t.ETA)+dot+"nothing for you to do", "hint"))
+		if _, ok := m.offerRunsList(); ok {
+			segs = append(segs, text.S(dot, "hint"))
+			key("x", "follows its log")
+		}
+	case workflow.TurnOthers:
+		lead(glyphs.G("clock"), "hint")
+		segs = append(segs, text.S(" — waits on "+t.What+dot+"not yours", "hint"))
+		if l := m.browseLabel(); l != "" {
+			segs = append(segs, text.S(dot, "hint"))
+			key("o", "opens its "+l)
+		}
+	case workflow.TurnFailed:
+		lead(glyphs.G("err"), "hint")
+		segs = append(segs, text.S(" — "+t.What, "hint"))
+		if _, ok := m.offerRunsList(); ok {
+			segs = append(segs, text.S(dot, "hint"))
+			key("x", "reads the log")
+			segs = append(segs, text.S(dot, "hint"))
+			key("X", "re-runs")
+		}
+	case workflow.TurnDone:
+		lead(glyphs.G("pass"), "hint")
+		if t.What != "" {
+			segs = append(segs, text.S(" — "+t.What, "hint"))
+		}
+	}
+	// not the viewer's: point at the next that is
+	if i := m.nextTurn(1); i >= 0 {
+		nt := m.turnOf(m.rows[i])
+		_, total := m.turnIndex()
+		if total == 0 {
+			total = m.countTurns().you
+		}
+		segs = append(segs, text.S(dot, "hint"))
+		key("n", fmt.Sprintf("%s %s: %s (%d on you)", glyphs.G("arrow"), m.rowRef(m.rows[i]), nt.Verb, total))
 	}
 	return segs
 }

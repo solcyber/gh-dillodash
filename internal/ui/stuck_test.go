@@ -31,7 +31,7 @@ func TestStaleApprovalOfMineNeedsAReReview(t *testing.T) {
 	h.gh.Compares = map[string]ghapi.CompareResult{oldHead + "..." + strings.Repeat("a", 40): {AheadBy: 3}}
 	h.load()
 	s := h.screen()
-	for _, want := range []string{"re-review", "stale: approved 1111111, head aaaaaaa (+3)", "1 need you", "u  since approval"} {
+	for _, want := range []string{"re-review", "stale: approved 1111111, head aaaaaaa (+3)", "1 on you", "u  since approval"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("screen lacks %q:\n%s", want, s)
 		}

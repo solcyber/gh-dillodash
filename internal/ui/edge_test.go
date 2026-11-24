@@ -458,14 +458,14 @@ func TestStatusEllipsisAndMessageOverlay(t *testing.T) {
 // count before the rest, and never ends on a dangling separator.
 func TestSummaryFits(t *testing.T) {
 	sep := text.S("  "+glyphs.G("sep")+"  ", "rule")
-	segs := []text.Seg{text.S(" 1 need you", "sum.attn"), sep, text.S("0 failing CI", "sum.muted"), sep,
+	segs := []text.Seg{text.S(" 1 on you", "sum.attn"), sep, text.S("0 failing CI", "sum.muted"), sep,
 		text.S("3 queued tonight", "sum.info"), sep, text.S("0 issues", "sum.muted")}
 	got := text.SegsText(fitSummary(segs, 40))
 	if strings.Contains(got, "0 failing") || strings.Contains(got, "0 issues") || !strings.Contains(got, "3 queued tonight") {
 		t.Errorf("quiet counts go first: %q", got)
 	}
 	got = text.SegsText(fitSummary(segs, 18))
-	if !strings.HasPrefix(got, " 1 need you") || !strings.HasSuffix(got, text.Ellipsis) {
+	if !strings.HasPrefix(got, " 1 on you") || !strings.HasSuffix(got, text.Ellipsis) {
 		t.Errorf("then an ellipsis, keeping what needs you: %q", got)
 	}
 	if w := text.SegsText(fitSummary(segs, 200)); w != text.SegsText(segs) {

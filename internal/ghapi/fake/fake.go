@@ -106,6 +106,9 @@ type Client struct {
 	Orgs map[string][]model.RepoListing
 	// RepoRulesets are Rulesets' answers.
 	RepoRulesets map[model.Repo][]model.Ruleset
+	// Envs are Environments' answers; EnvReads counts the reads.
+	Envs     map[model.Repo][]model.Environment
+	EnvReads int
 	// FortressData is Fortress's answer.
 	FortressData map[model.Repo]ghapi.FortressData
 	// Releases is ReleasePRs' answer.
@@ -927,6 +930,17 @@ func (f *Client) OrgRepos(ctx context.Context, org string) ([]model.RepoListing,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]model.RepoListing(nil), f.Orgs[org]...), nil
+}
+
+// Environments serves Envs.
+func (f *Client) Environments(ctx context.Context, repo model.Repo) ([]model.Environment, error) {
+	if err := f.fail("environments"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.EnvReads++
+	return append([]model.Environment(nil), f.Envs[repo]...), nil
 }
 
 // Rulesets serves RepoRulesets.

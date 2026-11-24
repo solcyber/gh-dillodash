@@ -546,6 +546,19 @@ func (c *GitHub) OrgRepos(ctx context.Context, org string) ([]model.RepoListing,
 	return repos, nil
 }
 
+// Environments is a repo's deployment environments, one page of 100 (a
+// repo with more has bigger problems than a dashboard). A conditional
+// read: rediscovery costs nothing while nothing changed.
+func (c *GitHub) Environments(ctx context.Context, repo model.Repo) ([]model.Environment, error) {
+	var out struct {
+		Environments []model.Environment `json:"environments"`
+	}
+	if err := c.restJSON(ctx, http.MethodGet, repoPath(repo, "environments?per_page=100"), nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Environments, nil
+}
+
 // Rulesets is the rulesets that apply to a repo (org and repo sourced).
 func (c *GitHub) Rulesets(ctx context.Context, repo model.Repo) ([]model.Ruleset, error) {
 	var out []model.Ruleset

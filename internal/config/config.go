@@ -459,7 +459,15 @@ func (r *ReleasePRConfig) DeployComment(repo model.Repo, number int, sha string)
 
 // WaitingRunsConfig is [workflows.waiting_runs].
 type WaitingRunsConfig struct {
-	Repos           []model.Repo // the review repos when unset
+	// Auto (repos = "auto", the default): read every repo in Orgs with an
+	// environment that has required reviewers, found by reading the
+	// environments and kept DiscoverTTLSecs; a repo that gains a gated
+	// environment is read without a config edit. Off: exactly Repos.
+	Auto            bool
+	Orgs            []string     // auto: the organizations; unset = requested_orgs, else the review repos' owners
+	DiscoverTTLSecs int          // auto: how long a discovery is kept
+	Cache           string       // auto: the discovery cache file (expanded; {org} = the orgs joined by "+")
+	Repos           []model.Repo // the explicit list (Auto off)
 	ApprovalComment string       // placeholders {repo} {workflow} {run}
 	// PollSecs is how often the waiting runs are read between refreshes
 	// (0 = only with the refresh; else >= MinWaitingPollSecs). A run that
@@ -475,10 +483,11 @@ func (w *WaitingRunsConfig) Comment(repo model.Repo, workflow string, run int64)
 	return rep.Replace(w.ApprovalComment)
 }
 
-// DefaultWaitingRuns is [workflows.waiting_runs] with every default;
-// Repos stays nil (= the review repos).
+// DefaultWaitingRuns is [workflows.waiting_runs] with every default but
+// discovery: a config file that names no repos discovers them (Auto),
+// one built in code lists its own (Repos).
 func DefaultWaitingRuns() *WaitingRunsConfig {
-	return &WaitingRunsConfig{ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}", PollSecs: DefaultWaitingPollSecs}
+	return &WaitingRunsConfig{DiscoverTTLSecs: 21600, Cache: DefaultWaitingCache, ApprovalComment: "dillodash: approved {workflow} run {run} in {repo}", PollSecs: DefaultWaitingPollSecs}
 }
 
 // Default is a Config with every default and no repos. Workflows are off
@@ -536,6 +545,10 @@ func DefaultMaintenanceWindow() *MaintenanceWindowConfig {
 		MissedFreezeGraceMins: 30,
 	}
 }
+
+// DefaultWaitingCache is the waiting runs discovery cache's default,
+// before ~, $XDG_CACHE_HOME and {org} are resolved.
+const DefaultWaitingCache = "~/.cache/dillodash/waiting-repos-{org}.json"
 
 // DefaultReleaseCache is the cache default before ~, $XDG_CACHE_HOME and
 // {org} are resolved.

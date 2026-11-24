@@ -144,7 +144,8 @@ type Model struct {
 	// refresh in flight is a catch-up after nobody watched
 	focused, focusKnown bool
 	lastInput           float64
-	caughtUp            bool // a workflow pulled the next refresh in (RefreshSoon): counted apart
+	caughtUp            bool
+	fullyLoaded         bool // a whole refresh (the workflows too) has landed once // a workflow pulled the next refresh in (RefreshSoon): counted apart
 	lastRefresh         float64
 	lastRefreshWall     string
 	clockLoc            *clock.Local  // the header clock's second zone; nil: no clock

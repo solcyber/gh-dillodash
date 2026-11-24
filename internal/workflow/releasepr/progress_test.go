@@ -618,7 +618,7 @@ func TestProgressChipAndStyle(t *testing.T) {
 		{Progress{Phase: PhaseWaitingSlot}, "waiting for slot", "chip.sched"},
 		{Progress{Phase: PhaseReleased, Terminal: true}, markOK() + "released", "chip.released"},
 		{Progress{Phase: PhasePending, Terminal: true}, "deploy waiting · D", "chip.act"},
-		{Progress{Phase: PhaseBumped, Terminal: true}, "bumped", "chip.act"},
+		{Progress{Phase: PhaseBumped, Terminal: true}, "bumped", "chip.rolled"},
 		{Progress{Phase: PhaseFailed, Terminal: true}, markErr() + "release FAILED", "chip.fail"},
 		{Progress{Phase: PhaseRefused, Terminal: true}, markErr() + "release refused", "chip.fail"},
 		{Progress{Phase: PhaseRolled, Terminal: true}, "rolled", "chip.rolled"},

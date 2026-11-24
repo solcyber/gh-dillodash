@@ -144,7 +144,7 @@ func TestListLoadsAndRenders(t *testing.T) {
 	h := newHarness(t)
 	h.load()
 	s := h.screen()
-	for _, want := range []string{"pull requests  2", "#101", "widen the deploy role", "bob", "issues  1", "rotate the signing keys", "1 need you", "acme/infra", "alice"} {
+	for _, want := range []string{"pull requests  2", "#101", "widen the deploy role", "bob", "issues  1", "rotate the signing keys", "1 on you", "acme/infra", "alice"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("screen lacks %q:\n%s", want, s)
 		}
@@ -204,6 +204,7 @@ func TestApproveIsAPlainReview(t *testing.T) {
 func TestApproveRefusesDraftAndSelf(t *testing.T) {
 	h := newHarness(t)
 	h.load()
+	h.key('j') // #101 in its own section (the cursor starts on its your-turn copy)
 	h.key('j') // the draft
 	h.gh.PRs[model.Ident{Repo: infra, Number: 102}] = h.gh.Open[infra].PRs[1]
 	h.named("enter")
@@ -992,7 +993,7 @@ func TestSummaryLine(t *testing.T) {
 	h := newHarness(t)
 	h.load()
 	s := text.SegsText(h.m.summarySegs())
-	if strings.Contains(s, "0 failing CI") || !strings.Contains(s, "need you") {
+	if strings.Contains(s, "0 failing CI") || !strings.Contains(s, "on you") {
 		t.Errorf("summary %q", s)
 	}
 	h.m.filter = "widen"
@@ -1000,7 +1001,7 @@ func TestSummaryLine(t *testing.T) {
 	if s := text.SegsText(h.m.summarySegs()); !strings.Contains(s, "1 row matches") {
 		t.Errorf("filtered summary %q", s)
 	}
-	items := []text.Seg{text.S(" 1 need you", "sum.attn"), text.S("  "+glyphs.G("sep")+"  ", "rule"),
+	items := []text.Seg{text.S(" 1 on you", "sum.attn"), text.S("  "+glyphs.G("sep")+"  ", "rule"),
 		text.S("3 runs waiting, 2 on you (D)", "sum.attn"), text.S("  "+glyphs.G("sep")+"  ", "rule"), text.S("5 to promote", "sum.attn")}
 	got := text.SegsText(fitSummary(items, 40))
 	if strings.Contains(got, "(D") && !strings.Contains(got, "(D)") || !strings.HasSuffix(strings.TrimSpace(got), text.Ellipsis) {

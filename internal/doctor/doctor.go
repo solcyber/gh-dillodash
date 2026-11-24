@@ -17,6 +17,7 @@ import (
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow/releasepr"
+	"github.com/solcyber/gh-dillodash/internal/workflow/waitingruns"
 )
 
 // Client is what the report needs of GitHub: the API plus where the
@@ -256,7 +257,12 @@ func Report(ctx context.Context, w io.Writer, cfg *config.Config, gh Client, src
 		if wr.PollSecs > 0 {
 			poll = fmt.Sprintf("every %ds", wr.PollSecs)
 		}
-		on("waiting_runs", true, "  repos: "+joinRepos(wr.Repos)+"; read "+poll)
+		repos := joinRepos(wr.Repos)
+		if wr.Auto {
+			repos = "auto (environments with required reviewers in " + strings.Join(wr.Orgs, ", ") + ")"
+		}
+		on("waiting_runs", true, "  repos: "+repos+"; read "+poll)
+		waitingReach(ctx, w, wr, gh)
 	} else {
 		on("waiting_runs", false, "")
 	}
@@ -429,4 +435,48 @@ func ago(t time.Time) string {
 		return "at an unknown time"
 	}
 	return clock.Ago(t, clock.Now())
+}
+
+// waitingReach reads which repos have an environment that needs a
+// reviewer: with repos = "auto" the set it reads; with a list, the gated
+// repos the list leaves out, whose waiting deploys never show (it warns,
+// and does not fail the check). Reporting only.
+func waitingReach(ctx context.Context, w io.Writer, wr *config.WaitingRunsConfig, gh ghapi.Client) {
+	orgs := wr.Orgs
+	if !wr.Auto {
+		seen := map[string]bool{}
+		for _, r := range wr.Repos {
+			if o := strings.ToLower(r.Owner); !seen[o] {
+				seen[o] = true
+				orgs = append(orgs, r.Owner)
+			}
+		}
+	}
+	found, err := waitingruns.Discover(ctx, gh, orgs)
+	if err != nil {
+		fmt.Fprintf(w, "    gated environments: not read (%s)\n", err)
+		return
+	}
+	if wr.Auto {
+		fmt.Fprintf(w, "    discovered: %s\n", joinRepos(found))
+		return
+	}
+	listed := map[string]bool{}
+	for _, r := range wr.Repos {
+		listed[strings.ToLower(r.String())] = true
+	}
+	var missing []model.Repo
+	for _, r := range found {
+		if !listed[strings.ToLower(r.String())] {
+			missing = append(missing, r)
+		}
+	}
+	if len(missing) > 0 {
+		verb, be, their := "has", "is", "its"
+		if len(missing) > 1 {
+			verb, be, their = "have", "are", "their"
+		}
+		fmt.Fprintf(w, "    warning: %s %s an environment that needs a reviewer but %s not listed: %s waiting deploys never show (repos = \"auto\" reads every such repo)\n",
+			joinRepos(missing), verb, be, their)
+	}
 }

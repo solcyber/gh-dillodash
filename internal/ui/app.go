@@ -296,6 +296,9 @@ func (m *Model) View() tea.View {
 	v := tea.NewView(c.Render(render))
 	v.AltScreen = true
 	v.ReportFocus = true // away (attention.go): slower while out of sight
+	if m.cfg != nil && m.cfg.Display.Title {
+		v.WindowTitle = m.windowTitle() // what waits on you, in the tab or tmux window
+	}
 	return v
 }
 

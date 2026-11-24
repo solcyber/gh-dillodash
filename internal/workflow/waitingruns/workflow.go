@@ -4,7 +4,7 @@
 // runs only through a merged PR's merge commit, so those stayed invisible
 // until someone opened the Actions page.
 //
-// The workflow adds a "waiting approvals (N)" section with one row per
+// The workflow adds a "deploys waiting (N)" section with one row per
 // run (its workflow, title, branch, who started it, its age and a chip
 // per environment), counts the runs in the header summary, and answers D
 // on its rows: it approves the environments the viewer is a reviewer of,
@@ -21,9 +21,11 @@ import (
 
 	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/config"
+	"github.com/solcyber/gh-dillodash/internal/deploys"
 	"github.com/solcyber/gh-dillodash/internal/fx"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/glyphs"
+	"github.com/solcyber/gh-dillodash/internal/keymap"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/scenes"
 	"github.com/solcyber/gh-dillodash/internal/text"
@@ -42,12 +44,20 @@ const RowRun = "waiting_run"
 // approves from their own row; this package does not import it.
 const releaseName = "release_pr"
 
+// promoteName is the promote workflow's state name: its change rows show
+// their tier's deploy, so a run on a change's tier commit is listed there.
+const promoteName = "promote"
+
 // Item is one run waiting on environments: where it runs, the run, and
 // the environments it waits on (nil when they couldn't be read).
 type Item struct {
 	Repo    model.Repo
 	Run     model.WorkflowRun
 	Pending []model.PendingDeployment
+	// Left are the environments (by id) automation reviews and still has
+	// its grace on ([bots] logins among the reviewers, deploy_auto_grace_secs):
+	// nobody's to press yet, the viewer's included.
+	Left map[int64]string
 }
 
 // Ident is (repo, run id): a run has no number, so its id stands in for
@@ -67,15 +77,29 @@ func (it *Item) Title() string {
 	return it.Name()
 }
 
-// Mine is the pending deployments the viewer can approve.
+// Mine is the pending deployments that are the viewer's to approve now:
+// the viewer can approve them and automation is not still on them.
 func (it *Item) Mine() []model.PendingDeployment {
 	var out []model.PendingDeployment
 	for _, p := range it.Pending {
-		if p.CurrentUserCanApprove {
+		if _, left := it.Left[p.Environment.ID]; p.CurrentUserCanApprove && !left {
 			out = append(out, p)
 		}
 	}
 	return out
+}
+
+// Waited is how long the run has waited, from its last change (zero
+// when GitHub gave no times).
+func (it *Item) Waited(now time.Time) time.Duration {
+	at := it.Run.UpdatedAt
+	if at.IsZero() || it.Run.CreatedAt.After(at) {
+		at = it.Run.CreatedAt
+	}
+	if at.IsZero() {
+		return 0
+	}
+	return now.Sub(at)
 }
 
 // Envs is every environment name the run waits on, in order.
@@ -159,6 +183,16 @@ type Workflow struct {
 	seen   map[int64]bool
 	active time.Time
 
+	// discovery (repos = "auto"): its own lock, so a slow discovery never
+	// holds the list's
+	discMu sync.Mutex
+	disc   discovered
+
+	// isBot and grace decide when a wait is left to automation (as the
+	// release rows do): set from [bots] and deploy_auto_grace_secs
+	isBot func(string) bool
+	grace time.Duration
+
 	// UI goroutine only: the runs that waited on the viewer at the last
 	// apply, so a run that starts waiting on them is said once.
 	mine   map[int64]bool
@@ -177,8 +211,33 @@ func init() {
 		if ctx == nil || ctx.Config == nil || ctx.Config.WaitingRuns == nil {
 			return nil, nil
 		}
-		return New(ctx.Config.WaitingRuns), nil
+		w := New(ctx.Config.WaitingRuns)
+		w.isBot = ctx.Config.Bots.IsBot
+		if rp := ctx.Config.ReleasePR; rp != nil {
+			w.grace = deploys.GraceOf(rp.DeployAutoGraceSecs)
+		}
+		return w, nil
 	})
+}
+
+// leftToAutomation is the environments of a waiting run that automation
+// reviews and still has its grace on: deploys.ComputeWith's rule, so a
+// run reads the same here as on a release's row.
+func (w *Workflow) leftToAutomation(r model.WorkflowRun, pend []model.PendingDeployment) map[int64]string {
+	if w.isBot == nil || len(pend) == 0 {
+		return nil
+	}
+	st := deploys.ComputeWith([]model.WorkflowRun{r}, map[int64][]model.PendingDeployment{r.ID: pend}, clock.Now(), deploys.Options{IsBot: w.isBot, AutoGrace: w.grace})
+	var out map[int64]string
+	for _, wt := range st.Waits {
+		if wt.Left {
+			if out == nil {
+				out = map[int64]string{}
+			}
+			out[wt.EnvID] = wt.By
+		}
+	}
+	return out
 }
 
 // New builds the workflow from its config.
@@ -227,12 +286,16 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 		st.Warnings = warns
 		return st, warns, err
 	}
+	repos, note := w.repos(ctx, gh, clock.Now())
+	if note != "" {
+		warns = append(warns, note)
+	}
 	// every repo's waiting runs side by side, then every run's pending
 	// environments side by side; warnings and items keep repo order
-	runsOf := make([][]model.WorkflowRun, len(w.cfg.Repos))
-	runErrs := make([]error, len(w.cfg.Repos))
+	runsOf := make([][]model.WorkflowRun, len(repos))
+	runErrs := make([]error, len(repos))
 	var wg sync.WaitGroup
-	for i, repo := range w.cfg.Repos {
+	for i, repo := range repos {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -248,7 +311,7 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 		err  error
 	}
 	var wants []*want
-	for i, repo := range w.cfg.Repos {
+	for i, repo := range repos {
 		if err := runErrs[i]; err != nil {
 			if ghapi.IsRateLimit(err) {
 				return limited(err)
@@ -287,7 +350,7 @@ func (w *Workflow) read(ctx context.Context, gh ghapi.Client, listed listedSet) 
 			warns = append(warns, fmt.Sprintf("waiting runs in %s: run %d's environments: %s%s", repo.Name, r.ID, err, tokenHint(err, "Actions: Read", repo)))
 		}
 		sort.SliceStable(pend, func(i, j int) bool { return envName(pend[i]) < envName(pend[j]) })
-		st.Items = append(st.Items, &Item{Repo: repo, Run: r, Pending: pend})
+		st.Items = append(st.Items, &Item{Repo: repo, Run: r, Pending: pend, Left: w.leftToAutomation(r, pend)})
 	}
 	sortItems(st.Items)
 	st.Warnings = warns
@@ -499,6 +562,11 @@ func (w *Workflow) visible(app workflow.App) []*Item {
 	if p, ok := app.State(releaseName).(workflow.CIProvider); ok && p != nil {
 		addSHAs(listed, p.CIPRs())
 	}
+	if p, ok := app.State(promoteName).(workflow.DeploySHAs); ok && p != nil {
+		for _, rs := range p.DeploySHAs() {
+			listed[listedKey(rs.Repo, rs.SHA)] = true
+		}
+	}
 	var out []*Item
 	for _, it := range st.Items {
 		if !listed.covers(it.Repo, it.Run) {
@@ -536,7 +604,7 @@ func matches(parts, terms []string) bool {
 	return true
 }
 
-// Sections is the "waiting approvals (N)" section: the runs that match
+// Sections is the "deploys waiting (N)" section: the runs that match
 // the filter, the one waiting longest first.
 func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workflow.Row {
 	var rows []workflow.Row
@@ -548,7 +616,7 @@ func (w *Workflow) Sections(app workflow.App, terms []string, _ string) []workfl
 	if len(rows) == 0 {
 		return nil
 	}
-	head := workflow.Row{Kind: "header", Item: fmt.Sprintf("waiting approvals (%d)", len(rows)), Meta: map[string]any{"icon": "shield"}}
+	head := workflow.Row{Kind: "header", Item: fmt.Sprintf("deploys waiting (%d)", len(rows)), Meta: map[string]any{"icon": "shield"}}
 	return append([]workflow.Row{head}, rows...)
 }
 
@@ -587,6 +655,12 @@ func (w *Workflow) RowKinds() map[string]workflow.RowKind {
 				}
 				return "run"
 			},
+			Turn: func(_ workflow.App, row workflow.Row) workflow.Turn {
+				if it, ok := row.Item.(*Item); ok {
+					return it.Turn()
+				}
+				return workflow.Turn{}
+			},
 			Title: func(row workflow.Row) string {
 				if it, ok := row.Item.(*Item); ok {
 					return it.Title()
@@ -610,7 +684,10 @@ func runURL(app workflow.App, it *Item) string {
 }
 
 // multi reports whether the rows name their repo.
-func (w *Workflow) multi(app workflow.App) bool { return app.MultiRepo() || len(w.cfg.Repos) > 1 }
+func (w *Workflow) multi(app workflow.App) bool {
+	// discovered repos can be any of an organization's: always named
+	return w.cfg.Auto || app.MultiRepo() || len(w.cfg.Repos) > 1
+}
 
 func maxw(items []workflow.Row, f func(*Item) string, limit int) int {
 	n := 0
@@ -644,9 +721,13 @@ func chipSegs(it *Item, pos int) []text.Seg {
 		if i > 0 {
 			segs = append(segs, text.S(" ", "text"))
 		}
-		if p.CurrentUserCanApprove {
+		_, left := it.Left[p.Environment.ID]
+		switch {
+		case left:
+			segs = append(segs, scenes.Chip("waits: "+envName(p)+" · automatic", "chip.state")...)
+		case p.CurrentUserCanApprove:
 			segs = append(segs, scenes.GlintChip("approve: "+envName(p), "chip.await", pos, fx.Ambient, mono)...)
-		} else {
+		default:
 			segs = append(segs, scenes.Chip("waits: "+envName(p), "chip.state")...)
 		}
 	}
@@ -804,7 +885,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		return true
 	}
 	sort.SliceStable(pend, func(i, j int) bool { return envName(pend[i]) < envName(pend[j]) })
-	cur := &Item{Repo: it.Repo, Run: it.Run, Pending: pend}
+	cur := &Item{Repo: it.Repo, Run: it.Run, Pending: pend, Left: w.leftToAutomation(it.Run, pend)}
 	if len(pend) == 0 {
 		app.Notice(where + " waits on no environment now — it was approved or rejected since the last refresh")
 		app.Refresh(true)
@@ -812,6 +893,19 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	}
 	me := app.Me()
 	mine := cur.Mine()
+	if len(mine) == 0 && len(cur.Left) > 0 {
+		var by string
+		for _, b := range cur.Left {
+			by = b
+			break
+		}
+		grace := w.grace
+		if grace <= 0 {
+			grace = deploys.AutoGrace
+		}
+		app.Notice(fmt.Sprintf("%s waits on automation (%s), which approves it; it is yours to press once it has waited %s", where, by, deploys.FmtSecs(grace)))
+		return true
+	}
 	if len(mine) == 0 {
 		if selfReview(it.Run, pend, me) {
 			// GitHub's prevent_self_review: the dispatcher is a reviewer but
@@ -826,7 +920,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 	lines := make([]string, 0, len(pend))
 	var theirs []string
 	for _, p := range pend {
-		if p.CurrentUserCanApprove {
+		if _, left := cur.Left[p.Environment.ID]; p.CurrentUserCanApprove && !left {
 			lines = append(lines, envName(p))
 		} else {
 			theirs = append(theirs, envName(p))
@@ -928,4 +1022,65 @@ func (w *Workflow) RunTargets(app workflow.App) []workflow.RunTarget {
 		why = "waits on " + strings.Join(envs, ", ")
 	}
 	return []workflow.RunTarget{{Repo: it.Repo, Run: it.Run, Why: why}}
+}
+
+// Turn is the run's: the viewer's when an environment waits on them and
+// not on automation; else automation's, or its reviewers'.
+func (it *Item) Turn() workflow.Turn {
+	since := it.Run.UpdatedAt
+	if since.IsZero() || it.Run.CreatedAt.After(since) {
+		since = it.Run.CreatedAt
+	}
+	if mine := it.Mine(); len(mine) > 0 {
+		t := workflow.You(keymap.S(keymap.Deploys), "approve "+strings.Join(envNames(mine), ", "), "deploy", workflow.PrioDeploy)
+		t.What, t.Since = it.Name(), since
+		return t
+	}
+	if len(it.Pending) == 0 {
+		return workflow.Turn{Kind: workflow.TurnOthers, What: "an environment's reviewers", Since: since}
+	}
+	for _, by := range it.Left {
+		t := workflow.Others("automation (" + text.OrQ(by) + ")")
+		t.Since = since
+		return t
+	}
+	t := workflow.Others(whoReviews(it.Pending))
+	t.Since = since
+	return t
+}
+
+// whoReviews names who can approve the environments: their required
+// reviewers ("team approvers, carol"), else "their reviewers".
+func whoReviews(pend []model.PendingDeployment) string {
+	seen := map[string]bool{}
+	var names []string
+	for _, p := range pend {
+		for _, r := range p.Reviewers {
+			if n := r.Name(); n != "" && n != "team " && !seen[n] {
+				seen[n] = true
+				names = append(names, n)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return "their reviewers"
+	}
+	return strings.Join(names, ", ")
+}
+
+// RunWait is the environments of a waiting run that are the viewer's to
+// approve now (workflow.RunWaits), from the last read.
+func (s *State) RunWait(repo model.Repo, runID int64) ([]string, bool) {
+	if s == nil {
+		return nil, false
+	}
+	for _, it := range s.Items {
+		if it.Run.ID == runID && strings.EqualFold(it.Repo.String(), repo.String()) {
+			if len(it.Pending) == 0 {
+				return nil, false // the environments were not read
+			}
+			return envNames(it.Mine()), true
+		}
+	}
+	return nil, false
 }

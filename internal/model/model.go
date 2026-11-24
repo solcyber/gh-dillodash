@@ -486,6 +486,27 @@ type RepoListing struct {
 	Archived bool   `json:"archived"`
 }
 
+// Environment is a repo's deployment environment as the environments
+// listing gives it: its name and protection rules.
+type Environment struct {
+	Name            string `json:"name"`
+	ProtectionRules []struct {
+		Type      string               `json:"type"`
+		Reviewers []DeploymentReviewer `json:"reviewers"`
+	} `json:"protection_rules"`
+}
+
+// Gated reports an environment a deployment waits on a person for: it
+// has required reviewers.
+func (e Environment) Gated() bool {
+	for _, r := range e.ProtectionRules {
+		if r.Type == "required_reviewers" && len(r.Reviewers) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Ruleset is a repo ruleset summary.
 type Ruleset struct {
 	Name       string `json:"name"`
