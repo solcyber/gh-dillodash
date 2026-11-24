@@ -300,7 +300,7 @@ func TestApproveAlreadyApprovedCancelAndFailure(t *testing.T) {
 	w, app := newWF(t, true)
 	pr := approved(makeRelease(relOpts{}), "alice")
 	w.Approve(app, pr, nil) // no pick scripted: Esc
-	if len(comments(app)) != 0 || !strings.Contains(app.Last(), "approve cancelled") {
+	if len(comments(app)) != 0 || !strings.Contains(app.Last(), "approve canceled") {
 		t.Errorf("Esc at the menu posts nothing: %q %q", comments(app), app.Last())
 	}
 	w, app = newWF(t, true)
@@ -418,7 +418,7 @@ func TestApproveReasonChecks(t *testing.T) {
 	w, app = newWF(t, true)
 	app.Picks = []int{1} // no prompt answer: Esc
 	w.Approve(app, makeRelease(relOpts{}), nil)
-	if len(app.Fake.Calls) != 0 || app.Last() != "notice: approve cancelled" {
+	if len(app.Fake.Calls) != 0 || app.Last() != "notice: approve canceled" {
 		t.Errorf("Esc at the reason cancels: %v %q", app.Fake.Calls, app.Last())
 	}
 	w, app = newWF(t, true)
@@ -429,7 +429,7 @@ func TestApproveReasonChecks(t *testing.T) {
 	}
 	w, app = newWF(t, true) // Esc at the menu
 	w.Approve(app, makeRelease(relOpts{}), nil)
-	if len(app.Fake.Calls) != 0 || app.Last() != "notice: approve cancelled" {
+	if len(app.Fake.Calls) != 0 || app.Last() != "notice: approve canceled" {
 		t.Errorf("Esc at the menu cancels: %v %q", app.Fake.Calls, app.Last())
 	}
 }
@@ -967,7 +967,7 @@ func TestSectionsWithoutWindowListQueued(t *testing.T) {
 	}
 	rows := w.Sections(app, nil, "alice")
 	if rows[0].Item != "releases (4)" {
-		t.Errorf("the labelled release is listed like any other: %v", rows[0].Item)
+		t.Errorf("the labeled release is listed like any other: %v", rows[0].Item)
 	}
 }
 

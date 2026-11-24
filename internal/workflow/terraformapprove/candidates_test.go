@@ -35,7 +35,7 @@ const (
 
 // testCfg is the acme fixture config: reviews on acme/infra, the digest
 // bot infra-bot, a 23:00-23:28 New York ceremony window and the default
-// maintenance window labelled ET.
+// maintenance window labeled ET.
 func testCfg() *config.Config {
 	cfg := config.Default()
 	cfg.Reviews.Repos = []model.Repo{infra}
@@ -333,7 +333,7 @@ func TestApplyOutcomes(t *testing.T) {
 	check(t, "set progress counted", s.Progress == [2]int{1, 2})
 	for _, c := range ex(setThread) {
 		if !c.Set && c.PlanID == idA {
-			check(t, "applied member labelled in plan-set — applied", PlanStateLabel(c, false, cfg) == "in plan-set — applied")
+			check(t, "applied member labeled in plan-set — applied", PlanStateLabel(c, false, cfg) == "in plan-set — applied")
 		}
 	}
 	s = setOf(ex(append(append([]model.Comment{}, setThread...), approveC(setID, "2026-10-22T19:30:00Z"))))

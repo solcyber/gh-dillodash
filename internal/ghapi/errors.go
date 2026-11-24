@@ -103,7 +103,7 @@ func retryAtFromHeaders(h http.Header, now time.Time) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// isSecondaryLimit recognises a secondary (abuse) rate limit by its
+// isSecondaryLimit recognizes a secondary (abuse) rate limit by its
 // shape rather than its headers: any 429, or a 403 whose message says
 // so. Those often arrive without Retry-After.
 func isSecondaryLimit(status int, msg string) bool {

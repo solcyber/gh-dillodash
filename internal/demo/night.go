@@ -17,7 +17,7 @@ import (
 // dillodash alone: after the freeze, an approved release the window
 // bumped goes out with release NOW, then, once it is released, the next
 // one in the lane (a database migration with a slot on the manifest):
-// release NOW, the slot cancelled in the same flow, and the migration's
+// release NOW, the slot canceled in the same flow, and the migration's
 // two environments approved with D. The fixture moves on as the keys
 // post: each post (and the refresh after the first release) is the
 // conductor's and the release job's answer.

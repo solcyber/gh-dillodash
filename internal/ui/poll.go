@@ -92,7 +92,7 @@ func (m *Model) poll() {
 
 // applyPoll lands a poll's patches and arms the next cycle. Patches
 // read before a refresh that has since landed are dropped: the refresh
-// is newer. A rate limit raises the same wall the refresh honours; any
+// is newer. A rate limit raises the same wall the refresh honors; any
 // other failure (a poller that panicked) keeps the last known progress
 // and retries at twice the cadence without touching the refresh's
 // backoff. Either is said on the warn line, ahead of the refresh's own

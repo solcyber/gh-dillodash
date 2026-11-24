@@ -159,7 +159,7 @@ func (w *Workflow) laneWait(app workflow.App, pr *model.PR) bool {
 	if app.Confirm(fmt.Sprintf("%s is still on its way — the lane releases one at a time. Release %s NOW anyway?", where(busy), where(pr))) {
 		return true
 	}
-	app.Notice(fmt.Sprintf("approve cancelled — %s waits for %s", where(pr), where(busy)))
+	app.Notice(fmt.Sprintf("approve canceled — %s waits for %s", where(pr), where(busy)))
 	return false
 }
 

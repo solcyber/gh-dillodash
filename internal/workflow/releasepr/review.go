@@ -43,11 +43,11 @@ func (w *Workflow) requestChanges(app workflow.App, pr *model.PR, wh string) {
 	reason, ok := app.Prompt(fmt.Sprintf("Why should %s not release? The reason is posted as the review (at least %d characters); Esc cancels:", wh, changesMinReason),
 		workflow.PromptOpts{MinLen: changesMinReason, Note: "posted as a request-changes review"})
 	if !ok || len([]rune(strings.TrimSpace(reason))) < changesMinReason {
-		app.Notice("request changes cancelled")
+		app.Notice("request changes canceled")
 		return
 	}
 	if !app.Confirm(fmt.Sprintf("request changes on %s as %s? It leaves the window until someone approves again.\n%s", wh, app.Me(), reason)) {
-		app.Notice("request changes cancelled")
+		app.Notice("request changes canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("requesting changes on %s...", wh))
@@ -107,7 +107,7 @@ func (w *Workflow) dismissMine(app workflow.App, pr *model.PR, wh string) {
 	}
 	msg := fmt.Sprintf("withdrawn by %s from dillodash", app.Me())
 	if !app.Confirm(fmt.Sprintf("dismiss your approval of %s? It leaves the queue; A approves it again to re-queue it.\nmessage: %s", wh, msg)) {
-		app.Notice("dismiss cancelled")
+		app.Notice("dismiss canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("dismissing your approval of %s...", wh))
@@ -165,7 +165,7 @@ func (w *Workflow) refire(app workflow.App, pr *model.PR, wh string, id int64) {
 	workflow.WarmMembership(app)
 	if !app.Confirm(fmt.Sprintf("fire %s on %s for the %s comment on %s?\npayload: repo=%s pr=%d comment_id=%d",
 		w.cfg.ReleaseNowDispatchEvent, target, w.cfg.ReleaseNowCommand, wh, pr.Repo.Name, pr.Number, id)) {
-		app.Notice("dispatch cancelled")
+		app.Notice("dispatch canceled")
 		return
 	}
 	if !workflow.PostGuard(app, w.cfg.ReleaseNowDispatchEvent) {

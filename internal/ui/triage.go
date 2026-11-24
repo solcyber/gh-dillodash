@@ -93,7 +93,7 @@ func (m *Model) doLabels(app *lockedApp) {
 		return
 	}
 	where := m.where(t.repo, t.number)
-	if m.writeRefused(app, t.repo, "labelling "+where) {
+	if m.writeRefused(app, t.repo, "labeling "+where) {
 		return
 	}
 	app.Flash(fmt.Sprintf("reading the labels of %s...", t.repo))
@@ -116,11 +116,11 @@ func (m *Model) doLabels(app *lockedApp) {
 	}
 	i := app.Pick(fmt.Sprintf("label %s: [x] removes, [ ] adds", where), choices)
 	if i < 0 {
-		app.Notice("label cancelled")
+		app.Notice("label canceled")
 		return
 	}
 	name := defs[i].Name
-	app.Flash(fmt.Sprintf("labelling %s...", where))
+	app.Flash(fmt.Sprintf("labeling %s...", where))
 	if hasFold(t.labels, name) {
 		if err := m.gh.RemoveLabel(m.ctx, t.repo, t.number, name); err != nil {
 			app.Fail(fmt.Sprintf("couldn't remove %q from %s: %s", name, where, err))
@@ -207,7 +207,7 @@ func (m *Model) doAssign(app *lockedApp) {
 	}
 	i := app.Pick(fmt.Sprintf("assign %s: [x] unassigns, [ ] assigns", where), choices)
 	if i < 0 {
-		app.Notice("assign cancelled")
+		app.Notice("assign canceled")
 		return
 	}
 	login := logins[i]
@@ -272,18 +272,18 @@ func (m *Model) doIssueState(app *lockedApp) {
 		case 1:
 			state, reason, did = "closed", "not_planned", "closed %s as not planned"
 		default:
-			app.Notice("close cancelled")
+			app.Notice("close canceled")
 			return
 		}
 		// the pick answers which close; a y/N says whether, so a stray
 		// Enter after Z never closes an issue
 		if !app.Confirm(fmt.Sprintf("close %s as %s, as %s?", where, strings.ReplaceAll(reason, "_", " "), m.me)) {
-			app.Notice("close cancelled")
+			app.Notice("close canceled")
 			return
 		}
 	} else {
 		if !app.Confirm(fmt.Sprintf("reopen %s?", where)) {
-			app.Notice("reopen cancelled")
+			app.Notice("reopen canceled")
 			return
 		}
 		state, reason, did = "open", "reopened", "reopened %s"
@@ -335,7 +335,7 @@ func (m *Model) doHandoff(app *lockedApp) {
 		q += " and post the handoff comment"
 	}
 	if !app.Confirm(q + "?") {
-		app.Notice("handoff cancelled")
+		app.Notice("handoff canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("handing %s to %s...", where, m.agentName()))
@@ -346,7 +346,7 @@ func (m *Model) doHandoff(app *lockedApp) {
 	m.setDetailLabels(app, append(append([]string(nil), t.labels...), label))
 	if comment != "" {
 		if err := m.gh.Comment(m.ctx, t.repo, t.number, comment); err != nil {
-			app.Fail(fmt.Sprintf("labelled %s %q, but the handoff comment failed: %s", where, label, err))
+			app.Fail(fmt.Sprintf("labeled %s %q, but the handoff comment failed: %s", where, label, err))
 			app.Refresh(true)
 			return
 		}

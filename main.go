@@ -114,7 +114,7 @@ usage:
                                   convert a legacy config.ini to config.toml
   gh dillodash font install|check [--force]
                                   install the bundled Nerd Font (icons = "nerd")
-  gh dillodash font license       print the font's licences (also written beside the installed files)
+  gh dillodash font license       print the font's licenses (also written beside the installed files)
   gh dillodash glyph-test [--icons SET]
                                   print every glyph and the palette (checks the terminal font)
   gh dillodash update [--rollback]
@@ -890,7 +890,7 @@ func fontCmd(args []string) error {
 		if err := subFlags("font license", args[1:], nil); err != nil {
 			return err
 		}
-		fmt.Printf("%s %s is redistributed under these licences:\n\n", fonts.Family, fonts.Version)
+		fmt.Printf("%s %s is redistributed under these licenses:\n\n", fonts.Family, fonts.Version)
 		for _, l := range fonts.Licenses() {
 			fmt.Printf("==== %s ====\n\n%s\n", l.Name, l.Data)
 		}
@@ -1003,7 +1003,7 @@ func pullConfig(ctx context.Context, gh ghapi.Client, spec, path string, force b
 // whatsNew20 is the card the first 2.x start shows: the keys moved.
 const whatsNew20 = `dillodash 2.0: Shift acts, lowercase looks.
 
-Every key that changes something (on GitHub, your install or your config) is now a capital and asks first; lowercase keys only move, open and show. The key bar leads with what you can do to the selected row, in gold, labelled with what it will do there, and the line above it says what the row waits on.
+Every key that changes something (on GitHub, your install or your config) is now a capital and asks first; lowercase keys only move, open and show. The key bar leads with what you can do to the selected row, in gold, labeled with what it will do there, and the line above it says what the row waits on.
 
 Moved:  a → A approve (release NOW, /approve)   c → C comment (Enter on an empty line: $EDITOR)   t → T tag   s → S assign   p → P promote   w → W window (/attend, /release)   W → w the room   A → s show PRs others approved   R and P → U update (restart, newer config)   x reads a run's log, X re-runs, cancels or rejects (and runs a listed workflow).
 

@@ -297,12 +297,12 @@ func TestNetworkErrors(t *testing.T) {
 		t.Fatalf("dropped mid-body: %v", err)
 	}
 
-	// a cancelled context
+	// a canceled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = s.client(t).Whoami(ctx)
 	if !isNetwork(err) {
-		t.Fatalf("cancelled: %v", err)
+		t.Fatalf("canceled: %v", err)
 	}
 }
 

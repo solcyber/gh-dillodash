@@ -178,7 +178,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "figure %dx%d px, pitch ~%d → %dx%d cells (px %.2f, py %.2f)\n",
 		maxX-minX+1, maxY-minY+1, pitch, cols, rows, px, py)
 
-	// 4. Sample the centre of every cell; drop the pale gray shadow.
+	// 4. Sample the center of every cell; drop the pale gray shadow.
 	grid := make([][]rgb, rows)
 	set := make([][]bool, rows)
 	for r := 0; r < rows; r++ {

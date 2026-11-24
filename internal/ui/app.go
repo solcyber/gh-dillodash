@@ -33,7 +33,7 @@ var ErrInterrupted = errors.New("interrupted")
 // the process signals while the TUI is up (SIGTERM quits, SIGINT
 // interrupts, both are masked while $PAGER or $EDITOR has the terminal),
 // so the context given here is not a signal context: it is the parent
-// of the workers' context, which is cancelled when the dashboard ends so
+// of the workers' context, which is canceled when the dashboard ends so
 // a refresh or action in flight stops with it.
 func Run(ctx context.Context, o Options) error {
 	ctx, cancel := context.WithCancel(ctx)

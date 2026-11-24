@@ -34,7 +34,7 @@ func TestRequestChangesFromTheMenu(t *testing.T) {
 	w, app = newWF(t, true)
 	app.Picks, app.Prompts = []int{2}, []string{"no"}
 	w.Approve(app, pr, nil)
-	if len(app.Fake.CallsFor("request_changes")) != 0 || !strings.Contains(app.Last(), "cancelled") {
+	if len(app.Fake.CallsFor("request_changes")) != 0 || !strings.Contains(app.Last(), "canceled") {
 		t.Errorf("a short reason posts nothing: %+v %q", app.Fake.Calls, app.Last())
 	}
 }

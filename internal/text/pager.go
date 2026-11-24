@@ -4,7 +4,7 @@ import "strings"
 
 // ForPager makes untrusted text (a PR's diff, a CI job's log) safe to
 // hand to $PAGER, which may pass escapes straight to the terminal (less
-// -R, more on Windows, cat). It keeps tabs, newlines and colour (SGR:
+// -R, more on Windows, cat). It keeps tabs, newlines and color (SGR:
 // ESC [ digits/semicolons m, which logs use and less -R renders) and
 // drops every other escape sequence (OSC 52 clipboard writes, OSC 8
 // links, title changes, cursor moves, DCS) and every other C0/C1

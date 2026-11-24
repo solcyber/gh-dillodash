@@ -94,7 +94,7 @@ func TestRunsKey(t *testing.T) {
 		t.Errorf("the reject confirm: %q", asked[len(asked)-1])
 	}
 
-	// a cancelled confirm sends nothing
+	// a canceled confirm sends nothing
 	h.m.tp.Confirm = func(string) bool { return false }
 	pickRun(12, runCancel)
 	h.key('X')

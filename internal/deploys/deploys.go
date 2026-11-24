@@ -164,7 +164,7 @@ func RefreshInterval(secs int) time.Duration {
 
 // compute is the pure part: runs on the sha, and the pending deployments
 // of the runs that wait. Phase priority: waiting, failed, stuck, running,
-// done, cancelled, none (a cancelled run beside a successful one is
+// done, cancelled, none (a canceled run beside a successful one is
 // usually superseded). A run queued or running longer than StuckAfter
 // is stuck; ComputeWith takes the threshold.
 func compute(runs []model.WorkflowRun, pending map[int64][]model.PendingDeployment, now time.Time) State {
@@ -307,7 +307,7 @@ func ComputeWith(runs []model.WorkflowRun, pending map[int64][]model.PendingDepl
 	case phases["done"]:
 		st.Phase, st.Text = "done", "deployed"
 	case phases["cancelled"]:
-		st.Phase, st.Text = "cancelled", "deploy cancelled"
+		st.Phase, st.Text = "cancelled", "deploy canceled"
 	default:
 		// repos that deploy outside Actions: nothing to show
 		st.Phase, st.Text = "none", "no Actions runs"

@@ -157,7 +157,7 @@ func NewMap(key string, w, h int, zoom string, lanes int, cx float64) *Map {
 			}
 		}
 	}
-	// a row per labelled street, across the city proper
+	// a row per labeled street, across the city proper
 	m.StreetRows = map[int]string{}
 	for _, st := range city.Streets {
 		r, _ := m.CellOf(0, bandMid(float64(st.Y), city.Dir)) // the row its day's items stand on

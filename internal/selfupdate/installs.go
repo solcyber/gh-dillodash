@@ -31,7 +31,7 @@ type Install struct {
 	Version string // "" when unknown
 	Running bool   // this process runs it
 	Pinned  bool   // a gh extension pinned to its tag
-	Runs    string // a launcher: what it runs, when that is recognisable
+	Runs    string // a launcher: what it runs, when that is recognizable
 	Note    string
 }
 

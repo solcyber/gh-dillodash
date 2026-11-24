@@ -383,7 +383,7 @@ func TestCtrlCInterrupts(t *testing.T) {
 		t.Error("in a prompt ctrl+c belongs to the prompt")
 	}
 	if h.m.modal != nil {
-		t.Error("the prompt should have cancelled")
+		t.Error("the prompt should have canceled")
 	}
 }
 
@@ -677,7 +677,7 @@ func TestCommentInlineCancelAndBlank(t *testing.T) {
 	h.named("enter")
 	h.m.tp.Prompt = func(string, workflow.PromptOpts) (string, bool) { return "", false }
 	h.key('C')
-	if h.m.status != "comment cancelled" || len(h.gh.CommentsPosted) != 0 {
+	if h.m.status != "comment canceled" || len(h.gh.CommentsPosted) != 0 {
 		t.Errorf("Esc: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
 	}
 	// Enter on an empty line opens $EDITOR; leaving it empty posts nothing
@@ -689,7 +689,7 @@ func TestCommentInlineCancelAndBlank(t *testing.T) {
 	if !edited {
 		t.Error("Enter on an empty line does not open $EDITOR")
 	}
-	if h.m.status != "comment cancelled (empty)" || len(h.gh.CommentsPosted) != 0 {
+	if h.m.status != "comment canceled (empty)" || len(h.gh.CommentsPosted) != 0 {
 		t.Errorf("blank: status %q posted %d", h.m.status, len(h.gh.CommentsPosted))
 	}
 }

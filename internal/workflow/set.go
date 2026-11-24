@@ -141,7 +141,7 @@ type Refreshing struct {
 	repos  []model.Repo
 	runs   []*wfRun // by Items index; nil until started
 	// limited is set by the first workflow to meet a rate limit: the
-	// others are cancelled, and a workflow that ends after it gives no
+	// others are canceled, and a workflow that ends after it gives no
 	// state (it would only show the wall), as one skipped would
 	limited atomic.Bool
 }
@@ -203,7 +203,7 @@ func (r *Refreshing) start(w Workflow, prs []*model.PR, issues []*model.Issue) *
 }
 
 // Abort ends a refresh that will not reach Finish (the list failed):
-// the started workflows are cancelled and waited for, so the next
+// the started workflows are canceled and waited for, so the next
 // refresh never runs a workflow's Refresh beside a stale one.
 func (r *Refreshing) Abort() {
 	r.cancel()

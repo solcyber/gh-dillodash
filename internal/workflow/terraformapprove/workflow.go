@@ -307,7 +307,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		workflow.PrimeHead(app, pr)
 		if !app.Confirm(note + fmt.Sprintf(" Submit a GitHub review approval as %s?", me)) {
 			workflow.ForgetHead(pr)
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		app.Flash(fmt.Sprintf("approving %s as %s...", where, me))
@@ -342,7 +342,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		}
 		i := app.Pick(fmt.Sprintf("post %s for which plan?", cmd), labels)
 		if i < 0 || i >= len(cands) {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		cand = cands[i]
@@ -394,12 +394,12 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			[]string{fmt.Sprintf("cancel — press %s again between %s and %s %s", keymap.S(keymap.Approve), cw.From, cw.To, cw.Local().LabelAt(now)),
 				fmt.Sprintf("run NOW, outside the window (%s) — real emergencies only", cfg.OutsideWindowFlag)})
 		if i != 1 {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		reason, ok := reasonPrompt(" with the command")
 		if !ok || len([]rune(reason)) < cfg.OutsideWindowMinReason || strings.Contains(reason, `"`) {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		outside = fmt.Sprintf(` %s="%s"`, cfg.OutsideWindowFlag, reason)
@@ -417,7 +417,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			[]string{fmt.Sprintf("queue it for %s window (plain %s) — the normal path", night, cmd),
 				fmt.Sprintf("apply NOW, outside the window (%s) — real emergencies only", cfg.OutsideWindowFlag)})
 		if i < 0 {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		if i == 1 {
@@ -426,11 +426,11 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			// is the backstop
 			reason, ok := reasonPrompt(" with the command")
 			if !ok {
-				app.Notice("approve cancelled")
+				app.Notice("approve canceled")
 				return true
 			}
 			if len([]rune(reason)) < cfg.OutsideWindowMinReason || strings.Contains(reason, `"`) {
-				app.Fail(fmt.Sprintf("approve cancelled — the reason needs at least %d characters and no double quotes", cfg.OutsideWindowMinReason))
+				app.Fail(fmt.Sprintf("approve canceled — the reason needs at least %d characters and no double quotes", cfg.OutsideWindowMinReason))
 				return true
 			}
 			outside = fmt.Sprintf(` %s="%s"`, cfg.OutsideWindowFlag, reason)
@@ -449,12 +449,12 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 			[]string{fmt.Sprintf("cancel — press %s again after %s", keymap.S(keymap.Approve), r.To),
 				fmt.Sprintf("apply NOW, outside the window (%s) — real emergencies only", cfg.OutsideWindowFlag)})
 		if i != 1 {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		reason, ok := reasonPrompt(" with the command")
 		if !ok || len([]rune(reason)) < cfg.OutsideWindowMinReason || strings.Contains(reason, `"`) {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		outside = fmt.Sprintf(` %s="%s"`, cfg.OutsideWindowFlag, reason)
@@ -483,11 +483,11 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		typed, got := app.Prompt(fmt.Sprintf("plan %s: its destroy count can't be parsed from the digest.%s\n"+
 			"Type the plan's destroy count (0 if it destroys nothing), or Esc to cancel:", cand.Stack, note), workflow.PromptOpts{})
 		if !got {
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 		if !digitsRE.MatchString(typed) {
-			app.Notice("approve cancelled (not a number)")
+			app.Notice("approve canceled (not a number)")
 			return true
 		}
 		destroys, _ = strconv.Atoi(typed)
@@ -501,7 +501,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		typed, _ := app.Prompt(fmt.Sprintf("plan %s DESTROYS %d resource(s). Posting %s:\n%s%s\nType %d to confirm, or Esc to cancel:",
 			cand.Stack, destroys, whereAs, body, note, destroys), workflow.PromptOpts{Note: glyphs.G("hazard") + " destroys " + strconv.Itoa(destroys)})
 		if typed != strconv.Itoa(destroys) {
-			app.Notice("approve cancelled (destroy count not confirmed)")
+			app.Notice("approve canceled (destroy count not confirmed)")
 			return true
 		}
 		ok = true
@@ -509,7 +509,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		ok = app.Confirm(fmt.Sprintf("%s%s\nPost that %s?", body, note, whereAs))
 	}
 	if !ok {
-		app.Notice("approve cancelled")
+		app.Notice("approve canceled")
 		return true
 	}
 	if !CommandRE(cfg).MatchString(body) {

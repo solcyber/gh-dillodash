@@ -285,7 +285,7 @@ func (w *Workflow) check(cmd string, info *Night, night, me string, now time.Tim
 	return CommandCheck(cmd, info, night, me, now, item, w.cfg)
 }
 
-// releaseNotListed says why a release cannot be cancelled on the
+// releaseNotListed says why a release cannot be canceled on the
 // night's manifest, and what takes it out instead.
 func (w *Workflow) releaseNotListed(pr *model.PR, night string, now time.Time) string {
 	id := fmt.Sprintf("rel:%s#%d", pr.Repo.Name, pr.Number)

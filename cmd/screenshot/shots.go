@@ -128,7 +128,7 @@ func nightSteps(n int) []string {
 		{"A"}, // release NOW only: the approval stands
 		{"enter", "bumped from the window for time; the fix is waiting", "enter", "y", "r"}, // posted; released, next in lane
 		{"G", "A", "enter", "next in the lane after the portal release", "enter", "y"},      // NOW on the migration; its slot
-		{"y", "D"}, // the slot cancelled; the migration waits on prod, the one environment people approve
+		{"y", "D"}, // the slot canceled; the migration waits on prod, the one environment people approve
 		{"y"},      // prod approved: released
 	}
 	var out []string

@@ -294,7 +294,7 @@ func TestPromptMinLenRefusal(t *testing.T) {
 		t.Error("esc cancels")
 	}
 	if _, ok := q.Result(); ok {
-		t.Error("cancelled: ok false")
+		t.Error("canceled: ok false")
 	}
 }
 

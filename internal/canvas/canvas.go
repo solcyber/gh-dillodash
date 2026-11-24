@@ -144,7 +144,7 @@ func (c *Canvas) putRun(y, x int, s, style string, extra text.Attr, sel, band bo
 	if x < 0 {
 		// skip the part left of the canvas
 		skip := -x
-		s = text.Clip(s, text.Width(s)) // normalise
+		s = text.Clip(s, text.Width(s)) // normalize
 		g := uniseg.NewGraphemes(s)
 		cut := 0
 		for g.Next() {

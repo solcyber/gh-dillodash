@@ -478,7 +478,7 @@ func Place(items []*Item, m *Map, lanes int) (map[Cell][]*Item, int) {
 		if z != "" {
 			if _, ok := zones[z]; !ok {
 				cells := m.ZoneCells(z)
-				// every other column, so neighbours read apart
+				// every other column, so neighbors read apart
 				var even, odd []Cell
 				for _, rc := range cells {
 					if rc.C%2 == 0 {

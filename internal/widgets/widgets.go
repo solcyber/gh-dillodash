@@ -3,7 +3,7 @@
 // drawing helpers they share (a word-wrapped question block, the reason
 // meter, the hazard stripe, a rounded box).
 //
-// They know nothing of the terminal framework: the app normalises each
+// They know nothing of the terminal framework: the app normalizes each
 // key press into a Key and feeds it to Handle, and asks Draw to paint the
 // modal over the frame it has already drawn. Styles stay names; the theme
 // resolves them at render time.

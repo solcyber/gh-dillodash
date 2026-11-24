@@ -2,7 +2,7 @@
 
 <!-- generated from internal/ui/keys.go by `go test ./internal/ui -update`; edit the table, not this file -->
 
-**Shift acts, lowercase looks.** A capital changes something (on GitHub, your install or your config) and asks first; a lowercase key only moves, opens or shows. The only capitals that just move are the vim motions `G`, `N` and the fortress's `HJKL`. The key bar leads with the keys that act on the selected row, labelled with what they do there; the line above it says what the row waits on.
+**Shift acts, lowercase looks.** A capital changes something (on GitHub, your install or your config) and asks first; a lowercase key only moves, opens or shows. The only capitals that just move are the vim motions `G`, `N` and the fortress's `HJKL`. The key bar leads with the keys that act on the selected row, labeled with what they do there; the line above it says what the row waits on.
 
 | View | Key | Action |
 |---|---|---|

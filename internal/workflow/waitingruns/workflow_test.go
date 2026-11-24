@@ -558,7 +558,7 @@ func TestDeployConfirmNoCancels(t *testing.T) {
 	w, app, row := deployRow(t)
 	app.Confirms = []bool{false}
 	w.DeployRow(app, row)
-	if app.Last() != "notice: deployment approval cancelled" || len(app.Fake.DeployApprovals) != 0 || len(app.Refreshes) != 0 {
+	if app.Last() != "notice: deployment approval canceled" || len(app.Fake.DeployApprovals) != 0 || len(app.Refreshes) != 0 {
 		t.Errorf("status %q approvals %v refreshes %v", app.Last(), app.Fake.DeployApprovals, app.Refreshes)
 	}
 }

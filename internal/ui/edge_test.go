@@ -314,7 +314,7 @@ func TestGotoFindsTheListedRepo(t *testing.T) {
 	h.m.mu.Unlock()
 	h.m.tp.Pick = func(string, []string) int { return -1 }
 	h.key(':')
-	if h.m.view != ViewList || !strings.Contains(h.m.status, "go to cancelled") {
+	if h.m.view != ViewList || !strings.Contains(h.m.status, "go to canceled") {
 		t.Errorf("Esc on the pick: view=%s status=%q", h.m.view, h.m.status)
 	}
 }

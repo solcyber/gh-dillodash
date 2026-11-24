@@ -105,7 +105,7 @@ the day after it is enrolled, or at once after the cache file is deleted.
 - **A merged release** stays listed for `merged_keep_secs` (12 hours) and,
   when nothing is following it, shows its deploy in the second chip: `approve: prod` (an environment you
   review waits), `waits: prod` (someone else's), `deploying`, `deployed`,
-  `deploy failed`, `deploy cancelled`, `stuck? 1h05m` (a run queued or
+  `deploy failed`, `deploy canceled`, `stuck? 1h05m` (a run queued or
   running longer than `deploy_stuck_secs`, 45 minutes by default), or `no
   Actions runs`. The card lists every run.
 - **The summary row** counts `N releases need approval`, `N deploys wait
@@ -378,7 +378,7 @@ new run.
 - **One message when it ends**: `web-portal#90 released — verified on
   9f8e7d6 after 6m02s`, with the launch; `release FAILED at verifying —
   <detail>; run: <url>`; `release refused — <reason>`; a notice for
-  *rolled*, *not run*, *cancelled* and *lost track*.
+  *rolled*, *not run*, *canceled* and *lost track*.
 - **A deploy held at an environment.** When the merge is done but the
   deploy run waits on a required-reviewer environment (the `WAITING`
   heading, or `pending_label`), the release ends as **`deploy waiting ·

@@ -26,7 +26,7 @@ internal/deploys            the deploy state of a merged PR's Actions runs
 internal/external           $EDITOR, $PAGER, the clipboard, the browser
 internal/workflow           the workflow interface and the aggregator
 internal/workflow/<name>    the optional workflows
-internal/fonts              the embedded Nerd Font, its licences and the installer
+internal/fonts              the embedded Nerd Font, its licenses and the installer
 internal/doctor             `config check`
 internal/demo               the offline fixture behind --demo and the screenshot
 internal/hygiene            the keyed denylist, its test over the tree, cmd/scan and cmd/gen-denylist
@@ -104,6 +104,11 @@ what to do, name the key. The conventions a test partly enforces:
   Acronyms keep their case (URL, CI, SHA). "couldn't", not "could not".
 - GitHub enums are humanized (`changes requested`); short SHAs are seven
   characters (`model.ShortSHA`).
+- US English spelling everywhere: status text, docs, comments and test
+  names (canceled, labeled, color, behavior, license). Identifiers, config
+  keys and the values GitHub or a bot defines keep their own spelling
+  (`cancelled` as a run conclusion). `TestUSSpelling` checks the string
+  literals; its exemptions say why each one stays.
 
 A new key goes in the table in `internal/ui/keys.go`: the key bar, the
 help overlay and `docs/keys.md` follow from it.

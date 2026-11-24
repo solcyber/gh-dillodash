@@ -140,7 +140,7 @@ func (m *Model) doRuns(app *lockedApp, act bool) {
 		}
 		i := app.Pick(title, labels)
 		if i < 0 || i >= len(labels) {
-			app.Notice("cancelled")
+			app.Notice("canceled")
 			return
 		}
 		if i == len(targets) {
@@ -156,7 +156,7 @@ func (m *Model) doRuns(app *lockedApp, act bool) {
 	acts := runActions(t.Run)
 	i := app.Pick(runLabel(t), acts)
 	if i < 0 || i >= len(acts) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	what := fmt.Sprintf("run %d (%s) in %s", t.Run.ID, text.OrQ(t.Run.Name), t.Repo)
@@ -169,7 +169,7 @@ func (m *Model) doRuns(app *lockedApp, act bool) {
 		return
 	}
 	if !app.Confirm(fmt.Sprintf("%s: %s as %s?", acts[i], what, m.me)) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("%s: %s...", acts[i], what))
@@ -186,7 +186,7 @@ func (m *Model) doRuns(app *lockedApp, act bool) {
 		app.Fail(fmt.Sprintf("%s of %s failed: %s%s", acts[i], what, err, actionsHint(err, t.Repo)))
 		return
 	}
-	done := map[string]string{runRerunFailed: "re-ran the failed jobs of", runRerunAll: "re-ran", runCancel: "cancelled"}[acts[i]]
+	done := map[string]string{runRerunFailed: "re-ran the failed jobs of", runRerunAll: "re-ran", runCancel: "canceled"}[acts[i]]
 	app.OK(fmt.Sprintf("%s %s", done, what))
 	app.Refresh(true)
 	app.RefreshSoon(m.deployRefresh())
@@ -223,7 +223,7 @@ func (m *Model) rejectRun(app *lockedApp, t workflow.RunTarget, what string) {
 	}
 	reason, ok := app.Prompt(fmt.Sprintf("Reject %s of %s? The reason goes on the run (Esc cancels):", strings.Join(names, ", "), what), workflow.PromptOpts{})
 	if !ok {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	comment := strings.TrimSpace(reason)
@@ -231,7 +231,7 @@ func (m *Model) rejectRun(app *lockedApp, t workflow.RunTarget, what string) {
 		comment = "dillodash: rejected by " + m.me
 	}
 	if !app.Confirm(fmt.Sprintf("reject %s of %s as %s? The run fails there and deploys nothing.", strings.Join(names, ", "), what, m.me)) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("rejecting %s of %s...", strings.Join(names, ", "), what))
@@ -276,7 +276,7 @@ func (m *Model) runLogs(app *lockedApp, t workflow.RunTarget) {
 		}
 		i := app.Pick(fmt.Sprintf("which job of run %d?", t.Run.ID), labels)
 		if i < 0 || i >= len(jobs) {
-			app.Notice("cancelled")
+			app.Notice("canceled")
 			return
 		}
 		job = jobs[i]

@@ -87,7 +87,7 @@ func (b *Backoff) Wait(now time.Time) time.Duration {
 }
 
 // RateLimitWait is how long GitHub's wall still stands (0 when it
-// doesn't). A manual refresh honours only this: forcing a request through
+// doesn't). A manual refresh honors only this: forcing a request through
 // the wall re-trips it and extends the penalty, whereas an exponential
 // backoff may be cut short by hand.
 func (b *Backoff) RateLimitWait(now time.Time) time.Duration {

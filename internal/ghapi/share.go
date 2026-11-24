@@ -120,7 +120,7 @@ func (c *GitHub) getShared(ctx context.Context, rawURL, accept string) ([]byte, 
 		var lc leaderCancelled
 		if errors.As(err, &lc) {
 			if ctx.Err() == nil {
-				// the reader that went first was cancelled (a workflow
+				// the reader that went first was canceled (a workflow
 				// stopped by another's rate limit); this one wasn't, so
 				// it asks for itself
 				return c.getCached(ctx, rawURL, accept)

@@ -230,7 +230,7 @@ func (w *Workflow) openPromotion(app workflow.App, c *Change) {
 	files := len(p.adds) + len(p.dels)
 	if !app.Confirm(fmt.Sprintf("open a PR promoting #%d to %s as %s?\n%d file(s) of %s applied to %s at %s, on branch %s",
 		n, w.cfg.Stage(), app.Me(), files, short(sha), w.cfg.Stage(), short(head), branch)) {
-		app.Notice("promotion cancelled")
+		app.Notice("promotion canceled")
 		return
 	}
 	body := fmt.Sprintf("Promotes #%d from `%s` to `%s`.\n\nThe change of %s (#%d's merge commit on `%s`), applied to `%s` at %s file by file: every file it touches still matched `%s` before #%d.\n\nOpened with dillodash by %s.",
@@ -334,7 +334,7 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 		lead = fmt.Sprintf("%s holds the release lease on %s: a merge now lands after their sweep — ask first.\n", h, c.Repo.Name)
 	}
 	if !app.Confirm(fmt.Sprintf("%smerge #%d into %s (%s) as %s? Its push deploys %s.%s", lead, n, w.cfg.Stage(), how, app.Me(), w.cfg.Stage(), extra)) {
-		app.Notice("merge cancelled")
+		app.Notice("merge canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("merging #%d into %s...", n, w.cfg.Stage()))
@@ -360,8 +360,8 @@ func (w *Workflow) mergePromotion(app workflow.App, c *Change) {
 
 // autoTagNote is what P says about tagging when units are tagged by an
 // automation: go once the staging deploy succeeds, hold for a staging
-// PR labelled hold.
-const autoTagNote = "tagging is automatic: go once its deploy succeeds, hold when its PR is labelled hold"
+// PR labeled hold.
+const autoTagNote = "tagging is automatic: go once its deploy succeeds, hold when its PR is labeled hold"
 
 func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 	gh, ctx := app.GH(), app.Context()
@@ -411,19 +411,19 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 	}
 	i := app.Pick(head, labels)
 	if i < 0 || i >= len(opts) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	o := opts[i]
 	if o.kind == "go" && d != DeployOK {
 		if !app.Confirm(fmt.Sprintf("%s's deploy of #%d: %s. Tag it go anyway?", w.cfg.Stage(), n, deploy)) {
-			app.Notice("cancelled")
+			app.Notice("canceled")
 			return
 		}
 	}
 	msg, ok := app.Prompt("Tag message (Esc cancels):", workflow.PromptOpts{Initial: fmt.Sprintf("%s: %s", o.kind, c.Promo.Title)})
 	if !ok {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	msg = strings.TrimSpace(msg)
@@ -437,7 +437,7 @@ func (w *Workflow) tagUnit(app workflow.App, c *Change) {
 		flip = fmt.Sprintf(" (deletes %s%d first)", o.other, n)
 	}
 	if !app.Confirm(fmt.Sprintf("tag %s on %s as %s?%s", name, short(sha), app.Me(), flip)) {
-		app.Notice("cancelled")
+		app.Notice("canceled")
 		return
 	}
 	app.Flash(fmt.Sprintf("tagging %s...", name))
@@ -571,7 +571,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		}
 		i := app.Pick("which run?", labels)
 		if i < 0 {
-			app.Notice("cancelled")
+			app.Notice("canceled")
 			return true
 		}
 		run = runs[i]
@@ -595,7 +595,7 @@ func (w *Workflow) DeployRow(app workflow.App, row workflow.Row) bool {
 		return true
 	}
 	if !app.Confirm(fmt.Sprintf("approve %s (%s run %d) of %s as %s?", strings.Join(mine, ", "), run.Name, run.ID, what, app.Me())) {
-		app.Notice("deployment approval cancelled")
+		app.Notice("deployment approval canceled")
 		return true
 	}
 	app.Flash(fmt.Sprintf("approving %s...", what))

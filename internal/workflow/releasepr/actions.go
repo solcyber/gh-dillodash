@@ -119,7 +119,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	labels, paths = append(labels, changesLabel), append(paths, "changes")
 	i := app.Pick(title, labels)
 	if i < 0 || i >= len(paths) {
-		app.Notice("approve cancelled")
+		app.Notice("approve canceled")
 		return true
 	}
 	path := paths[i]
@@ -144,7 +144,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		workflow.PrimeHead(app, pr)
 		if !app.Confirm(q) {
 			workflow.ForgetHead(pr)
-			app.Notice("approve cancelled")
+			app.Notice("approve canceled")
 			return true
 		}
 	}
@@ -186,7 +186,7 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 		if id, at, ok := w.unpicked(pr, app.Now()); ok {
 			title := fmt.Sprintf("%s: the %s posted %s ago has no run — the manifest repo was never told", wh, w.cfg.ReleaseNowCommand, ago(app.Now().Sub(at)))
 			if app.Pick(title, []string{fmt.Sprintf("fire %s for that comment (no new comment, no review)", w.cfg.ReleaseNowDispatchEvent)}) != 0 {
-				app.Notice("dispatch cancelled")
+				app.Notice("dispatch canceled")
 				return true
 			}
 			w.refire(app, pr, wh, id)
@@ -209,7 +209,7 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 		w.requestChanges(app, pr, wh)
 		return true
 	default:
-		app.Notice("approve cancelled")
+		app.Notice("approve canceled")
 		return true
 	}
 	if !w.laneWait(app, pr) {
@@ -247,20 +247,20 @@ func (w *Workflow) nowBody(app workflow.App, question string) (string, bool) {
 	reason, ok := app.Prompt(fmt.Sprintf("Why can't this wait for the window? The reason is posted on the PR with the command (at least %d characters, no double quotes); Esc cancels:", minLen),
 		workflow.PromptOpts{MinLen: minLen, Forbid: `"`, Note: "the reason is posted with " + cmd})
 	if !ok {
-		app.Notice("approve cancelled")
+		app.Notice("approve canceled")
 		return "", false
 	}
 	if len([]rune(reason)) < minLen || strings.Contains(reason, `"`) {
-		app.Fail(fmt.Sprintf("approve cancelled — the reason needs at least %d characters and no double quotes", minLen))
+		app.Fail(fmt.Sprintf("approve canceled — the reason needs at least %d characters and no double quotes", minLen))
 		return "", false
 	}
 	body := fmt.Sprintf(`%s "%s"`, cmd, reason)
 	if !w.nowRE.MatchString(body) {
-		app.Fail(fmt.Sprintf("approve cancelled — %q does not match the %s grammar", body, cmd))
+		app.Fail(fmt.Sprintf("approve canceled — %q does not match the %s grammar", body, cmd))
 		return "", false
 	}
 	if !app.Confirm(body + "\n" + question) {
-		app.Notice("approve cancelled")
+		app.Notice("approve canceled")
 		return "", false
 	}
 	return body, true
