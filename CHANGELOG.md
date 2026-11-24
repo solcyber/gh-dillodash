@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.8.0] — 2026-11-24
+
+**The cursor stays where the work is.** It starts on your next move,
+comes back to the next one when you finish one, and no longer jumps
+when the list changes under it.
+
+### Changed
+
+- **One rule places the cursor** each time the list is rebuilt (a
+  refresh, a write, the filter, `s`):
+  - **A move that is done** (its row leaves `your turn`) puts the cursor
+    on the next row of the section, or the one before when it was the
+    last. Before, it followed the item down to its own section. Only an
+    emptied section sends the cursor there now.
+  - **A row that leaves the list** (merged, closed, hidden) puts the
+    cursor on its neighbor in the same section. Before, it landed on
+    whatever row took its place, often in another section.
+  - **Until a key places it,** the cursor follows the head of `your
+    turn`, not only on the first load.
+  - **Idle** (`idle_after_secs` without a key): a cursor outside `your
+    turn` goes back to its head. A cursor on one of your moves, in a PR,
+    under a filter, or behind the help or a pager stays where it is.
+  - **A question open about the row** (a confirm) or an action in flight
+    keeps the cursor on that item, so the highlighted row is always the
+    one the question names.
+  - **Rows arriving or leaving above the cursor** leave its row on the
+    same screen line.
+  - **The filter** keeps the row while it matches, else goes to the
+    first match. The row it started from comes back as soon as it matches
+    again (a typo, then a backspace), and Esc in the prompt puts the
+    cursor back on it.
+  - **A restart (`U`)** restores the copy the cursor was on, the `your
+    turn` copy or the item's own row. The first restart into 2.8 comes
+    from 2.7, which doesn't record it, so that one lands on the item's
+    own row.
+- **A `your turn` row stops short of its key's chip.** The chip
+  (`D  approve prod`) was drawn over the end of the row, cutting the
+  title mid-word. The row now ends on an ellipsis before it, and the
+  section's columns fit the room the chip leaves, so a column drops
+  before the title is crushed.
+- **US spelling** throughout the copy, help and docs (canceled, labeled,
+  color). Config keys and values are unchanged.
+
 ## [2.7.0] — 2026-11-24
 
 **Whose move is it.** Every row says whose turn it is, what is yours is
