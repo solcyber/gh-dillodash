@@ -135,22 +135,10 @@ func (m *Model) rowMatches(row workflow.Row, terms []string) bool {
 	return true
 }
 
-// refilter rebuilds the unified row list and keeps the cursor on the
-// same item across a refresh.
+// refilter rebuilds the unified row list; placeCursor (cursor.go) puts
+// the cursor back by its one rule.
 func (m *Model) refilter() {
-	var prevKey *struct {
-		kind   string
-		id     model.Ident
-		pinned bool
-	}
-	if m.selected >= 0 && m.selected < len(m.rows) && m.rows[m.selected].Kind != "header" {
-		r := m.rows[m.selected]
-		prevKey = &struct {
-			kind   string
-			id     model.Ident
-			pinned bool
-		}{r.Kind, r.Ident(), pinned(r)}
-	}
+	anchor, had := m.anchor()
 	terms := strings.Fields(strings.ToLower(m.filter))
 	var rest, agentPRs []*model.PR
 	for _, p := range m.allPRs {
@@ -225,42 +213,8 @@ func (m *Model) refilter() {
 	// row also stands in its own section)
 	rows = append(m.yourTurnRows(rows, len(terms) > 0), rows...)
 	m.rows = rows
-	if prevKey != nil {
-		found := -1
-		for i, r := range rows {
-			if r.Kind != "header" && r.Kind == prevKey.kind && r.Ident() == prevKey.id && pinned(r) == prevKey.pinned {
-				found = i
-				break
-			}
-		}
-		if found < 0 { // it left the your-turn section (done), or joined it
-			for i, r := range rows {
-				if r.Kind != "header" && r.Kind == prevKey.kind && r.Ident() == prevKey.id {
-					found = i
-					break
-				}
-			}
-		}
-		if found < 0 { // the item moved to another kind (PR -> queued)
-			for i, r := range rows {
-				if r.Kind != "header" && r.Ident() == prevKey.id {
-					found = i
-					break
-				}
-			}
-		}
-		if found >= 0 {
-			m.selected = found
-		}
-	}
-	if m.selected > len(rows)-1 {
-		m.selected = len(rows) - 1
-	}
-	if m.selected < 0 {
-		m.selected = 0
-	}
 	m.overlayPending()
-	m.parkCursor()
+	m.placeCursor(anchor, had)
 }
 
 // parkCursor settles the cursor on a selectable row near where it is:

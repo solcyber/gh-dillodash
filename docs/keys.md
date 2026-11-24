@@ -13,7 +13,7 @@
 | list | enter / `l` | open the PR or issue (`l` and → too), on the keypress: the list's copy shows while the rest is read (keys that act wait for it), and a row the cursor rested on is usually read already |
 | files | enter / `l` | that file's diff in-app (`l` and → too) |
 | list | `n` / `N` | the cursor to the next (`N`: previous) row that is your move, in its own section: a deploy that waits on you, a release or a review to approve, a promotion of yours to merge (the bar shows it while one is; the hint line names where it goes) |
-| list | `/` | filter, live as you type: words match the number, title, author, labels and a workflow's own text (a stack, a repo) |
+| list | `/` | filter, live as you type: words match the number, title, author, labels and a workflow's own text (a stack, a repo); the cursor keeps its row while it matches, else goes to the first match, and Esc in the prompt puts it back where it was |
 | list | esc | clear the filter (Esc never quits: a stray escape from an Alt chord must not close the dashboard) |
 | list | `s` | show / hide PRs others approved (issues are always all shown) |
 | list | `D` | approve the deployments waiting on the selected merged PR, or on the selected waiting run (the bar shows it while `release_pr` or `waiting_runs` is on) |

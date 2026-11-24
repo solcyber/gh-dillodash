@@ -87,7 +87,8 @@ More in [docs/keys.md](docs/keys.md) and each workflow's page.
   deployments waiting on a merged one that are yours to approve.
 - **Your turn.** Every row is someone's move, and the dashboard says whose.
   What is yours is pinned at the top with the key that does it (`D approve
-  prod`, `A approve the release`). The cursor starts there and `n` walks it.
+  prod`, `A approve the release`). The cursor starts there, comes back to the next move when you finish
+  one, and `n` walks it.
   The summary row counts what is on you, what runs and what waits on
   others. The line above the keys says what to do with the selected row,
   or that nothing is yours and where `n` goes

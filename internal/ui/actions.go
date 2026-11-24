@@ -773,6 +773,10 @@ func (m *Model) listedNumbered(n int) ([]model.Repo, []*model.PR) {
 func (m *Model) startFilter(app *lockedApp) {
 	m.mu.Lock()
 	before := m.filter
+	// typing keeps the row while it matches, else goes to the first
+	// match; Esc goes back to the row the filter started from
+	m.filterFrom, m.filterHad = m.anchor()
+	m.filtering = true
 	m.mu.Unlock()
 	out, ok := app.Prompt("filter (words match #number, title, author, labels; Enter keeps, Esc restores):", workflow.PromptOpts{
 		Initial: before,
@@ -782,12 +786,19 @@ func (m *Model) startFilter(app *lockedApp) {
 		},
 	})
 	m.mu.Lock()
+	m.filtering = false
 	if ok {
 		m.filter = out
+		m.refilter()
 	} else {
 		m.filter = before
+		m.refilter()
+		if m.filterHad {
+			if i := m.resolve(m.filterFrom, false); i >= 0 {
+				m.selected = i
+			}
+		}
 	}
-	m.refilter()
 	m.mu.Unlock()
 }
 
