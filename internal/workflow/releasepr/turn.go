@@ -56,6 +56,13 @@ func (w *Workflow) turn(app workflow.App, pr *model.PR) workflow.Turn {
 			return t
 		case PhaseBumped, PhaseRolled:
 			return workflow.Others("the next window")
+		case PhaseHeld:
+			if me != "" && strings.EqualFold(pr.Author.Login, me) {
+				return workflow.Others("an approver (it is yours)")
+			}
+			return workflow.You(keymap.S(keymap.Approve), "release it again (a release ahead did not verify)", "release", workflow.PrioRelease)
+		case PhaseLaneQueued:
+			return workflow.Others("the release lane")
 		case PhaseCancelled, PhaseNotRun, PhaseLost:
 			return workflow.Turn{Kind: workflow.TurnDone, What: p.Phase}
 		case "":
