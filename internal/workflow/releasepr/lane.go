@@ -139,6 +139,9 @@ func (w *Workflow) releasable(cand *model.PR) bool {
 // laneNote is what a released release's message adds: the next release
 // in the lane and how to send it, or "".
 func (w *Workflow) laneNote(pr *model.PR) string {
+	if w.cfg.ServerLane {
+		return "" // the release lane sends the next one itself
+	}
 	next := w.nextInLane(pr)
 	if next == nil {
 		return ""
@@ -152,6 +155,9 @@ func (w *Workflow) laneNote(pr *model.PR) string {
 // laneWait asks before NOW on a release while another in its lane is
 // still on its way; true goes ahead.
 func (w *Workflow) laneWait(app workflow.App, pr *model.PR) bool {
+	if w.cfg.ServerLane {
+		return true // the manifest repo keeps the order: nothing to wait for here
+	}
 	busy := w.laneBusy(pr)
 	if busy == nil {
 		return true

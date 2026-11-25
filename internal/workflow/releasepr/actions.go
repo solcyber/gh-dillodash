@@ -96,8 +96,24 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 	queues := w.cfg.ApprovalQueuesForWindow && w.win != nil && kind != KindHotfix // a hotfix never queues
 	night := w.NightPhrase(app.Now())
 	nowLabel := fmt.Sprintf("release NOW (%s) — real emergencies only", cmd)
+	// set_approve: the whole release leads the menu (set.go)
+	members, left, set := w.releaseSet(app, pr)
+	var setLabels, setPaths []string
+	if set {
+		toApprove := false
+		for _, m := range members {
+			toApprove = toApprove || !m.approved
+		}
+		if queues && toApprove { // every review posted already: nothing to queue
+			setLabels, setPaths = append(setLabels, setQueueLabel(len(members), night)), append(setPaths, "setqueue")
+		}
+		setLabels, setPaths = append(setLabels, setNowLabel(len(members))), append(setPaths, "setnow")
+	}
+	runSet := func(path string) {
+		w.approveSet(app, members, left, path == "setnow", queues)
+	}
 	if workflow.IApproved(app, pr) {
-		return w.approvedNow(app, pr, wh, me, nowLabel, queues)
+		return w.approvedNow(app, pr, wh, me, nowLabel, queues, setLabels, setPaths, runSet)
 	}
 	queueLabel := fmt.Sprintf("queue it for %s window (approve review) — the normal path", night)
 	if !queues {
@@ -117,12 +133,20 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		}
 	}
 	labels, paths = append(labels, changesLabel), append(paths, "changes")
+	if set {
+		labels, paths = append(append([]string{}, setLabels...), labels...), append(append([]string{}, setPaths...), paths...)
+		title = fmt.Sprintf("%d releases are ready — one approval can take them all, in lane order; or %s alone", len(members), wh)
+	}
 	i := app.Pick(title, labels)
 	if i < 0 || i >= len(paths) {
 		app.Notice("approve canceled")
 		return true
 	}
 	path := paths[i]
+	if path == "setqueue" || path == "setnow" {
+		runSet(path)
+		return true
+	}
 	if path == "changes" {
 		w.requestChanges(app, pr, wh)
 		return true
@@ -179,7 +203,7 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 // stands (and queues it, where approvals queue), so the only thing left
 // to offer is NOW, which posts the command and no second review. A
 // release already on its way has nothing left to post.
-func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel string, queues bool) bool {
+func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel string, queues bool, setLabels, setPaths []string, runSet func(string)) bool {
 	if w.inFlight(pr) {
 		// on its way, unless nobody picked the command up: then the only
 		// thing left is to tell the manifest repo about it
@@ -200,7 +224,15 @@ func (w *Workflow) approvedNow(app workflow.App, pr *model.PR, wh, me, nowLabel 
 		stands += " and queues it"
 	}
 	title := fmt.Sprintf("%s is already approved by you — %s; NOW posts %s without a second review", wh, stands, w.cfg.ReleaseNowCommand)
-	switch app.Pick(title, []string{nowLabel, dismissLabel, changesLabel}) {
+	pick := app.Pick(title, append(append([]string{}, setLabels...), nowLabel, dismissLabel, changesLabel))
+	if pick >= 0 && pick < len(setPaths) {
+		runSet(setPaths[pick])
+		return true
+	}
+	if pick >= len(setPaths) {
+		pick -= len(setPaths)
+	}
+	switch pick {
 	case 0:
 	case 1:
 		w.dismissMine(app, pr, wh)

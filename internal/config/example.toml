@@ -176,6 +176,10 @@ enabled = false
 # deploy_approval_comment = "dillodash: release {repo}#{number} merged as {sha}"   # placeholders: {repo} {number} {sha}
 # lane_order = []                           # release repos (short names) in the order a manual night releases them; after one is released, A offers the next (a manifest item's own lane_order comes first)
 # apply_budget_mins = 0                     # a release in flight counts down from this many minutes on its row (0 = no countdown; a manifest item's own T_s comes first)
+# set_approve = false                       # with two or more releases ready, A offers the whole set: every review (and for NOW every command) in one confirm
+# server_lane = false                       # the manifest repo releases posted commands one at a time in lane order; A never waits for the release ahead
+# lane_queued_label = "release:now-queued"  # the release lane's label on a release waiting its turn
+# lane_held_label = "release:held"          # the release lane's label on a release held because one ahead of it did not verify
 
 # ============================================================================
 # Workflow: waiting runs

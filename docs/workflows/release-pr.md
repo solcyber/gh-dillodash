@@ -299,6 +299,59 @@ replays one offline; these shots are its steps.
 
 ![prod approved: both releases out, with no keystroke outside dillodash](../shots/night-6-done.png)
 
+## The whole release in one approval
+
+With `set_approve = true`, `A` on a release offers the whole release
+whenever two or more releases are ready. It leads the menu with:
+
+- **`approve the whole release (N): queue every one for <night> window`:**
+  one confirm, then one approving review per release, each pinned to the
+  head on screen.
+- **`release the whole set NOW (N), in lane order — one reason for all`:**
+  the same reviews, then one reason, then the command on every release
+  and its dispatch, in `lane_order`.
+
+The single release's own choices stay below them. The confirm lists
+every release in lane order with its head, marks the ones your approval
+already covers (no second review is posted), and names each release
+left out and why: a draft, your own, changes requested, or failing
+checks. A hotfix is never part of the set.
+
+Every review and every command is your own, on its own PR, exactly what
+`A` on each row would post. The set saves keystrokes; it is not a new
+kind of approval. Reviews go first, all of them:
+
+- **A review that fails** (or a head that moved while the confirm was
+  up): NOW posts no command at all, so the lane never runs a set with a
+  hole in it. The status line names what failed; `A` again approves the
+  rest.
+- **A command that fails:** the ones after it in lane order stay
+  unposted, and the status line names them.
+- **Slots on tonight's manifest:** one question afterwards offers their
+  `/window-cancel`s together.
+
+### The release lane (`server_lane`)
+
+With `server_lane = true` the manifest repo keeps the lane order itself:
+it takes each posted command, releases them one at a time in lane order,
+and stops the rest when one does not verify. dillodash then:
+
+- **never asks first** on NOW while another release is on its way, and
+  names no next release in the lane;
+- **names the set in every dispatch** (`set` in the payload: each member
+  as `repo#n`, in lane order), so the lane can wait for an earlier member
+  whose dispatch arrives late;
+- **reads the lane's labels** (`lane_queued_label`, default
+  `release:now-queued`; `lane_held_label`, default `release:held`):
+  - a release waiting its turn reads `queued in lane`, and the lane's
+    turn, not yours;
+  - one held because a release ahead of it did not verify reads
+    `held · A` and is on your turn: `A` posts the command again. Its
+    approval stands, so no second review is posted.
+
+Leave `server_lane` off unless the manifest repo runs such a lane:
+without it, the commands of a set all start at once.
+
 ## Live progress
 
 ![A release in flight on the list: its rail is a pip per phase, filled as it goes, with the phase and its clock](../shots/release-rail.png)

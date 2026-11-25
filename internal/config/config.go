@@ -449,6 +449,18 @@ type ReleasePRConfig struct {
 	// ApplyBudgetMins is how long a release in flight is expected to
 	// take, for the countdown on its row (0 = no countdown)
 	ApplyBudgetMins int
+	// SetApprove: with two or more releases ready, A offers the whole
+	// set (every review, and for NOW every command) in one confirm.
+	SetApprove bool
+	// ServerLane: the manifest repo releases posted commands one at a
+	// time in lane order (a release lane), so A never waits for the
+	// release ahead, and a release it holds shows as held.
+	ServerLane bool
+	// LaneQueuedLabel and LaneHeldLabel are the release lane's labels on
+	// a release PR: waiting its turn, and held because a release ahead
+	// of it did not verify.
+	LaneQueuedLabel string
+	LaneHeldLabel   string
 }
 
 // DeployComment renders deploy_approval_comment for a merged release.
@@ -581,6 +593,8 @@ func DefaultReleasePR() *ReleasePRConfig {
 		MergedKeepSecs:          43200,
 		DeployStuckSecs:         2700,
 		DeployAutoGraceSecs:     300,
+		LaneQueuedLabel:         "release:now-queued",
+		LaneHeldLabel:           "release:held",
 		DeployRefreshSecs:       30,
 		DeployApprovalComment:   "dillodash: release {repo}#{number} merged as {sha}",
 	}

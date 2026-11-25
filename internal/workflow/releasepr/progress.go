@@ -38,6 +38,7 @@ const (
 	PhaseWaitingSlot = "waiting for slot" // the manifest item waits (terraform items, /release), or the slot passed with no run
 	PhaseDispatched  = "dispatched"       // the command is posted (or the manifest says dispatched), no run seen yet
 	PhaseNotTold     = "not told"         // this session posted the command but its dispatch to the manifest repo failed: nothing will pick it up (M merges it by hand)
+	PhaseLaneQueued  = "queued in lane"   // server_lane: the manifest repo took the command and releases it after the ones ahead (the lane's queued label)
 	PhaseSetup       = "setup"            // the run's steps before the validation
 	PhaseValidating  = "validating"
 	PhaseMerging     = "merging"
@@ -56,6 +57,7 @@ const (
 	PhaseBumped       = "bumped" // the freeze left it out of tonight (the manifest flag); its approval stands
 	PhaseCancelled    = "cancelled"
 	PhaseLost         = "lost track"
+	PhaseHeld         = "held" // server_lane: a release ahead of it in the lane did not verify; its approval stands, A releases it again
 )
 
 // runPhases is the order of the phases a run walks through: the rail's
@@ -66,6 +68,7 @@ var runPhases = []string{PhaseSetup, PhaseValidating, PhaseMerging, PhaseApprovi
 var terminalPhases = map[string]bool{
 	PhaseReleased: true, PhasePending: true, PhaseFailed: true, PhaseRefused: true, PhaseUnverifiable: true,
 	PhaseNotRun: true, PhaseRolled: true, PhaseBumped: true, PhaseCancelled: true, PhaseLost: true,
+	PhaseHeld: true,
 }
 
 // Terminal reports a phase that ends the tracking.
@@ -282,6 +285,11 @@ func (w *Workflow) noteComment(pr *model.PR, now time.Time, id int64) {
 	defer w.mu.Unlock()
 	w.trackFor(pr, true, now).nowCommentID = id
 }
+
+// laneRelabelLag is how long after this session posts a command a held
+// release's held label may still show: the manifest repo validates the
+// command, then swaps held for queued.
+const laneRelabelLag = 3 * time.Minute
 
 // unpickedAfter is how long a posted command may wait for its run
 // before M may merge the release by hand: the run usually shows within
@@ -1173,6 +1181,26 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 			return w.timeout(p, now)
 		}
 	}
+	if w.cfg.ServerLane && pr.State != "MERGED" {
+		// the release lane's labels: waiting its turn (no run yet: a run
+		// seen above wins), or held because one ahead did not verify
+		// a command this session just posted re-queues a held release:
+		// the label lags the manifest repo's enqueue by a minute or so
+		justPosted := !t.nowPostedAt.IsZero() && now.Sub(t.nowPostedAt) < laneRelabelLag
+		if l := w.cfg.LaneHeldLabel; l != "" && pr.Labels.Has(l) && !justPosted {
+			p.Phase, p.Terminal, p.Source = PhaseHeld, true, "label"
+			p.Detail = "a release ahead of it in the lane did not verify — its approval stands; A releases it again"
+			return p
+		}
+		if l := w.cfg.LaneQueuedLabel; l != "" && pr.Labels.Has(l) {
+			p.Phase, p.Source, p.Since = PhaseLaneQueued, "label", cmdAt
+			if p.Since.IsZero() {
+				p.Since = t.firstSeen
+			}
+			p.Detail = "the release lane runs it after the releases ahead of it, one at a time"
+			return p
+		}
+	}
 	if !cmdAt.IsZero() {
 		if t.notTold && cmdAt.Equal(t.nowPostedAt) {
 			// nothing will pick it up: no spinner, no clock, no timeout;
@@ -1418,6 +1446,10 @@ func (w *Workflow) progressChipText(p Progress, el string) string {
 		return "waiting for slot"
 	case PhaseDispatched:
 		return "dispatched " + el
+	case PhaseLaneQueued:
+		return "queued in lane " + el
+	case PhaseHeld:
+		return "held · A"
 	case PhaseNotTold:
 		if p.MergeSHA != "" {
 			return "merged by hand"
@@ -1474,6 +1506,11 @@ func progressStyle(p Progress) string {
 	case PhaseBumped:
 		// the next window takes it: A offers NOW, but nothing waits on it
 		return "chip.rolled"
+	case PhaseHeld:
+		// it stands until the approver releases it again
+		return "chip.act"
+	case PhaseLaneQueued:
+		return "chip.sched"
 	case PhaseFailed, PhaseRefused, PhaseUnverifiable:
 		return "chip.fail"
 	case PhaseRolled:

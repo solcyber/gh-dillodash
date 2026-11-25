@@ -932,6 +932,10 @@ func (p *parser) parseReleasePR(wt *table, cfg *Config) {
 		}
 	}
 	w.ApplyBudgetMins = t.int("apply_budget_mins", w.ApplyBudgetMins)
+	w.SetApprove = t.boolean("set_approve", w.SetApprove)
+	w.ServerLane = t.boolean("server_lane", w.ServerLane)
+	w.LaneQueuedLabel = t.nonEmpty("lane_queued_label", w.LaneQueuedLabel)
+	w.LaneHeldLabel = t.nonEmpty("lane_held_label", w.LaneHeldLabel)
 	for _, ph := range placeholderRE.FindAllString(w.DeployApprovalComment, -1) {
 		switch ph {
 		case "{repo}", "{number}", "{sha}":

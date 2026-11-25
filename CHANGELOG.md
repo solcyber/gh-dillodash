@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+**One approval releases the whole set.** With `set_approve`, `A` on a
+release offers every release that is ready in one confirm, in lane
+order, for tonight's window or NOW with one reason.
+
+### Added
+
+- **`set_approve`** (`[workflows.release_pr]`, default off): `A` leads
+  with `approve the whole release (N)` and `release the whole set NOW
+  (N)` when two or more releases are ready. The confirm lists each
+  release with its head, the ones your approval covers, and the ones
+  left out with the reason. NOW posts no command when any review fails,
+  and stops at the first command that fails.
+- **`server_lane`** (default off), **`lane_queued_label`** and
+  **`lane_held_label`**: for a manifest repo that releases posted
+  commands one at a time in lane order. NOW no longer asks while another
+  release is on its way; a release waiting its turn reads `queued in
+  lane`; one held because a release ahead did not verify reads `held ·
+  A` and is on your turn.
+
 ## [2.8.0] — 2026-11-24
 
 **The cursor stays where the work is.** It starts on your next move,
