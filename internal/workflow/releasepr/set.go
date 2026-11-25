@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solcyber/gh-dillodash/internal/clock"
 	"github.com/solcyber/gh-dillodash/internal/ghapi"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
@@ -76,8 +77,14 @@ func (w *Workflow) setExcludes(app workflow.App, cand *model.PR, me string) stri
 	if cand == nil || (cand.State != "" && cand.State != "OPEN") || w.NotARelease(cand) || w.kindOf(cand) != KindRelease {
 		return "-"
 	}
-	if w.inFlight(cand) {
-		return "-" // on its way already: nothing to post
+	if w.inFlight(cand) || w.recentlyPosted(cand) {
+		return "-" // on its way already (or this session just sent it): nothing to post
+	}
+	if l := w.cfg.LaneQueuedLabel; w.cfg.ServerLane && l != "" && cand.Labels.Has(l) {
+		return "-" // waiting its turn in the release lane
+	}
+	if !app.Config().GitHub.WriteAllowed(cand.Repo) {
+		return "read-only here (allowed_repos)"
 	}
 	switch {
 	case cand.IsDraft:
@@ -92,6 +99,20 @@ func (w *Workflow) setExcludes(app workflow.App, cand *model.PR, me string) stri
 	}
 	return ""
 }
+
+// recentlyPosted reports a release this session sent NOW within
+// setRepostGuard: until the manifest repo's lane label or its run shows,
+// its row may still read scheduled, and the set must not send it twice.
+func (w *Workflow) recentlyPosted(pr *model.PR) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	t, ok := w.progress[pr.Ident()]
+	return ok && !t.nowPostedAt.IsZero() && clock.Now().Sub(t.nowPostedAt) < setRepostGuard
+}
+
+// setRepostGuard is how long a release this session sent stays out of
+// the set, whatever its row reads.
+const setRepostGuard = 15 * time.Minute
 
 // laneLess orders releases by lane_order (repos not listed after the
 // listed ones, by name), then by number.
@@ -229,63 +250,77 @@ func (w *Workflow) approveSet(app workflow.App, members []setMember, left []setL
 	}
 	setNames := strings.Join(names, ",")
 	posted := 0
+	var unsure []string
 	for i, m := range members {
-		if !w.postSetCommand(app, m.pr, body, setNames) {
+		res := w.postSetCommand(app, m.pr, body, setNames)
+		if res.unsure != "" {
+			unsure = append(unsure, res.unsure)
+		}
+		if res.failed != "" {
+			// one line: what failed, and what to do next. The member that
+			// failed is on its way or needs its thread read, never A again.
+			msg := fmt.Sprintf("released %d of %d; %s", posted, n, res.failed)
 			if i+1 < len(members) {
 				rest := make([]string, 0, len(members)-i-1)
 				for _, r := range members[i+1:] {
 					rest = append(rest, where(r.pr))
 				}
-				app.Fail(fmt.Sprintf("released %d of %d; %s failed, so %s went unposted — A on %s releases the rest",
-					posted, n, where(m.pr), strings.Join(rest, ", "), where(m.pr)))
+				msg += fmt.Sprintf("; not posted: %s — A on %s releases those", strings.Join(rest, ", "), rest[0])
 			}
-			app.Refresh(true)
+			app.Fail(msg)
+			app.RefreshSoon(45 * time.Second)
 			return
 		}
 		posted++
 	}
-	how := "in lane order, one at a time"
-	if !w.cfg.ServerLane {
-		how = "all at once (no release lane on the manifest repo)"
+	if len(unsure) > 0 {
+		app.Fail(fmt.Sprintf("posted %s on all %d, but telling the manifest repo may have failed for %s — watch those rows: press M only if one has not started in two minutes",
+			w.cfg.ReleaseNowCommand, n, strings.Join(unsure, ", ")))
+		app.Launch()
+		app.RefreshSoon(45 * time.Second)
+		return
 	}
-	app.OK(fmt.Sprintf("released the set as %s: %s posted on %d releases — they run %s", me, w.cfg.ReleaseNowCommand, n, how))
+	app.OK(fmt.Sprintf("released the set as %s: %s posted on %d releases — the release lane runs them in lane order, one at a time", me, w.cfg.ReleaseNowCommand, n))
 	app.Launch()
 	w.offerSetSlotCancel(app, members)
 	app.Refresh(true)
 }
 
+// setPost is how one member's command went: failed (the set stops
+// there) says what happened and what to do about it; unsure names a
+// member whose dispatch may not have reached the manifest repo.
+type setPost struct{ failed, unsure string }
+
 // postSetCommand posts the command on one member and tells the manifest
-// repo; false when the command did not reach the PR or the manifest repo
-// was surely not told (the set stops there).
-func (w *Workflow) postSetCommand(app workflow.App, pr *model.PR, body, set string) bool {
+// repo.
+func (w *Workflow) postSetCommand(app workflow.App, pr *model.PR, body, set string) setPost {
 	cmd := w.cfg.ReleaseNowCommand
 	wh := where(pr)
-	app.Flash(fmt.Sprintf("posting %s on %s...", cmd, wh))
 	id, unsure, err := workflow.Post(app, pr.Repo, pr.Number, body)
 	if err != nil {
-		workflow.PostFailed(app, wh+": ", cmd, unsure, err)
-		return false
+		if unsure {
+			return setPost{failed: fmt.Sprintf("%s: %s may have posted (%s) — read its thread before anything else", wh, cmd, err)}
+		}
+		return setPost{failed: fmt.Sprintf("%s: %s NOT posted (%s)", wh, cmd, err)}
 	}
 	w.noteComment(pr, app.Now(), id)
 	target := w.manifestRepo(app)
 	if target.IsZero() || !w.cfg.ReleaseNowDispatch || w.cfg.ReleaseNowCommentOnly {
 		// no dispatch to fire, or the release repo's own workflow fires it
 		w.notePosted(pr, app.Now(), true)
-		return true
+		return setPost{}
 	}
 	payload := map[string]any{"repo": pr.Repo.Name, "pr": pr.Number, "comment_id": id, "set": set}
 	if err := app.GH().Dispatch(app.Context(), target, w.cfg.ReleaseNowDispatchEvent, payload); err != nil {
 		if ghapi.Ambiguous(err) {
 			w.notePosted(pr, app.Now(), true)
-			app.Notice(fmt.Sprintf("%s: telling %s may have failed (%s) — watch its row", wh, target, err))
-			return true
+			return setPost{unsure: wh}
 		}
 		w.notePosted(pr, app.Now(), false)
-		app.Fail(fmt.Sprintf("%s: posted %s, but %s was not told (%s)", wh, cmd, target, err))
-		return false
+		return setPost{failed: fmt.Sprintf("%s: posted %s, but %s was not told (%s) — A on its row fires the dispatch again", wh, cmd, target, err)}
 	}
 	w.notePosted(pr, app.Now(), true)
-	return true
+	return setPost{}
 }
 
 // offerSetSlotCancel asks once to take every member that holds a slot

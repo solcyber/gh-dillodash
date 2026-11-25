@@ -309,6 +309,11 @@ func (w *Workflow) dispatchFailed(pr *model.PR) bool {
 	if !ok {
 		return false
 	}
+	if w.cfg.ServerLane {
+		// the lane may hold an accepted command for a long while: M merges
+		// out of its order only when the dispatch surely failed
+		return t.notTold
+	}
 	return t.notTold || (t.cur.Phase == PhaseDispatched && !t.cur.Since.IsZero() && clock.Now().Sub(t.cur.Since) >= unpickedAfter)
 }
 
@@ -1128,6 +1133,29 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 		}
 		return w.timeout(p, now)
 	}
+	if w.cfg.ServerLane && pr.State != "MERGED" {
+		// the release lane's labels: waiting its turn (no run yet: a run,
+		// an outcome or a refusal seen above wins), or held because one
+		// ahead did not verify. Before the manifest item and the window's
+		// scheduled label: a release the lane has taken is no longer the
+		// window's, whatever its slot says.
+		// a command this session just posted re-queues a held release:
+		// the label lags the manifest repo's enqueue by a minute or so
+		justPosted := !t.nowPostedAt.IsZero() && now.Sub(t.nowPostedAt) < laneRelabelLag
+		if l := w.cfg.LaneHeldLabel; l != "" && pr.Labels.Has(l) && !justPosted {
+			p.Phase, p.Terminal, p.Source = PhaseHeld, true, "label"
+			p.Detail = "a release ahead of it in the lane did not verify — its approval stands; A releases it again"
+			return p
+		}
+		if l := w.cfg.LaneQueuedLabel; l != "" && pr.Labels.Has(l) {
+			p.Phase, p.Source, p.Since = PhaseLaneQueued, "label", cmdAt
+			if p.Since.IsZero() {
+				p.Since = t.firstSeen
+			}
+			p.Detail = "the release lane runs it after the releases ahead of it, one at a time"
+			return p
+		}
+	}
 	if t.item != nil {
 		// a release the window left behind (bumped, rolled) that was sent
 		// NOW since: the command is the newer news, not the item
@@ -1179,26 +1207,6 @@ func (w *Workflow) deriveAt(pr *model.PR, t *track, now time.Time) Progress {
 				return p
 			}
 			return w.timeout(p, now)
-		}
-	}
-	if w.cfg.ServerLane && pr.State != "MERGED" {
-		// the release lane's labels: waiting its turn (no run yet: a run
-		// seen above wins), or held because one ahead did not verify
-		// a command this session just posted re-queues a held release:
-		// the label lags the manifest repo's enqueue by a minute or so
-		justPosted := !t.nowPostedAt.IsZero() && now.Sub(t.nowPostedAt) < laneRelabelLag
-		if l := w.cfg.LaneHeldLabel; l != "" && pr.Labels.Has(l) && !justPosted {
-			p.Phase, p.Terminal, p.Source = PhaseHeld, true, "label"
-			p.Detail = "a release ahead of it in the lane did not verify — its approval stands; A releases it again"
-			return p
-		}
-		if l := w.cfg.LaneQueuedLabel; l != "" && pr.Labels.Has(l) {
-			p.Phase, p.Source, p.Since = PhaseLaneQueued, "label", cmdAt
-			if p.Since.IsZero() {
-				p.Since = t.firstSeen
-			}
-			p.Detail = "the release lane runs it after the releases ahead of it, one at a time"
-			return p
 		}
 	}
 	if !cmdAt.IsZero() {

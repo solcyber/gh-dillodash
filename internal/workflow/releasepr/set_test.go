@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/solcyber/gh-dillodash/internal/deploys"
+	"github.com/solcyber/gh-dillodash/internal/ghapi"
+	"github.com/solcyber/gh-dillodash/internal/ghapi/fake"
 	"github.com/solcyber/gh-dillodash/internal/model"
 	"github.com/solcyber/gh-dillodash/internal/workflow"
 	"github.com/solcyber/gh-dillodash/internal/workflow/wftest"
@@ -117,7 +119,7 @@ func TestSetReleaseNow(t *testing.T) {
 			t.Errorf("a review after a command: %+v", app.Fake.Calls)
 		}
 	}
-	if !logHas(app, "ok", "released the set as alice: /release-now posted on 3 releases — they run in lane order, one at a time") {
+	if !logHas(app, "ok", "released the set as alice: /release-now posted on 3 releases — the release lane runs them in lane order, one at a time") {
 		t.Errorf("status: %q", app.Log)
 	}
 	if app.Launched == 0 {
@@ -204,7 +206,7 @@ func TestSetNowStopsAtAFailedCommand(t *testing.T) {
 	if len(app.Fake.Dispatches) != 0 {
 		t.Fatalf("nothing told after a failed command: %v", app.Fake.Dispatches)
 	}
-	if !logHas(app, "fail", "released 0 of 3; db-migrations#64 failed, so web-portal#212, etl-jobs#158 went unposted") {
+	if !logHas(app, "fail", "released 0 of 3; db-migrations#64: /release-now NOT posted (HTTP 422); not posted: web-portal#212, etl-jobs#158 — A on web-portal#212 releases those") {
 		t.Errorf("status: %q", app.Log)
 	}
 }
@@ -255,6 +257,11 @@ func TestSetHeadMoved(t *testing.T) {
 	}
 	if !logHas(app, "fail", "web-portal#212: its head moved") {
 		t.Errorf("status names the moved head: %q", app.Log)
+	}
+	for _, n := range app.Fake.Approvals {
+		if n == 212 {
+			t.Errorf("the moved release got a review: %v", app.Fake.Approvals)
+		}
 	}
 }
 
@@ -325,5 +332,131 @@ func TestServerLaneNeverWaits(t *testing.T) {
 	}
 	if got := w.laneNote(first); got != "" {
 		t.Errorf("server lane: no next-in-lane note: %q", got)
+	}
+}
+
+// TestSetNeverSendsTwice: a member this session just sent, or one the
+// lane holds in its queue, is not offered again, even while its row
+// still reads scheduled on tonight's manifest.
+func TestSetNeverSendsTwice(t *testing.T) {
+	patchNow(t, outWindow)
+	w, app, rels := setWorld(t)
+	for _, r := range rels {
+		r.Labels = model.Labels{Nodes: []model.Label{{Name: "window:scheduled"}}}
+	}
+	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
+	w.Approve(app, rels[0], rels[0])
+	if len(app.Fake.CommentsPosted) != 3 {
+		t.Fatalf("first set NOW: %v", app.Fake.CommentsPosted)
+	}
+	app.Picks, app.Confirms = []int{0}, []bool{false}
+	w.Approve(app, rels[1], rels[1])
+	if strings.Contains(strings.Join(app.Menus[len(app.Menus)-1], "|"), "whole set NOW") || len(app.Fake.CommentsPosted) != 3 {
+		t.Errorf("no second set NOW: %q", app.Menus[len(app.Menus)-1])
+	}
+
+	// a member already waiting in the lane is not a candidate
+	w, app, rels = setWorld(t)
+	rels[0].Labels = model.Labels{Nodes: []model.Label{{Name: "release:now-queued"}}}
+	app.Picks, app.Confirms = []int{0}, []bool{true}
+	w.Approve(app, rels[1], rels[1])
+	if got := numbers(app.Fake.Approvals); len(got) != 2 {
+		t.Errorf("the queued one is left alone: %v", got)
+	}
+}
+
+// TestSetDispatchFails: a dispatch that surely failed stops the set and
+// says how to fire it again; one that may have landed is reported, not
+// hidden behind a success line.
+func TestSetDispatchFails(t *testing.T) {
+	patchNow(t, outWindow)
+	w, app, rels := setWorld(t)
+	app.Fake.AfterCall = func(c fake.Call) {
+		if c.Op == "dispatch" && len(app.Fake.Dispatches) == 1 {
+			app.Fake.Fail = map[string]error{"dispatch": &ghapi.Error{Status: 422, Message: "bad payload"}}
+		}
+	}
+	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
+	w.Approve(app, rels[0], rels[0])
+	if len(app.Fake.CommentsPosted) != 2 {
+		t.Fatalf("stops after the member whose dispatch failed: %v", app.Fake.CommentsPosted)
+	}
+	if !logHas(app, "fail", "released 1 of 3; web-portal#212: posted /release-now, but acme/infra was not told") ||
+		!logHas(app, "fail", "A on its row fires the dispatch again; not posted: etl-jobs#158 — A on etl-jobs#158 releases those") {
+		t.Errorf("status: %q", app.Log)
+	}
+
+	w, app, rels = setWorld(t)
+	app.Fake.Fail = map[string]error{"dispatch": &ghapi.Error{Status: 502, Message: "bad gateway"}}
+	app.Picks, app.Prompts, app.Confirms = []int{1}, []string{reason}, []bool{true}
+	w.Approve(app, rels[0], rels[0])
+	if len(app.Fake.CommentsPosted) != 3 || logHas(app, "ok", "released the set") ||
+		!logHas(app, "fail", "telling the manifest repo may have failed for db-migrations#64, web-portal#212, etl-jobs#158") {
+		t.Errorf("uncertain dispatches are reported: %q", app.Log)
+	}
+}
+
+// TestSetNowNeedsTheLane: without server_lane the set offers no NOW
+// (its commands would all start at once); a read-only repo is left out.
+func TestSetNowNeedsTheLane(t *testing.T) {
+	patchNow(t, outWindow)
+	w, app, rels := setWorld(t)
+	w.cfg.ServerLane = false
+	app.Picks, app.Confirms = []int{0}, []bool{true}
+	w.Approve(app, rels[0], rels[0])
+	if m := strings.Join(app.Menus[0], "|"); strings.Contains(m, "whole set NOW") || !strings.Contains(m, "approve the whole release (3)") {
+		t.Errorf("no lane: queue only: %q", m)
+	}
+
+	w, app, rels = setWorld(t)
+	app.Cfg.GitHub.AllowedRepos = []model.Repo{portal, etl}
+	app.Picks, app.Confirms = []int{0}, []bool{true}
+	w.Approve(app, rels[0], rels[0])
+	if !strings.Contains(app.Questions[0], "left out: db-migrations#64 (read-only here (allowed_repos))") || len(app.Fake.Approvals) != 2 {
+		t.Errorf("a read-only repo is left out: %q %v", app.Questions[0], app.Fake.Approvals)
+	}
+}
+
+// TestServerLaneLabelsYield: the lane's labels win over a scheduled
+// item, and lose to a refusal, an outcome or a merge.
+func TestServerLaneLabelsYield(t *testing.T) {
+	w, app := newWF(t, true)
+	w.cfg.ServerLane = true
+	t0 := utc(3, 0)
+	pr := approved(makeRelease(relOpts{}), "alice")
+	pr.Labels = model.Labels{Nodes: []model.Label{{Name: "release:now-queued"}, {Name: "window:scheduled"}}}
+	cmd := model.Comment{ID: 5, Body: "/release-now \"" + reason + "\"", CreatedAt: t0.Add(-5 * time.Minute), Author: model.Actor{Login: "alice"}}
+	if p := deriveWith(w, pr, func(tr *track) { tr.comments = []model.Comment{cmd} }, t0); p.Phase != PhaseLaneQueued {
+		t.Errorf("queued wins over the window's scheduled label: %+v", p)
+	}
+	ref := model.Comment{ID: 6, Body: "**/release-now refused:** at its turn in the release lane its head moved", CreatedAt: t0.Add(-time.Minute)}
+	if p := deriveWith(w, pr, func(tr *track) { tr.comments = []model.Comment{cmd, ref} }, t0); p.Phase != PhaseRefused {
+		t.Errorf("a refusal after the command wins: %+v", p)
+	}
+	pr.Labels = model.Labels{Nodes: []model.Label{{Name: "release:held"}, {Name: "window:failed"}}}
+	if p := deriveWith(w, pr, func(tr *track) { tr.comments = []model.Comment{cmd} }, t0); p.Phase != PhaseFailed {
+		t.Errorf("an outcome label wins over held: %+v", p)
+	}
+	merged := mergedRelease()
+	merged.Labels = model.Labels{Nodes: []model.Label{{Name: "release:held"}}}
+	if p := deriveWith(w, merged, nil, t0); p.Phase == PhaseHeld {
+		t.Errorf("a merged release is never held: %+v", p)
+	}
+	// the author of a held release waits for an approver
+	pr.Labels = model.Labels{Nodes: []model.Label{{Name: "release:held"}}}
+	pr.Author = model.Actor{Login: "alice"}
+	w.mu.Lock()
+	w.progress[pr.Ident()] = &track{repo: pr.Repo, number: pr.Number, cur: Progress{Phase: PhaseHeld, Terminal: true}}
+	w.mu.Unlock()
+	if tu := w.turn(app, pr); tu.Kind != workflow.TurnOthers {
+		t.Errorf("held, but yours: an approver's move: %+v", tu)
+	}
+	// refire and M stay closed while the lane holds an accepted command
+	w.mu.Lock()
+	w.progress[pr.Ident()] = &track{repo: pr.Repo, number: pr.Number, nowPostedAt: t0.Add(-30 * time.Minute), nowCommentID: 5,
+		cur: Progress{Phase: PhaseDispatched, Source: "command", Since: t0.Add(-30 * time.Minute)}}
+	w.mu.Unlock()
+	if _, _, ok := w.unpicked(pr, t0); ok {
+		t.Error("server lane: no refire offer for an accepted command")
 	}
 }

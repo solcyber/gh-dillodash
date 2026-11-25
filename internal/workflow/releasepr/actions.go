@@ -107,7 +107,12 @@ func (w *Workflow) Approve(app workflow.App, pr, listed *model.PR) bool {
 		if queues && toApprove { // every review posted already: nothing to queue
 			setLabels, setPaths = append(setLabels, setQueueLabel(len(members), night)), append(setPaths, "setqueue")
 		}
-		setLabels, setPaths = append(setLabels, setNowLabel(len(members))), append(setPaths, "setnow")
+		// the set's NOW only where the manifest repo keeps the lane order:
+		// without it the commands would all start at once
+		if w.cfg.ServerLane {
+			setLabels, setPaths = append(setLabels, setNowLabel(len(members))), append(setPaths, "setnow")
+		}
+		set = len(setLabels) > 0
 	}
 	runSet := func(path string) {
 		w.approveSet(app, members, left, path == "setnow", queues)

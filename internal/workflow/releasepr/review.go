@@ -137,6 +137,12 @@ func (w *Workflow) unpicked(pr *model.PR, now time.Time) (id int64, at time.Time
 	if !t.notTold && (t.cur.Phase != PhaseDispatched || t.cur.Source != "command") {
 		return 0, time.Time{}, false
 	}
+	if w.cfg.ServerLane && !t.notTold {
+		// a release lane may hold an accepted command for a long while
+		// (an earlier member of its set, a release in flight): only a
+		// dispatch that surely failed is fired again
+		return 0, time.Time{}, false
+	}
 	id, at = t.nowCommentID, t.nowPostedAt
 	for _, c := range t.comments {
 		if c.ID != 0 && w.nowRE != nil && w.nowRE.MatchString(strings.TrimSpace(c.Body)) && (id == 0 || c.CreatedAt.After(at)) {
