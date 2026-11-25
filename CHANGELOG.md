@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.9.0] — 2026-11-25
 
 **One approval releases the whole set.** With `set_approve`, `A` on a
 release offers every release that is ready in one confirm, in lane
